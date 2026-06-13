@@ -1,2 +1,2 @@
 # HaiKyuu
-2D volleyball game
+2D online volleyball game
