@@ -12,6 +12,6 @@ public class GameController {
     }
 
     public void update() {
-        model.update(keyboard.getBlueInput(), keyboard.getRedInput());
+        model.update(keyboard.getRedInput(), keyboard.getBlueInput());
     }
 }

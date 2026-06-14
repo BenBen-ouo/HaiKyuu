@@ -9,7 +9,7 @@ import model.TeamInput;
 public class KeyboardController implements KeyListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
 
-    public TeamInput getBlueInput() {
+    public TeamInput getRedInput() {
         TeamInput input = new TeamInput();
         input.backLeft = isPressed(KeyEvent.VK_A);
         input.backRight = isPressed(KeyEvent.VK_D);
@@ -22,7 +22,7 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
-    public TeamInput getRedInput() {
+    public TeamInput getBlueInput() {
         TeamInput input = new TeamInput();
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
         input.backRight = isPressed(KeyEvent.VK_RIGHT);

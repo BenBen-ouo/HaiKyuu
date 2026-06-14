@@ -31,15 +31,15 @@ public final class GameConfig {
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
-    // 左隊各角色相對基準點的位置
-    public static final double LEFT_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH;
-    public static final double LEFT_SETTER_OFFSET_X = -50 - PLAYER_IMAGE_WIDTH;
-    public static final double LEFT_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH;
-    public static final double LEFT_WING_OFFSET_X = -167 - PLAYER_IMAGE_WIDTH; //照比例換算 300 * 5/9
+    // red 隊各角色相對基準點的位置
+    public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH;
+    public static final double RED_SETTER_OFFSET_X = -50 - PLAYER_IMAGE_WIDTH;
+    public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH;
+    public static final double RED_WING_OFFSET_X = -167 - PLAYER_IMAGE_WIDTH; //照比例換算 300 * 5/9
 
-    // 右隊各角色相對基準點的位置
-    public static final double RIGHT_BACK_OFFSET_X = 300;
-    public static final double RIGHT_SETTER_OFFSET_X = 50;
-    public static final double RIGHT_QUICK_OFFSET_X = 5;
-    public static final double RIGHT_WING_OFFSET_X = 167; //照比例換算 300 * 5/9
+    // blue 隊各角色相對基準點的位置
+    public static final double BLUE_BACK_OFFSET_X = 300;
+    public static final double BLUE_SETTER_OFFSET_X = 50;
+    public static final double BLUE_QUICK_OFFSET_X = 5;
+    public static final double BLUE_WING_OFFSET_X = 167; //照比例換算 300 * 5/9
 }

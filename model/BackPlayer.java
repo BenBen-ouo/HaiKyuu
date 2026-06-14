@@ -5,7 +5,7 @@ public class BackPlayer extends Player {
         super(assetName, x, y);
     }
 
-    public void update(TeamInput input, boolean leftSide) {
+    public void update(TeamInput input, boolean redSide) {
         vx = 0;
         if (input.backLeft) vx -= GameConfig.PLAYER_SPEED;
         if (input.backRight) vx += GameConfig.PLAYER_SPEED;
@@ -17,7 +17,7 @@ public class BackPlayer extends Player {
 
         if (input.backDive && !jumping) {
             diving = true;
-            vx = leftSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;
+            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;
         }
 
         applyGravity();

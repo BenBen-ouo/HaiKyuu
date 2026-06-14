@@ -2,33 +2,33 @@ package model;
 
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
-    public Team leftTeam = new Team(true);
-    public Team rightTeam = new Team(false);
+    public Team redTeam = new Team(true);
+    public Team blueTeam = new Team(false);
 
-    public int leftScore = 0;
-    public int rightScore = 0;
+    public int redScore = 0;
+    public int blueScore = 0;
 
-    public void update(TeamInput leftInput, TeamInput rightInput) {
-        leftTeam.update(leftInput);
-        rightTeam.update(rightInput);
+    public void update(TeamInput redInput, TeamInput blueInput) {
+        redTeam.update(redInput);
+        blueTeam.update(blueInput);
 
         ball.update();
 
         collideNet();
-        collideTeam(leftTeam, true);
-        collideTeam(rightTeam, false);
+        collideTeam(redTeam, true);
+        collideTeam(blueTeam, false);
 
         // TODO: 之後你可以在這裡接得分規則。
     }
 
-    private void collideTeam(Team team, boolean leftSide) {
-        collidePlayer(team.backPlayer, leftSide, 8.5);
-        collidePlayer(team.setter, leftSide, 7.5);
-        collidePlayer(team.quickAttacker, leftSide, team.quickAttacker.attacking ? 13.0 : 8.0);
-        collidePlayer(team.wingSpiker, leftSide, team.wingSpiker.attacking ? 13.5 : 7.5);
+    private void collideTeam(Team team, boolean redSide) {
+        collidePlayer(team.backPlayer, redSide, 8.5);
+        collidePlayer(team.setter, redSide, 7.5);
+        collidePlayer(team.quickAttacker, redSide, team.quickAttacker.attacking ? 13.0 : 8.0);
+        collidePlayer(team.wingSpiker, redSide, team.wingSpiker.attacking ? 13.5 : 7.5);
     }
 
-    private void collidePlayer(Player player, boolean leftSide, double power) {
+    private void collidePlayer(Player player, boolean redSide, double power) {
         if (!player.intersectsBall(ball)) {
             return;
         }
@@ -44,7 +44,7 @@ public class GameModel {
         ball.x += dx / len * 6;
         ball.y += dy / len * 6;
 
-        ball.vx = dx / len * power + (leftSide ? 2.4 : -2.4);
+        ball.vx = dx / len * power + (redSide ? 2.4 : -2.4);
         ball.vy = Math.min(-5.5, dy / len * power - 4.0);
     }
 

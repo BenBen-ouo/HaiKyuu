@@ -10,8 +10,8 @@ public class GameRenderer {
         drawBackground(g);
         drawWorldBoundaryGuide(g);
         drawCourt(g);
-        drawTeam(g, model.leftTeam, true);
-        drawTeam(g, model.rightTeam, false);
+        drawTeam(g, model.redTeam, true);
+        drawTeam(g, model.blueTeam, false);
         drawBall(g, model.ball);
         drawScore(g, model);
     }
@@ -46,14 +46,14 @@ public class GameRenderer {
         g.fillRect(netX, (int) GameConfig.NET_TOP_Y, (int) GameConfig.NET_WIDTH, (int) GameConfig.NET_HEIGHT);
     }
 
-    private void drawTeam(Graphics2D g, Team team, boolean leftSide) {
-        drawPlayer(g, team.wingSpiker, leftSide);
-        drawPlayer(g, team.backPlayer, leftSide);
-        drawPlayer(g, team.setter, leftSide);
-        drawPlayer(g, team.quickAttacker, leftSide);
+    private void drawTeam(Graphics2D g, Team team, boolean redTeam) {
+        drawPlayer(g, team.wingSpiker, redTeam);
+        drawPlayer(g, team.backPlayer, redTeam);
+        drawPlayer(g, team.setter, redTeam);
+        drawPlayer(g, team.quickAttacker, redTeam);
     }
 
-    private void drawPlayer(Graphics2D g, Player p, boolean leftSide) {
+    private void drawPlayer(Graphics2D g, Player p, boolean redTeam) {
         Image img = assets.get(p.assetName);
 
         int imageX = (int) p.x;
@@ -62,24 +62,24 @@ public class GameRenderer {
         if (img != null) {
             g.drawImage(img, imageX, imageY, p.imageWidth, p.imageHeight, null);
         } else {
-            g.setColor(leftSide ? new Color(80, 125, 220) : new Color(220, 90, 90));
+            g.setColor(redTeam ? new Color(220, 90, 90) : new Color(80, 125, 220));
             g.fillRoundRect(imageX, imageY, p.imageWidth, p.imageHeight, 14, 14);
         }
 
-        drawPlayerHitBox(g, p, leftSide);
+        drawPlayerHitBox(g, p, redTeam);
         drawPlayerStateText(g, p, imageX, imageY);
     }
 
-    private void drawPlayerHitBox(Graphics2D g, Player p, boolean leftSide) {
+    private void drawPlayerHitBox(Graphics2D g, Player p, boolean redTeam) {
         int hitX = (int) p.getHitBoxX();
         int hitY = (int) p.getHitBoxY();
 
         Composite oldComposite = g.getComposite();
 
-        if (leftSide) {
-            g.setColor(new Color(0, 90, 255, 70));
-        } else {
+        if (redTeam) {
             g.setColor(new Color(255, 40, 40, 70));
+        } else {
+            g.setColor(new Color(0, 90, 255, 70));
         }
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
@@ -87,10 +87,10 @@ public class GameRenderer {
 
         g.setComposite(oldComposite);
 
-        if (leftSide) {
-            g.setColor(new Color(0, 60, 220));
-        } else {
+        if (redTeam) {
             g.setColor(new Color(220, 0, 0));
+        } else {
+            g.setColor(new Color(0, 60, 220));
         }
 
         g.setStroke(new BasicStroke(2));
@@ -135,6 +135,6 @@ public class GameRenderer {
     private void drawScore(Graphics2D g, GameModel model) {
         g.setColor(Color.BLACK);
         g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString(model.leftScore + " : " + model.rightScore, GameConfig.SCREEN_WIDTH / 2 - 28, 44);
+        g.drawString(model.redScore + " : " + model.blueScore, GameConfig.SCREEN_WIDTH / 2 - 28, 44);
     }
 }
