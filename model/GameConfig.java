@@ -26,7 +26,7 @@ public final class GameConfig {
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
 
-    public static final int PLAYER_IMAGE_WIDTH = 30;
+    public static final int PLAYER_IMAGE_WIDTH = 50;
     public static final int PLAYER_IMAGE_HEIGHT = 92;
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
