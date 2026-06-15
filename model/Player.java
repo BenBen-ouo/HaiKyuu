@@ -29,6 +29,10 @@ public class Player {
         this.hitBox = new HitBox(this);
     }
 
+    // 運動邊界限制
+    public double minX = GameConfig.WORLD_LEFT;
+    public double maxX = GameConfig.WORLD_RIGHT;
+
     public void applyGravity() {
         vy += GameConfig.GRAVITY;
         x += vx;
@@ -42,13 +46,13 @@ public class Player {
             diving = false;
         }
 
-        // 用圖片範圍限制世界邊界
-        if (x < GameConfig.WORLD_LEFT) {
-            x = GameConfig.WORLD_LEFT;
+        // 限制移動邊界
+        if (x < minX) {
+            x = minX;
         }
 
-        if (x + imageWidth > GameConfig.WORLD_RIGHT) {
-            x = GameConfig.WORLD_RIGHT - imageWidth;
+        if (x + imageWidth > maxX) {
+            x = maxX - imageWidth;
         }
     }
 
