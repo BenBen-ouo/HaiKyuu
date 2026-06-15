@@ -2,6 +2,7 @@ package view;
 
 import java.awt.Image;
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import javax.imageio.ImageIO;
@@ -25,7 +26,7 @@ public class AssetLoader {
             } else if (assetRootFile.exists()) {
                 image = ImageIO.read(assetRootFile);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             image = null;
         }
 
