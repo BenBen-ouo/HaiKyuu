@@ -1,11 +1,12 @@
 package model;
 
 public class BackPlayer extends Player {
-    public BackPlayer(String assetName, double x, double y) {
-        super(assetName, x, y);
+    public BackPlayer(String assetName, double x, double y, boolean redSide) {
+        super(assetName, x, y, redSide);
     }
 
-    public void update(TeamInput input, boolean redSide) {
+    @Override
+    public void update(TeamInput input) {
         vx = 0;
         if (input.backLeft) vx -= GameConfig.PLAYER_SPEED;
         if (input.backRight) vx += GameConfig.PLAYER_SPEED;
@@ -17,7 +18,7 @@ public class BackPlayer extends Player {
 
         if (input.backDive && !jumping) {
             diving = true;
-            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;//目前只有跳，魚躍還沒做
+            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;
         }
 
         applyGravity();

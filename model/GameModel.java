@@ -10,11 +10,8 @@ public class GameModel {
     public int redScore = 0;
     public int blueScore = 0;
 
-    private boolean waitingForServe = true;
-    private boolean redServing = true;
-    private boolean lastRedServePressed = false;
-
     private final Random random = new Random();
+    private final ServeHandler serveHandler = new ServeHandler(this);
 
     // 擊球計數器
     public int redHitCount = 0;
@@ -27,19 +24,17 @@ public class GameModel {
     private double lastBallX;
 
     public GameModel() {
-        prepareRedBackServe();
+        // serveHandler 預設就會準備好第一次發球
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
-        if (waitingForServe) {
-            handleServeWaiting(redInput);
+        if (serveHandler.isWaitingForServe()) {
+            serveHandler.update(redInput, blueInput);
 
             redTeam.update(redInput);
             blueTeam.update(blueInput);
 
-            if (waitingForServe) {
-                prepareRedBackServe();
-                lastRedServePressed = redInput.servePressed;
+            if (serveHandler.isWaitingForServe()) {
                 return;
             }
         } else {
@@ -56,122 +51,12 @@ public class GameModel {
             }
         }
 
-        collideNet();
+        ball.collideWithNet();
         collideTeam(redTeam, true);
         collideTeam(blueTeam, false);
-
-        lastRedServePressed = redInput.servePressed;
-
-        // TODO: 之後你可以在這裡接得分規則。
-        // TODO: 之後得分後可以把 waitingForServe 改回 true，並判斷下一球誰發球。
     }
 
-    private void handleServeWaiting(TeamInput redInput) {
-        if (!redServing) {
-            return;
-        }
-
-        // 發球等待中，WASD 只拿來決定球種，不讓 backPlayer 移動或跳。
-        redInput.backLeft = false;
-        redInput.backRight = false;
-        redInput.backJump = false;
-        redInput.backDive = false;
-
-        boolean justPressedServe = redInput.servePressed && !lastRedServePressed;
-
-        if (justPressedServe) {
-            prepareRedBackServe();
-            launchRedBackServe(redInput.serveType);
-            waitingForServe = false;
-            resetCounters();
-        }
-    }
-
-    private void prepareRedBackServe() {
-        Player server = redTeam.backPlayer;
-
-        // 發球方 backPlayer 使用指定發球站位，不使用原本預設站位
-        server.x = GameConfig.RED_BACK_SERVE_X;
-        server.y = GameConfig.RED_BACK_SERVE_Y;
-        server.vx = 0;
-        server.vy = 0;
-        server.jumping = false;
-        server.diving = false;
-        server.attacking = false;
-        server.blocking = false;
-
-        placeBallForRedBackServe();
-    }
-
-    private void placeBallForRedBackServe() {
-        Player server = redTeam.backPlayer;
-
-        ball.x = server.x + GameConfig.RED_SERVE_BALL_OFFSET_X;
-        ball.y = server.y + GameConfig.RED_SERVE_BALL_OFFSET_Y;
-
-        ball.vx = 0;
-        ball.vy = 0;
-    }
-
-    private void launchRedBackServe(int serveType) {
-        Player server = redTeam.backPlayer;
-
-        ball.x = server.x + GameConfig.RED_SERVE_BALL_OFFSET_X;
-        ball.y = server.y + GameConfig.RED_SERVE_BALL_OFFSET_Y;
-
-        switch (serveType) {
-            case TeamInput.SERVE_CEILING -> {
-                setServeVelocity(
-                        GameConfig.SERVE_CEILING_VX,
-                        GameConfig.SERVE_CEILING_VY
-                );
-            }
-
-            case TeamInput.SERVE_LOW_NET -> {
-                setServeVelocity(
-                        GameConfig.SERVE_LOW_NET_VX,
-                        GameConfig.SERVE_LOW_NET_VY
-                );
-            }
-
-            case TeamInput.SERVE_SHORT -> {
-                setServeVelocity(
-                        GameConfig.SERVE_SHORT_VX,
-                        GameConfig.SERVE_SHORT_VY
-                );
-            }
-
-            case TeamInput.SERVE_JUMP -> {
-                server.vy = GameConfig.PLAYER_JUMP_SPEED;
-                server.jumping = true;
-
-                ball.y -= 36;
-
-                setServeVelocity(
-                        GameConfig.SERVE_JUMP_VX,
-                        GameConfig.SERVE_JUMP_VY
-                );
-            }
-
-            default -> {
-                setServeVelocity(
-                        GameConfig.SERVE_NORMAL_VX,
-                        GameConfig.SERVE_NORMAL_VY
-                );
-            }
-        }
-    }
-
-    private void setServeVelocity(double baseVx, double baseVy) {
-        ball.vx = baseVx + randomRange(GameConfig.SERVE_RANDOM_VX_RANGE);
-        ball.vy = baseVy + randomRange(GameConfig.SERVE_RANDOM_VY_RANGE);
-    }
-
-    private double randomRange(double range) {
-        return (random.nextDouble() * 2.0 - 1.0) * range;
-    }
-
-    private void resetCounters() {
+    public void resetCounters() {
         redHitCount = 0;
         blueHitCount = 0;
         redLastHitter = null;
@@ -182,61 +67,42 @@ public class GameModel {
         int currentHitCount = redSide ? redHitCount : blueHitCount;
         Player lastHitter = redSide ? redLastHitter : blueLastHitter;
 
-        Object targetObj;
+        double targetX;
+        double targetY;
         double power;
 
         if (currentHitCount == 0 || currentHitCount == 1) {
             // 第一、二球：固定接到舉球員頭上
-            targetObj = team.setter;
+            targetX = team.setter.x + team.setter.imageWidth / 2.0;
+            targetY = team.setter.y - 20;
             power = 13.5;
         } else {
             // 第三球及以後：傳到對面場地
-            double targetX = redSide ? (GameConfig.SCREEN_WIDTH * 0.8) : (GameConfig.SCREEN_WIDTH * 0.2);
-            targetObj = new double[]{targetX, GameConfig.FLOOR_Y - 50};
+            targetX = redSide ? (GameConfig.SCREEN_WIDTH * 0.8) : (GameConfig.SCREEN_WIDTH * 0.2);
+            targetY = GameConfig.FLOOR_Y - 50;
             power = 15.5;
         }
 
-        boolean hitOccurred = false;
+        for (Player player : team.getPlayers()) {
+            if (player == lastHitter) continue;
 
-        if (!hitOccurred) {
-            hitOccurred = checkPlayerCollision(team.backPlayer, redSide, power, targetObj, lastHitter);
-        }
+            // 如果是舉球員本人接到，傳到自己正上方
+            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1)) ? ball.x : targetX;
 
-        if (!hitOccurred) {
-            hitOccurred = checkPlayerCollision(team.setter, redSide, power, targetObj, lastHitter);
-        }
-
-        if (!hitOccurred) {
-            hitOccurred = checkPlayerCollision(team.quickAttacker, redSide, power, targetObj, lastHitter);
-        }
-
-        if (!hitOccurred) {
-            checkPlayerCollision(team.wingSpiker, redSide, power, targetObj, lastHitter);
-        }
-    }
-
-    private boolean checkPlayerCollision(Player player, boolean redSide, double power, Object targetObj, Player lastHitter) {
-        // 防止連擊：同一個人不能連碰兩次
-        if (player == lastHitter) {
-            return false;
-        }
-
-        if (collidePlayer(player, power, targetObj)) {
-            if (redSide) {
-                redHitCount++;
-                redLastHitter = player;
-            } else {
-                blueHitCount++;
-                blueLastHitter = player;
+            if (collidePlayer(player, power, currentTargetX, targetY)) {
+                if (redSide) {
+                    redHitCount++;
+                    redLastHitter = player;
+                } else {
+                    blueHitCount++;
+                    blueLastHitter = player;
+                }
+                break;
             }
-
-            return true;
         }
-
-        return false;
     }
 
-    private boolean collidePlayer(Player player, double power, Object targetObj) {
+    private boolean collidePlayer(Player player, double power, double targetX, double targetY) {
         if (!player.intersectsBall(ball)) {
             return false;
         }
@@ -252,80 +118,10 @@ public class GameModel {
         ball.x += dx / len * 6;
         ball.y += dy / len * 6;
 
-        if (targetObj != null) {
-            double targetX;
-            double targetY;
-
-            if (targetObj instanceof Player) {
-                Player targetPlayer = (Player) targetObj;
-
-                targetX = targetPlayer.x + targetPlayer.imageWidth / 2.0;
-
-                // 如果是舉球員本人接到，傳到自己正上方
-                if (player == targetPlayer) {
-                    targetX = ball.x;
-                }
-
-                targetY = targetPlayer.y - 20;
-            } else {
-                double[] coords = (double[]) targetObj;
-                targetX = coords[0];
-                targetY = coords[1];
-            }
-
-            double g = GameConfig.GRAVITY;
-            double c = power;
-            double deltaX = targetX - ball.x;
-            double deltaY = targetY - ball.y;
-
-            // 避免 deltaX 太小導致物理公式崩潰
-            if (Math.abs(deltaX) < 1) {
-                deltaX = deltaX >= 0 ? 1 : -1;
-            }
-
-            double x2 = deltaX * deltaX;
-            double a = deltaY * deltaY + x2;
-            double b = -x2 * (g * deltaY + c * c);
-            double d = 0.25 * g * g * x2 * x2;
-            double discriminant = b * b - 4 * a * d;
-
-            if (discriminant >= 0) {
-                double u = (-b - Math.sqrt(discriminant)) / (2.0 * a);
-
-                if (u > 0) {
-                    ball.vx = Math.sqrt(u) * Math.signum(deltaX);
-                    ball.vy = -Math.sqrt(Math.max(0, c * c - u));
-                } else {
-                    fallbackPass(deltaX, c);
-                }
-            } else {
-                fallbackPass(deltaX, c);
-            }
-        }
+        double[] vel = PhysicsUtils.calculateVelocityToTarget(ball.x, ball.y, targetX, targetY, power, GameConfig.GRAVITY);
+        ball.vx = vel[0];
+        ball.vy = vel[1];
 
         return true;
-    }
-
-    private void fallbackPass(double deltaX, double power) {
-        ball.vx = Math.sqrt(power * power / 2.0) * Math.signum(deltaX);
-        ball.vy = -Math.sqrt(power * power / 2.0);
-    }
-
-    private void collideNet() {
-        double netLeft = GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0;
-        double netRight = GameConfig.NET_X + GameConfig.NET_WIDTH / 2.0;
-
-        boolean hitX = ball.x + ball.radius > netLeft && ball.x - ball.radius < netRight;
-        boolean hitY = ball.y + ball.radius > GameConfig.NET_TOP_Y && ball.y - ball.radius < GameConfig.FLOOR_Y;
-
-        if (hitX && hitY) {
-            if (ball.x < GameConfig.NET_X) {
-                ball.x = netLeft - ball.radius;
-                ball.vx = -Math.abs(ball.vx) * GameConfig.NET_BOUNCE;
-            } else {
-                ball.x = netRight + ball.radius;
-                ball.vx = Math.abs(ball.vx) * GameConfig.NET_BOUNCE;
-            }
-        }
     }
 }

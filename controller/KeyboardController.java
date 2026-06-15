@@ -4,6 +4,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.HashSet;
 import java.util.Set;
+import model.ServeType;
 import model.TeamInput;
 
 public class KeyboardController implements KeyListener {
@@ -41,20 +42,20 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
-    private int getRedServeType() {
+    private ServeType getRedServeType() {
         if (isPressed(KeyEvent.VK_W)) {
-            return TeamInput.SERVE_CEILING;
+            return ServeType.CEILING;
         }
         if (isPressed(KeyEvent.VK_S)) {
-            return TeamInput.SERVE_LOW_NET;
+            return ServeType.LOW_NET;
         }
         if (isPressed(KeyEvent.VK_A)) {
-            return TeamInput.SERVE_SHORT;
+            return ServeType.SHORT;
         }
         if (isPressed(KeyEvent.VK_D)) {
-            return TeamInput.SERVE_JUMP;
+            return ServeType.JUMP;
         }
-        return TeamInput.SERVE_NORMAL;
+        return ServeType.NORMAL;
     }
 
     // private int getBlueServeType() {

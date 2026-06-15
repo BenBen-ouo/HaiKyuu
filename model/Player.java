@@ -1,6 +1,6 @@
 package model;
 
-public class Player {
+public abstract class Player {
     public String assetName;
 
     // 圖片左上角位置
@@ -22,12 +22,17 @@ public class Player {
     public boolean blocking;
     public boolean diving;
 
-    public Player(String assetName, double x, double y) {
+    public boolean redSide;
+
+    public Player(String assetName, double x, double y, boolean redSide) {
         this.assetName = assetName;
         this.x = x;
         this.y = y;
+        this.redSide = redSide;
         this.hitBox = new HitBox(this);
     }
+
+    public abstract void update(TeamInput input);
 
     // 運動邊界限制
     public double minX = GameConfig.WORLD_LEFT;

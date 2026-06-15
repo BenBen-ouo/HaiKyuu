@@ -1,10 +1,11 @@
 package model;
 
 public class QuickAttacker extends Player {
-    public QuickAttacker(String assetName, double x, double y) {
-        super(assetName, x, y);
+    public QuickAttacker(String assetName, double x, double y, boolean redSide) {
+        super(assetName, x, y, redSide);
     }
 
+    @Override
     public void update(TeamInput input) {
         vx = 0;
         attacking = input.quickAttack;
