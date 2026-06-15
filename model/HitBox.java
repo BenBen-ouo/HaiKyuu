@@ -21,7 +21,7 @@ public class HitBox {
     public HitBox(Player owner) {
         this.owner = owner;
 
-        // 預設值，之後每個球員都可以在 Team.java 裡面自己改
+        // 預設值
         this.offsetX = 21;
         this.offsetY = 14;
         this.width = 28;

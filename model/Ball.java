@@ -19,6 +19,10 @@ public class Ball {
         x += vx;
         y += vy;
 
+        handleWorldBoundaries();
+    }
+
+    private void handleWorldBoundaries() {
         if (x - radius < GameConfig.WORLD_LEFT) {
             x = GameConfig.WORLD_LEFT + radius;
             vx = -vx * GameConfig.NET_BOUNCE;
@@ -35,6 +39,24 @@ public class Ball {
             y = GameConfig.FLOOR_Y - radius;
             vy = -Math.abs(vy) * GameConfig.BALL_BOUNCE;
             vx *= 0.96;
+        }
+    }
+
+    public void collideWithNet() {
+        double netLeft = GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0;
+        double netRight = GameConfig.NET_X + GameConfig.NET_WIDTH / 2.0;
+
+        boolean hitX = x + radius > netLeft && x - radius < netRight;
+        boolean hitY = y + radius > GameConfig.NET_TOP_Y && y - radius < GameConfig.FLOOR_Y;
+
+        if (hitX && hitY) {
+            if (x < GameConfig.NET_X) {
+                x = netLeft - radius;
+                vx = -Math.abs(vx) * GameConfig.NET_BOUNCE;
+            } else {
+                x = netRight + radius;
+                vx = Math.abs(vx) * GameConfig.NET_BOUNCE;
+            }
         }
     }
 }

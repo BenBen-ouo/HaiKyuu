@@ -12,4 +12,7 @@ public class TeamInput {
     public boolean quickBlock;
 
     public boolean wingAttack;
+
+    public boolean servePressed;
+    public ServeType serveType = ServeType.NORMAL;
 }
