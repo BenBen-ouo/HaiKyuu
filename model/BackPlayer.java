@@ -17,7 +17,7 @@ public class BackPlayer extends Player {
 
         if (input.backDive && !jumping) {
             diving = true;
-            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;
+            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;//目前只有跳，魚躍還沒做
         }
 
         applyGravity();
