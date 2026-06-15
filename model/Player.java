@@ -11,16 +11,11 @@ public class Player {
     public double vy;
 
     // 圖片顯示大小
-    public int imageWidth = 70;
-    public int imageHeight = 86;
+    public int imageWidth = GameConfig.PLAYER_IMAGE_WIDTH;
+    public int imageHeight = GameConfig.PLAYER_IMAGE_HEIGHT;
 
-    // 碰撞箱大小
-    public int width = 28;
-    public int height = 68;
-
-    // 碰撞箱相對於圖片左上角的偏移
-    public int hitBoxOffsetX = 21;
-    public int hitBoxOffsetY = 14;
+    // 每個球員自己的碰撞箱
+    public HitBox hitBox;
 
     public boolean jumping;
     public boolean attacking;
@@ -31,6 +26,7 @@ public class Player {
         this.assetName = assetName;
         this.x = x;
         this.y = y;
+        this.hitBox = new HitBox(this);
     }
 
     public void applyGravity() {
@@ -56,32 +52,15 @@ public class Player {
         }
     }
 
-    public double getHitBoxX() {
-        return x + hitBoxOffsetX;
-    }
-
-    public double getHitBoxY() {
-        return y + hitBoxOffsetY;
+    public boolean intersectsBall(Ball ball) {
+        return hitBox.intersectsBall(ball);
     }
 
     public double getHitBoxCenterX() {
-        return getHitBoxX() + width / 2.0;
+        return hitBox.getCenterX();
     }
 
     public double getHitBoxCenterY() {
-        return getHitBoxY() + height / 2.0;
-    }
-
-    public boolean intersectsBall(Ball ball) {
-        double hitX = getHitBoxX();
-        double hitY = getHitBoxY();
-
-        double nearestX = Math.max(hitX, Math.min(ball.x, hitX + width));
-        double nearestY = Math.max(hitY, Math.min(ball.y, hitY + height));
-
-        double dx = ball.x - nearestX;
-        double dy = ball.y - nearestY;
-
-        return dx * dx + dy * dy <= ball.radius * ball.radius;
+        return hitBox.getCenterY();
     }
 }

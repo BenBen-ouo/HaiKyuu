@@ -1,6 +1,7 @@
 package view;
 
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import model.*;
 
 public class GameRenderer {
@@ -71,10 +72,22 @@ public class GameRenderer {
     }
 
     private void drawPlayerHitBox(Graphics2D g, Player p, boolean redTeam) {
-        int hitX = (int) p.getHitBoxX();
-        int hitY = (int) p.getHitBoxY();
+        HitBox box = p.hitBox;
 
+        int hitX = (int) Math.round(box.getX());
+        int hitY = (int) Math.round(box.getY());
+        int hitW = (int) Math.round(box.width);
+        int hitH = (int) Math.round(box.height);
+
+        AffineTransform oldTransform = g.getTransform();
         Composite oldComposite = g.getComposite();
+        Stroke oldStroke = g.getStroke();
+
+        g.rotate(
+                Math.toRadians(box.rotationDegrees),
+                box.getCenterX(),
+                box.getCenterY()
+        );
 
         if (redTeam) {
             g.setColor(new Color(255, 40, 40, 70));
@@ -83,7 +96,14 @@ public class GameRenderer {
         }
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-        g.fillRect(hitX, hitY, p.width, p.height);
+        g.fillRoundRect(
+                hitX,
+                hitY,
+                hitW,
+                hitH,
+                box.arcWidth,
+                box.arcHeight
+        );
 
         g.setComposite(oldComposite);
 
@@ -94,7 +114,18 @@ public class GameRenderer {
         }
 
         g.setStroke(new BasicStroke(2));
-        g.drawRect(hitX, hitY, p.width, p.height);
+        g.drawRoundRect(
+                hitX,
+                hitY,
+                hitW,
+                hitH,
+                box.arcWidth,
+                box.arcHeight
+        );
+
+        g.setStroke(oldStroke);
+        g.setTransform(oldTransform);
+        g.setComposite(oldComposite);
     }
 
     private void drawPlayerStateText(Graphics2D g, Player p, int x, int y) {

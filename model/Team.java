@@ -39,6 +39,8 @@ public class Team {
                     baseY
             );
 
+            setupRedHitBoxes();
+
         } else {
             double baseX = GameConfig.NET_X;
 
@@ -65,7 +67,73 @@ public class Team {
                     baseX + GameConfig.BLUE_WING_OFFSET_X,
                     baseY
             );
+
+            setupBlueHitBoxes();
         }
+    }
+
+    private void setupRedHitBoxes() {
+        // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
+
+        backPlayer.hitBox.set(
+                21, 50,
+                28, 10,
+                8, 8,
+                20
+        );
+
+        setter.hitBox.set(
+                21, 14,
+                28, 20,
+                8, 8,
+                0
+        );
+
+        quickAttacker.hitBox.set(
+                40, 0,
+                10, 30,
+                8, 8,
+                20
+        );
+
+        wingSpiker.hitBox.set(
+                21, 50,
+                28, 10,
+                8, 8,
+                20
+        );
+    }
+
+    private void setupBlueHitBoxes() {
+        // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
+
+        backPlayer.hitBox.set(
+                21, 50,
+                28, 10,
+                8, 8,
+                -20
+        );
+
+        setter.hitBox.set(
+                21, 14,
+                28, 20,
+                8, 8,
+                0
+        );
+
+        quickAttacker.hitBox.set(
+                20, 0,
+                10, 30,
+                8, 8,
+                -20
+        );
+
+        wingSpiker.hitBox.set(
+                21, 50,
+                28, 10,
+                8, 8,
+                -20
+        );
     }
 
     public void update(TeamInput input) {
@@ -74,4 +142,4 @@ public class Team {
         quickAttacker.update(input);
         wingSpiker.update(input);
     }
-}
+} 
