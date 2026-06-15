@@ -38,6 +38,8 @@ public class KeyboardController implements KeyListener {
         input.quickAttack = isPressed(KeyEvent.VK_NUMPAD6);
         input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
         input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
+        input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
+        input.serveType = getBlueServeType();
 
         return input;
     }
@@ -58,21 +60,21 @@ public class KeyboardController implements KeyListener {
         return ServeType.NORMAL;
     }
 
-    // private int getBlueServeType() {
-    //     if (isPressed(KeyEvent.VK_UP)) {
-    //         return TeamInput.SERVE_CEILING;
-    //     }
-    //     if (isPressed(KeyEvent.VK_DOWN)) {
-    //         return TeamInput.SERVE_LOW_NET;
-    //     }
-    //     if (isPressed(KeyEvent.VK_LEFT)) {
-    //         return TeamInput.SERVE_SHORT;
-    //     }
-    //     if (isPressed(KeyEvent.VK_RIGHT)) {
-    //         return TeamInput.SERVE_JUMP;
-    //     }
-    //     return TeamInput.SERVE_NORMAL;
-    // }
+    private ServeType getBlueServeType() {
+        if (isPressed(KeyEvent.VK_UP)) {
+            return ServeType.CEILING;
+        }
+        if (isPressed(KeyEvent.VK_DOWN)) {
+            return ServeType.LOW_NET;
+        }
+        if (isPressed(KeyEvent.VK_RIGHT)) {
+            return ServeType.SHORT;
+        }
+        if (isPressed(KeyEvent.VK_LEFT)) {
+            return ServeType.JUMP;
+        }
+        return ServeType.NORMAL;
+    }
 
     private boolean isPressed(int keyCode) {
         return pressedKeys.contains(keyCode);

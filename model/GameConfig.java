@@ -15,9 +15,9 @@ public final class GameConfig {
     public static final double GRAVITY = 0.25;
     public static final double PLAYER_SPEED = 4.3;
     public static final double PLAYER_JUMP_SPEED = -8;
-    public static final double DIVE_SPEED = 8.0; ///之後改成撲接時碰撞箱範圍變大，先不動
+    public static final double DIVE_SPEED = 5.0; ///之後改成撲接時碰撞箱範圍變大，先不動
 
-    public static final double BALL_RADIUS = 20;
+    public static final double BALL_RADIUS = 15;
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
