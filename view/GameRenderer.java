@@ -146,7 +146,7 @@ public class GameRenderer {
     }
 
     private void drawBall(Graphics2D g, Ball ball) {
-        Image img = assets.get("mikasa.jpg");
+        Image img = assets.get("mikasa.png");
 
         int d = (int) (ball.radius * 2);
         int x = (int) (ball.x - ball.radius);
@@ -154,12 +154,13 @@ public class GameRenderer {
 
         if (img != null) {
             g.drawImage(img, x, y, d, d, null);
-        } else {
-            g.setColor(new Color(245, 210, 60));
-            g.fillOval(x, y, d, d);
+        } 
+        else {
+            // g.setColor(new Color(245, 210, 60));
+            // g.fillOval(x, y, d, d);
 
-            g.setColor(Color.BLACK);
-            g.drawOval(x, y, d, d);
+            // g.setColor(Color.BLACK);
+            // g.drawOval(x, y, d, d);
         }
     }
 
