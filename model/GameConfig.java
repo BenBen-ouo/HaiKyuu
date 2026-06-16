@@ -17,7 +17,7 @@ public final class GameConfig {
     public static final double PLAYER_JUMP_SPEED = -8;
     public static final double DIVE_SPEED = 5.0; ///之後改成撲接時碰撞箱範圍變大，先不動
 
-    public static final double BALL_RADIUS = 15;
+    public static final double BALL_RADIUS = 14;
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
@@ -26,8 +26,8 @@ public final class GameConfig {
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
 
-    public static final int PLAYER_IMAGE_WIDTH = 40;
-    public static final int PLAYER_IMAGE_HEIGHT = 92;
+    public static final int PLAYER_IMAGE_WIDTH = 100;
+    public static final int PLAYER_IMAGE_HEIGHT = 100;
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
@@ -58,8 +58,8 @@ public final class GameConfig {
     public static final double SERVE_NORMAL_VY = -12;
     public static final double SERVE_CEILING_VX = 5;
     public static final double SERVE_CEILING_VY = -25;
-    public static final double SERVE_LOW_NET_VX = 15;
-    public static final double SERVE_LOW_NET_VY = -6.8;
+    public static final double SERVE_LOW_NET_VX = 14.8;
+    public static final double SERVE_LOW_NET_VY = -7;
     public static final double SERVE_SHORT_VX = 7.0;
     public static final double SERVE_SHORT_VY = -14.0;
     public static final double SERVE_JUMP_VX = 11.5;
