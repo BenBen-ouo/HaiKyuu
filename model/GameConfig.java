@@ -40,7 +40,7 @@ public final class GameConfig {
     public static final double RED_BACK_SERVE_Y = PLAYER_BASE_Y;
     // 發球時，球相對於 red backPlayer 圖片左上角的位置
     public static final double RED_SERVE_BALL_OFFSET_X = PLAYER_IMAGE_WIDTH + 12;
-    public static final double RED_SERVE_BALL_OFFSET_Y = 0;
+    public static final double RED_SERVE_BALL_OFFSET_Y = -5;
 
     // blue 隊各角色相對基準點的位置
     public static final double BLUE_BACK_OFFSET_X = 300;
@@ -51,7 +51,7 @@ public final class GameConfig {
     public static final double BLUE_BACK_SERVE_Y = PLAYER_BASE_Y;
     // blue 隊發球時，球相對於 blue backPlayer 圖片左上角的位置
     public static final double BLUE_SERVE_BALL_OFFSET_X = PLAYER_IMAGE_WIDTH + 12;
-    public static final double BLUE_SERVE_BALL_OFFSET_Y = 0;
+    public static final double BLUE_SERVE_BALL_OFFSET_Y = -5;
 
     // 發球球速，之後可以再依照手感慢慢調
     public static final double SERVE_NORMAL_VX = 10;
