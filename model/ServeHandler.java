@@ -80,8 +80,7 @@ public class ServeHandler {
         if (redSide) {
             ball.x = server.x + GameConfig.RED_SERVE_BALL_OFFSET_X;
         } else {
-            // 藍隊圖片在右邊，球應該在左邊
-            ball.x = server.x - ball.radius * 2;
+            ball.x = server.x + server.imageWidth - GameConfig.BLUE_SERVE_BALL_OFFSET_X;
         }
 
         ball.y = server.y + (redSide ? GameConfig.RED_SERVE_BALL_OFFSET_Y : GameConfig.BLUE_SERVE_BALL_OFFSET_Y);

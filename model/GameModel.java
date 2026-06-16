@@ -30,6 +30,8 @@ public class GameModel {
     public void update(TeamInput redInput, TeamInput blueInput) {
         if (serveHandler.isWaitingForServe()) {
             serveHandler.update(redInput, blueInput);
+            configureBackPlayerAction(redInput, redHitCount);
+            configureBackPlayerAction(blueInput, blueHitCount);
 
             redTeam.update(redInput);
             blueTeam.update(blueInput);
@@ -39,6 +41,8 @@ public class GameModel {
             }
         } else {
             lastBallX = ball.x;
+            configureBackPlayerAction(redInput, redHitCount);
+            configureBackPlayerAction(blueInput, blueHitCount);
 
             redTeam.update(redInput);
             blueTeam.update(blueInput);
@@ -61,6 +65,18 @@ public class GameModel {
         blueHitCount = 0;
         redLastHitter = null;
         blueLastHitter = null;
+    }
+
+    private void configureBackPlayerAction(TeamInput input, int hitCount) {
+        boolean actionPressed = input.backJump || input.backDive;
+
+        if (hitCount == 0) {
+            input.backJump = false;
+            input.backDive = actionPressed;
+        } else {
+            input.backJump = actionPressed;
+            input.backDive = false;
+        }
     }
 
     private void collideTeam(Team team, boolean redSide) {
