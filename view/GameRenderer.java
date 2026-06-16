@@ -30,19 +30,33 @@ public class GameRenderer {
     }
 
     private void drawCourt(Graphics2D g) {
-        g.setColor(new Color(238, 190, 115));
-        g.fillRect(0, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT - (int) GameConfig.FLOOR_Y);
+        // 整體地板底色 (原本的顏色)
+        int floorY = (int) GameConfig.FLOOR_Y;
+        int floorH = GameConfig.SCREEN_HEIGHT - floorY;
+        int courtLeftX = GameConfig.SCREEN_WIDTH / 2 - 500;
+        int courtRightX = GameConfig.SCREEN_WIDTH / 2 + 500;
+        int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
+
+        g.setColor(new Color(243, 146, 10));
+        g.fillRect(0, floorY, GameConfig.SCREEN_WIDTH, floorH);
+
+        // 將左右兩邊邊線以外的區域塗成綠色
+        g.setColor(new Color(54, 136, 138)); // 綠色地面
+        
+        // 左邊綠色區
+        g.fillRect(0, floorY, courtLeftX, floorH);
+        // 右邊綠色區
+        g.fillRect(courtRightX, floorY, GameConfig.SCREEN_WIDTH - courtRightX, floorH);
 
         g.setColor(Color.WHITE);
         g.setStroke(new BasicStroke(3));
-        g.drawLine(0, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH, (int) GameConfig.FLOOR_Y);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH / 2, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 167,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 - 167,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 167,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 + 167,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 500,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 - 500,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 500,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 + 500,GameConfig.SCREEN_HEIGHT);
+        g.drawLine(0, floorY, GameConfig.SCREEN_WIDTH, floorY);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2, floorY, GameConfig.SCREEN_WIDTH / 2, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 167, floorY, GameConfig.SCREEN_WIDTH / 2 - 167, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 167, floorY, GameConfig.SCREEN_WIDTH / 2 + 167, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(courtLeftX, floorY, courtLeftX, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(courtRightX, floorY, courtRightX, GameConfig.SCREEN_HEIGHT);
 
-        int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
         g.setColor(new Color(70, 70, 80));
         g.fillRect(netX, (int) GameConfig.NET_TOP_Y, (int) GameConfig.NET_WIDTH, (int) GameConfig.NET_HEIGHT);
     }
