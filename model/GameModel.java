@@ -27,6 +27,14 @@ public class GameModel {
         // serveHandler 預設就會準備好第一次發球
     }
 
+    public ServeHandler getServeHandler() {
+        return serveHandler;
+    }
+
+    public void restart() {
+        GameResetter.reset(this);
+    }
+
     public void update(TeamInput redInput, TeamInput blueInput) {
         if (serveHandler.isWaitingForServe()) {
             serveHandler.update(redInput, blueInput);

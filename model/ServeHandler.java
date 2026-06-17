@@ -30,6 +30,12 @@ public class ServeHandler {
         this.redServing = redServing;
     }
 
+    public void reset() {
+        this.waitingForServe = true;
+        this.redServing = true;
+        this.lastServePressed = false;
+    }
+
     public void update(TeamInput redInput, TeamInput blueInput) {
         TeamInput currentInput = redServing ? redInput : blueInput;
         
