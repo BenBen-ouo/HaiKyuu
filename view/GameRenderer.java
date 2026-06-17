@@ -37,16 +37,12 @@ public class GameRenderer {
         int courtRightX = GameConfig.SCREEN_WIDTH / 2 + 500;
         int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
 
-        g.setColor(new Color(243, 146, 10));
+        g.setColor(new Color(243, 146, 10));//地板底色
         g.fillRect(0, floorY, GameConfig.SCREEN_WIDTH, floorH);
 
-        // 將左右兩邊邊線以外的區域塗成綠色
-        g.setColor(new Color(54, 136, 138)); // 綠色地面
-        
-        // 左邊綠色區
-        g.fillRect(0, floorY, courtLeftX, floorH);
-        // 右邊綠色區
-        g.fillRect(courtRightX, floorY, GameConfig.SCREEN_WIDTH - courtRightX, floorH);
+        g.setColor(new Color(106, 200, 243)); // 綠色地面
+        g.fillRect(0, floorY, courtLeftX, floorH);// 左邊綠色區
+        g.fillRect(courtRightX, floorY, GameConfig.SCREEN_WIDTH - courtRightX, floorH);// 右邊綠色區
 
         g.setColor(Color.WHITE);
         g.setStroke(new BasicStroke(3));
@@ -57,7 +53,7 @@ public class GameRenderer {
         g.drawLine(courtLeftX, floorY, courtLeftX, GameConfig.SCREEN_HEIGHT);
         g.drawLine(courtRightX, floorY, courtRightX, GameConfig.SCREEN_HEIGHT);
 
-        g.setColor(new Color(70, 70, 80));
+        g.setColor(new Color(70, 70, 80));// 網子顏色
         g.fillRect(netX, (int) GameConfig.NET_TOP_Y, (int) GameConfig.NET_WIDTH, (int) GameConfig.NET_HEIGHT);
     }
 
