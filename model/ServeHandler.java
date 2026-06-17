@@ -24,6 +24,9 @@ public class ServeHandler {
 
     public void setWaitingForServe(boolean waiting) {
         this.waitingForServe = waiting;
+        if (waiting) {
+            prepareServe(redServing);
+        }
     }
 
     public void setRedServing(boolean redServing) {
@@ -34,38 +37,45 @@ public class ServeHandler {
         this.waitingForServe = true;
         this.redServing = true;
         this.lastServePressed = false;
+        prepareServe(redServing); // 確保重置時也回到定位
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
         TeamInput currentInput = redServing ? redInput : blueInput;
         
-        // 在等待發球期間，限制球員動作（例如不能隨意移動或跳躍，除非是發球動作的一部分）
-        currentInput.backLeft = false;
-        currentInput.backRight = false;
-        currentInput.backJump = false;
-        currentInput.backDive = false;
+        // 如果正在等待發球，鎖定「發球者」的移動
+        if (waitingForServe) {
+            currentInput.backLeft = false;
+            currentInput.backRight = false;
+            currentInput.backJump = false;
+            currentInput.backDive = false;
+            
+            // 在等待發球期間，球要固定在發球員手邊
+            placeBallForServe(redServing);
+        }
 
         boolean justPressedServe = currentInput.servePressed && !lastServePressed;
 
         if (justPressedServe) {
-            prepareServe(redServing);
+            // 發球瞬間再次校準球的位置
+            placeBallForServe(redServing);
             launchServe(currentInput.serveType, redServing);
             waitingForServe = false;
             model.resetCounters();
-        }
-
-        if (waitingForServe) {
-            prepareServe(redServing);
         }
 
         lastServePressed = currentInput.servePressed;
     }
 
     public void prepareServe(boolean redSide) {
+        // 重置兩隊所有人的位置
+        model.redTeam.resetAllPlayers();
+        model.blueTeam.resetAllPlayers();
+
         Team team = redSide ? model.redTeam : model.blueTeam;
         Player server = team.backPlayer;
 
-        // 發球方 backPlayer 使用指定發球站位
+        // 發球方 backPlayer 使用指定發球站位 (覆蓋掉初始站位)
         server.x = redSide ? GameConfig.RED_BACK_SERVE_X : GameConfig.BLUE_BACK_SERVE_X;
         server.y = redSide ? GameConfig.RED_BACK_SERVE_Y : GameConfig.BLUE_BACK_SERVE_Y;
         server.vx = 0;
@@ -109,6 +119,7 @@ public class ServeHandler {
             ball.y -= 36;
         }
 
+        model.setLastHitTeam(redSide);
         setServeVelocity(serveType.baseVx * direction, serveType.baseVy);
     }
 

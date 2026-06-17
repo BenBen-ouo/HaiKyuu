@@ -20,22 +20,46 @@ public class GameModel {
     // 記錄最後一次觸球者，用於防止連擊
     private Player redLastHitter = null;
     private Player blueLastHitter = null;
+    private Boolean lastHitTeam = null; // true: red, false: blue, null: none
+    private boolean lastTouchWasBlock = false;
+
+    private boolean isRallyOver = false;
+    private int deadBallTimer = 0;
 
     private double lastBallX;
 
     public GameModel() {
-        // serveHandler 預設就會準備好第一次發球
+        // 遊戲開始，預設紅方發球，並將所有人拉到初始位置
+        serveHandler.setWaitingForServe(true);
     }
 
     public ServeHandler getServeHandler() {
         return serveHandler;
     }
 
+    public Boolean getLastHitTeam() {
+        return lastHitTeam;
+    }
+
+    public void setLastHitTeam(Boolean team) {
+        this.lastHitTeam = team;
+    }
+
     public void restart() {
         GameResetter.reset(this);
+        isRallyOver = false;
+        deadBallTimer = 0;
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
+        if (isRallyOver) {
+            updateDeadBall();
+            ball.update(); // 讓球繼續彈跳
+            redTeam.update(redInput); // 球員仍可移動但不能擊球
+            blueTeam.update(blueInput);
+            return;
+        }
+
         if (serveHandler.isWaitingForServe()) {
             serveHandler.update(redInput, blueInput);
             configureBackPlayerAction(redInput, redHitCount);
@@ -56,6 +80,11 @@ public class GameModel {
             blueTeam.update(blueInput);
             ball.update();
 
+            // 偵測球是否落地 (死球判斷)
+            if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
+                processScoring();
+            }
+
             // 偵測球是否過網，過網則重置兩隊的計數器與最後觸球者
             double netX = GameConfig.NET_X;
             if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
@@ -68,11 +97,39 @@ public class GameModel {
         collideTeam(blueTeam, false);
     }
 
+    private void processScoring() {
+        if (isRallyOver) return;
+
+        isRallyOver = true;
+        deadBallTimer = 60;
+
+        boolean redWins = ScoringLogic.determineWinner(ball.x, lastHitTeam, serveHandler.isRedServing());
+        
+        if (redWins) {
+            redScore++;
+            serveHandler.setRedServing(true);
+        } else {
+            blueScore++;
+            serveHandler.setRedServing(false);
+        }
+    }
+
+    private void updateDeadBall() {
+        deadBallTimer--;
+        if (deadBallTimer <= 0) {
+            isRallyOver = false;
+            serveHandler.setWaitingForServe(true);
+            resetCounters();
+        }
+    }
+
     public void resetCounters() {
         redHitCount = 0;
         blueHitCount = 0;
         redLastHitter = null;
         blueLastHitter = null;
+        lastHitTeam = null;
+        lastTouchWasBlock = false;
     }
 
     private void configureBackPlayerAction(TeamInput input, int hitCount) {
@@ -108,19 +165,24 @@ public class GameModel {
         }
 
         for (Player player : team.getPlayers()) {
-            if (player == lastHitter) continue;
+            // 如果是上一次觸球者，且上一次「不是」攔網，則跳過 (防止非法連擊)
+            if (player == lastHitter && !lastTouchWasBlock) continue;
 
             // 如果是舉球員本人接到，傳到自己正上方
             double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1)) ? ball.x : targetX;
 
             if (collidePlayer(player, power, currentTargetX, targetY)) {
+                lastHitTeam = redSide; // 更新最後觸球隊伍 (用於出界判定)
+                
                 if (redSide) {
-                    redHitCount++;
                     redLastHitter = player;
+                    if (!player.blocking) redHitCount++; // 攔網不計次
                 } else {
-                    blueHitCount++;
                     blueLastHitter = player;
+                    if (!player.blocking) blueHitCount++; // 攔網不計次
                 }
+                
+                lastTouchWasBlock = player.blocking; // 紀錄本次觸球是否為攔網
                 break;
             }
         }
