@@ -1,7 +1,5 @@
 package model;
 
-import java.util.Random;
-
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public Team redTeam = new Team(true);
@@ -10,7 +8,6 @@ public class GameModel {
     public int redScore = 0;
     public int blueScore = 0;
 
-    private final Random random = new Random();
     private final ServeHandler serveHandler = new ServeHandler(this);
 
     // 擊球計數器
@@ -36,6 +33,9 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
+        fillBallSideInfo(redInput, true);
+        fillBallSideInfo(blueInput, false);
+
         if (serveHandler.isWaitingForServe()) {
             serveHandler.update(redInput, blueInput);
             configureBackPlayerAction(redInput, redHitCount);
@@ -75,13 +75,21 @@ public class GameModel {
         blueLastHitter = null;
     }
 
+    private void fillBallSideInfo(TeamInput input, boolean redSide) {
+        boolean ownSide = redSide ? ball.x <= GameConfig.NET_X : ball.x >= GameConfig.NET_X;
+        input.ballOnOwnSide = ownSide;
+        input.ballOnOpponentSide = !ownSide;
+    }
+
     private void configureBackPlayerAction(TeamInput input, int hitCount) {
         boolean actionPressed = input.backJump || input.backDive;
 
         if (hitCount == 0) {
+            // 還沒有接起本隊第一球：Space / 0 是撲球，不是起跳攻擊。
             input.backJump = false;
             input.backDive = actionPressed;
         } else {
+            // 已經接起第一球後：Space / 0 才進入 back 攻擊起跳與空中揮臂判斷。
             input.backJump = actionPressed;
             input.backDive = false;
         }
@@ -111,9 +119,13 @@ public class GameModel {
             if (player == lastHitter) continue;
 
             // 如果是舉球員本人接到，傳到自己正上方
-            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1)) ? ball.x : targetX;
+            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1))
+                    ? ball.x
+                    : targetX;
 
             if (collidePlayer(player, power, currentTargetX, targetY)) {
+                playTouchAnimation(player, currentHitCount);
+
                 if (redSide) {
                     redHitCount++;
                     redLastHitter = player;
@@ -123,6 +135,30 @@ public class GameModel {
                 }
                 break;
             }
+        }
+    }
+
+    private void playTouchAnimation(Player player, int currentHitCount) {
+        if (player instanceof Setter) {
+            if (currentHitCount <= 2) {
+                player.playSettingAnimation();
+            }
+            return;
+        }
+
+        if (player.isAttackReady() || player.isAttackSwinging()) {
+            // 之後真正扣球邏輯可以從這裡接：
+            // if (player.isAttackSwinging()) { 改成扣球速度 / 方向 }
+            return;
+        }
+
+        if (player instanceof WingSpiker) {
+            player.playReceiveAnimation();
+            return;
+        }
+
+        if (player instanceof BackPlayer && !player.diving) {
+            player.playReceiveAnimation();
         }
     }
 
@@ -142,7 +178,14 @@ public class GameModel {
         ball.x += dx / len * 6;
         ball.y += dy / len * 6;
 
-        double[] vel = PhysicsUtils.calculateVelocityToTarget(ball.x, ball.y, targetX, targetY, power, GameConfig.GRAVITY);
+        double[] vel = PhysicsUtils.calculateVelocityToTarget(
+                ball.x,
+                ball.y,
+                targetX,
+                targetY,
+                power,
+                GameConfig.GRAVITY
+        );
         ball.vx = vel[0];
         ball.vy = vel[1];
 

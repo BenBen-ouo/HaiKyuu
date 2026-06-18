@@ -77,6 +77,9 @@ public class DiveController {
         this.frame = 0;
         this.direction = direction;
 
+        setDiveImageDirection();
+        player.playDiveAnimation();
+
         player.y = GameConfig.FLOOR_Y - player.imageHeight;
         setDiveHitBox();
     }
@@ -89,13 +92,24 @@ public class DiveController {
     }
 
     private int getBackPlayerDiveDirection(TeamInput input) {
-        if (player.redSide) {
-            // 紅隊：A + Space 往左撲，其餘預設往右撲。
-            return input.backLeft ? -1 : 1;
+        // 以「當下按住的左右鍵」決定撲接方向。
+        // 紅隊：A 左、D 右。藍隊：← 左、→ 右。
+        if (input.backLeft && !input.backRight) {
+            return -1;
         }
 
-        // 藍隊：Right + 0 往右撲，其餘預設往左撲。
-        return input.backRight ? 1 : -1;
+        if (input.backRight && !input.backLeft) {
+            return 1;
+        }
+
+        // 沒按方向時保留原本預設：紅隊往右，藍隊往左。
+        return player.redSide ? 1 : -1;
+    }
+
+    private void setDiveImageDirection() {
+        // 預設素材方向：player 1 面右，player 2 面左。
+        // 往預設相反方向撲接時，Renderer 會把圖片水平反轉。
+        player.mirrorImage = player.redSide ? direction < 0 : direction > 0;
     }
 
     private void setDiveHitBox() {

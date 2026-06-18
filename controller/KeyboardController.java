@@ -32,13 +32,13 @@ public class KeyboardController implements KeyListener {
 
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
         input.backRight = isPressed(KeyEvent.VK_RIGHT);
-        input.backJump = isPressed(KeyEvent.VK_NUMPAD0);
-        input.backDive = isPressed(KeyEvent.VK_NUMPAD0);
-        input.setterJump = isPressed(KeyEvent.VK_NUMPAD5);
-        input.quickAttack = isPressed(KeyEvent.VK_NUMPAD6);
-        input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
-        input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
-        input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
+        input.backJump = isPressed(KeyEvent.VK_SHIFT);
+        input.backDive = isPressed(KeyEvent.VK_SHIFT);
+        input.setterJump = isPressed(KeyEvent.VK_5);
+        input.quickAttack = isPressed(KeyEvent.VK_6);
+        input.quickBlock = isPressed(KeyEvent.VK_6);
+        input.wingAttack = isPressed(KeyEvent.VK_4);
+        input.servePressed = isPressed(KeyEvent.VK_SHIFT);
         input.serveType = getBlueServeType();
 
         return input;

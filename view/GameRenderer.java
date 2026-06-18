@@ -71,7 +71,18 @@ public class GameRenderer {
         int imageY = (int) p.y;
 
         if (img != null) {
-            g.drawImage(img, imageX, imageY, p.imageWidth, p.imageHeight, null);
+            if (p.mirrorImage) {
+                g.drawImage(
+                        img,
+                        imageX + p.imageWidth,
+                        imageY,
+                        -p.imageWidth,
+                        p.imageHeight,
+                        null
+                );
+            } else {
+                g.drawImage(img, imageX, imageY, p.imageWidth, p.imageHeight, null);
+            }
         } else {
             g.setColor(redTeam ? new Color(220, 90, 90) : new Color(80, 125, 220));
             g.fillRoundRect(imageX, imageY, p.imageWidth, p.imageHeight, 14, 14);
@@ -164,7 +175,7 @@ public class GameRenderer {
 
         if (img != null) {
             g.drawImage(img, x, y, d, d, null);
-        } 
+        }
         else {
             // g.setColor(new Color(245, 210, 60));
             // g.fillOval(x, y, d, d);
