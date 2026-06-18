@@ -1,7 +1,5 @@
 package model;
 
-import java.util.Random;
-
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public Team redTeam = new Team(true);
@@ -10,7 +8,6 @@ public class GameModel {
     public int redScore = 0;
     public int blueScore = 0;
 
-    private final Random random = new Random();
     private final ServeHandler serveHandler = new ServeHandler(this);
 
     // 擊球計數器
@@ -36,36 +33,40 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
-        if (serveHandler.isWaitingForServe()) {
-            serveHandler.update(redInput, blueInput);
+        lastBallX = ball.x;
+
+        serveHandler.updateBeforeTeams(redInput, blueInput);
+
+        if (serveHandler.shouldUseGameBackPlayerAction(true)) {
             configureBackPlayerAction(redInput, redHitCount);
+        }
+
+        if (serveHandler.shouldUseGameBackPlayerAction(false)) {
             configureBackPlayerAction(blueInput, blueHitCount);
+        }
 
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
+        redTeam.update(redInput);
+        blueTeam.update(blueInput);
 
-            if (serveHandler.isWaitingForServe()) {
-                return;
-            }
-        } else {
-            lastBallX = ball.x;
-            configureBackPlayerAction(redInput, redHitCount);
-            configureBackPlayerAction(blueInput, blueHitCount);
+        serveHandler.updateAfterTeams();
 
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
+        if (serveHandler.shouldUpdateBall()) {
             ball.update();
-
-            // 偵測球是否過網，過網則重置兩隊的計數器與最後觸球者
-            double netX = GameConfig.NET_X;
-            if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
-                resetCounters();
-            }
+            serveHandler.updateAfterBall();
+            resetCountersWhenBallCrossesNet();
         }
 
         ball.collideWithNet();
-        collideTeam(redTeam, true);
-        collideTeam(blueTeam, false);
+
+        if (serveHandler.canTeamCollideWithBall(true)) {
+            collideTeam(redTeam, true);
+        }
+
+        if (serveHandler.canTeamCollideWithBall(false)) {
+            collideTeam(blueTeam, false);
+        }
+
+        serveHandler.finishFrame();
     }
 
     public void resetCounters() {
@@ -84,6 +85,14 @@ public class GameModel {
         } else {
             input.backJump = actionPressed;
             input.backDive = false;
+        }
+    }
+
+    private void resetCountersWhenBallCrossesNet() {
+        double netX = GameConfig.NET_X;
+
+        if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
+            resetCounters();
         }
     }
 
@@ -111,7 +120,9 @@ public class GameModel {
             if (player == lastHitter) continue;
 
             // 如果是舉球員本人接到，傳到自己正上方
-            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1)) ? ball.x : targetX;
+            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1))
+                    ? ball.x
+                    : targetX;
 
             if (collidePlayer(player, power, currentTargetX, targetY)) {
                 if (redSide) {
@@ -142,7 +153,14 @@ public class GameModel {
         ball.x += dx / len * 6;
         ball.y += dy / len * 6;
 
-        double[] vel = PhysicsUtils.calculateVelocityToTarget(ball.x, ball.y, targetX, targetY, power, GameConfig.GRAVITY);
+        double[] vel = PhysicsUtils.calculateVelocityToTarget(
+                ball.x,
+                ball.y,
+                targetX,
+                targetY,
+                power,
+                GameConfig.GRAVITY
+        );
         ball.vx = vel[0];
         ball.vy = vel[1];
 
