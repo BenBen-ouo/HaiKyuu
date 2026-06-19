@@ -75,7 +75,6 @@ public class ServeHandler {
 
     public void setRedServing(boolean redServing) {
         this.redServing = redServing;
-        state = ServeState.READY;
         lastServePressed = false;
         waitForPostServeSpaceRelease = false;
         serveLaunchedThisFrame = false;
@@ -179,6 +178,7 @@ public class ServeHandler {
 
     private void launchServeFromCurrentBall(ServeType serveType, boolean redSide) {
         double direction = redSide ? 1.0 : -1.0;
+        model.setLastHitTeam(redSide);
         setServeVelocity(serveType.baseVx * direction, serveType.baseVy);
         serveLaunchedThisFrame = true;
     }

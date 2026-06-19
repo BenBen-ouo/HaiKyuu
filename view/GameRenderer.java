@@ -33,8 +33,8 @@ public class GameRenderer {
         // 整體地板底色 (原本的顏色)
         int floorY = (int) GameConfig.FLOOR_Y;
         int floorH = GameConfig.SCREEN_HEIGHT - floorY;
-        int courtLeftX = GameConfig.SCREEN_WIDTH / 2 - 500;
-        int courtRightX = GameConfig.SCREEN_WIDTH / 2 + 500;
+        int courtLeftX = (int) GameConfig.COURT_LEFT_X;
+        int courtRightX = (int) GameConfig.COURT_RIGHT_X;
         int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
 
         g.setColor(new Color(243, 146, 10));//地板底色

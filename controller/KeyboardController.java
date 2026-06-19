@@ -44,6 +44,10 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
+    public boolean isRestartPressed() {
+        return isPressed(KeyEvent.VK_R);
+    }
+
     private ServeType getRedServeType() {
         if (isPressed(KeyEvent.VK_W)) {
             return ServeType.CEILING;
