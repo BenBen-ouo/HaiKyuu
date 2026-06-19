@@ -1,7 +1,5 @@
 package model;
 
-import java.util.Random;
-
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public Team redTeam = new Team(true);
@@ -10,7 +8,6 @@ public class GameModel {
     public int redScore = 0;
     public int blueScore = 0;
 
-    private final Random random = new Random();
     private final ServeHandler serveHandler = new ServeHandler(this);
 
     // 擊球計數器
@@ -29,7 +26,6 @@ public class GameModel {
     private double lastBallX;
 
     public GameModel() {
-        // 遊戲開始，預設紅方發球，並將所有人拉到初始位置
         serveHandler.setWaitingForServe(true);
     }
 
@@ -53,48 +49,54 @@ public class GameModel {
 
     public void update(TeamInput redInput, TeamInput blueInput) {
         if (isRallyOver) {
-            updateDeadBall();
-            ball.update(); // 讓球繼續彈跳
-            redTeam.update(redInput); // 球員仍可移動但不能擊球
-            blueTeam.update(blueInput);
+            updateDeadBall(redInput, blueInput);
             return;
         }
 
-        if (serveHandler.isWaitingForServe()) {
-            serveHandler.update(redInput, blueInput);
+        lastBallX = ball.x;
+
+        serveHandler.updateBeforeTeams(redInput, blueInput);
+
+        if (serveHandler.shouldUseGameBackPlayerAction(true)) {
             configureBackPlayerAction(redInput, redHitCount);
+        }
+
+        if (serveHandler.shouldUseGameBackPlayerAction(false)) {
             configureBackPlayerAction(blueInput, blueHitCount);
+        }
 
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
+        redTeam.update(redInput);
+        blueTeam.update(blueInput);
 
-            if (serveHandler.isWaitingForServe()) {
-                return;
-            }
-        } else {
-            lastBallX = ball.x;
-            configureBackPlayerAction(redInput, redHitCount);
-            configureBackPlayerAction(blueInput, blueHitCount);
+        serveHandler.updateAfterTeams();
 
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
+        if (serveHandler.shouldUpdateBall()) {
             ball.update();
+            serveHandler.updateAfterBall();
+            processScoringIfBallLanded();
 
-            // 偵測球是否落地 (死球判斷)
-            if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
-                processScoring();
-            }
-
-            // 偵測球是否過網，過網則重置兩隊的計數器與最後觸球者
-            double netX = GameConfig.NET_X;
-            if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
-                resetCounters();
+            if (!isRallyOver) {
+                resetCountersWhenBallCrossesNet();
             }
         }
 
         ball.collideWithNet();
-        collideTeam(redTeam, true);
-        collideTeam(blueTeam, false);
+
+        if (!isRallyOver && serveHandler.canTeamCollideWithBall(true)) {
+            collideTeam(redTeam, true);
+        }
+
+        if (!isRallyOver && serveHandler.canTeamCollideWithBall(false)) {
+            collideTeam(blueTeam, false);
+        }
+
+        serveHandler.finishFrame();
+    }
+
+    private void processScoringIfBallLanded() {
+        if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
+            processScoring();
+        }
     }
 
     private void processScoring() {
@@ -104,7 +106,7 @@ public class GameModel {
         deadBallTimer = 60;
 
         boolean redWins = ScoringLogic.determineWinner(ball.x, lastHitTeam, serveHandler.isRedServing());
-        
+
         if (redWins) {
             redScore++;
             serveHandler.setRedServing(true);
@@ -114,8 +116,12 @@ public class GameModel {
         }
     }
 
-    private void updateDeadBall() {
+    private void updateDeadBall(TeamInput redInput, TeamInput blueInput) {
         deadBallTimer--;
+        ball.update(); // 讓球繼續彈跳
+        redTeam.update(redInput); // 球員仍可移動但不能擊球
+        blueTeam.update(blueInput);
+
         if (deadBallTimer <= 0) {
             isRallyOver = false;
             serveHandler.setWaitingForServe(true);
@@ -144,6 +150,14 @@ public class GameModel {
         }
     }
 
+    private void resetCountersWhenBallCrossesNet() {
+        double netX = GameConfig.NET_X;
+
+        if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
+            resetCounters();
+        }
+    }
+
     private void collideTeam(Team team, boolean redSide) {
         int currentHitCount = redSide ? redHitCount : blueHitCount;
         Player lastHitter = redSide ? redLastHitter : blueLastHitter;
@@ -169,11 +183,13 @@ public class GameModel {
             if (player == lastHitter && !lastTouchWasBlock) continue;
 
             // 如果是舉球員本人接到，傳到自己正上方
-            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1)) ? ball.x : targetX;
+            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1))
+                    ? ball.x
+                    : targetX;
 
             if (collidePlayer(player, power, currentTargetX, targetY)) {
                 lastHitTeam = redSide; // 更新最後觸球隊伍 (用於出界判定)
-                
+
                 if (redSide) {
                     redLastHitter = player;
                     if (!player.blocking) redHitCount++; // 攔網不計次
@@ -181,7 +197,7 @@ public class GameModel {
                     blueLastHitter = player;
                     if (!player.blocking) blueHitCount++; // 攔網不計次
                 }
-                
+
                 lastTouchWasBlock = player.blocking; // 紀錄本次觸球是否為攔網
                 break;
             }
@@ -204,7 +220,14 @@ public class GameModel {
         ball.x += dx / len * 6;
         ball.y += dy / len * 6;
 
-        double[] vel = PhysicsUtils.calculateVelocityToTarget(ball.x, ball.y, targetX, targetY, power, GameConfig.GRAVITY);
+        double[] vel = PhysicsUtils.calculateVelocityToTarget(
+                ball.x,
+                ball.y,
+                targetX,
+                targetY,
+                power,
+                GameConfig.GRAVITY
+        );
         ball.vx = vel[0];
         ball.vy = vel[1];
 

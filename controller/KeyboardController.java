@@ -58,9 +58,7 @@ public class KeyboardController implements KeyListener {
         if (isPressed(KeyEvent.VK_A)) {
             return ServeType.SHORT;
         }
-        if (isPressed(KeyEvent.VK_D)) {
-            return ServeType.JUMP;
-        }
+
         return ServeType.NORMAL;
     }
 
@@ -74,9 +72,7 @@ public class KeyboardController implements KeyListener {
         if (isPressed(KeyEvent.VK_RIGHT)) {
             return ServeType.SHORT;
         }
-        if (isPressed(KeyEvent.VK_LEFT)) {
-            return ServeType.JUMP;
-        }
+        
         return ServeType.NORMAL;
     }
 
