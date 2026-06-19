@@ -1,3 +1,7 @@
+/*
+物理計算工具類，提供球飛向指定目標點所需速度的估算。
+目前主要用於接球、舉球、第三球與發球拋物線計算。
+*/
 package model;
 
 public class PhysicsUtils {

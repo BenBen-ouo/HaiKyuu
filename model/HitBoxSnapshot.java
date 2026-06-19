@@ -1,3 +1,7 @@
+/*
+用來暫存 HitBox 當前設定，之後可恢復回原本碰撞箱。
+目前主要用於撲球時切換低扁碰撞箱，撲球結束後還原。
+*/
 package model;
 
 public class HitBoxSnapshot {

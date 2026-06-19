@@ -1,3 +1,7 @@
+/*
+負責繪製背景、地板、球場線、世界邊界提示與網子。
+球場外觀相關的繪圖集中在這裡，避免 GameRenderer 過長。
+*/
 package view;
 
 import java.awt.*;
