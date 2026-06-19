@@ -1,7 +1,7 @@
 package model;
 
 public class BackPlayer extends Player {
-    private static final double BACK_ATTACK_AIR_SPEED = 2.0;
+    private static final double BACK_ATTACK_AIR_SPEED = 2.5;
 
     private final DiveController diveController;
     private boolean previousBackAction = false;

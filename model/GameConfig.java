@@ -17,7 +17,7 @@ public final class GameConfig {
     public static final double PLAYER_JUMP_SPEED = -8;
     public static final double DIVE_SPEED = 5.0; ///之後改成撲接時碰撞箱範圍變大，先不動
 
-    public static final double BALL_RADIUS = 14;
+    public static final double BALL_RADIUS = 12;
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
@@ -28,14 +28,15 @@ public final class GameConfig {
 
     public static final int PLAYER_IMAGE_WIDTH = 100;
     public static final int PLAYER_IMAGE_HEIGHT = 100;
+    public static final double PLAYER_NET_OVERLAP_X = PLAYER_IMAGE_WIDTH / 3.0;
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
     // red 隊各角色相對基準點的位置
-    public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH;
-    public static final double RED_SETTER_OFFSET_X = -50 - PLAYER_IMAGE_WIDTH;
-    public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH;
-    public static final double RED_WING_OFFSET_X = -167 - PLAYER_IMAGE_WIDTH; //照比例換算 300 * 5/9
+    public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
+    public static final double RED_SETTER_OFFSET_X = -30 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
+    public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
+    public static final double RED_WING_OFFSET_X = -140 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_BACK_SERVE_X = -100;
     public static final double RED_BACK_SERVE_Y = PLAYER_BASE_Y;
     // 發球時，球相對於 red backPlayer 圖片左上角的位置
@@ -43,10 +44,10 @@ public final class GameConfig {
     public static final double RED_SERVE_BALL_OFFSET_Y = -5;
 
     // blue 隊各角色相對基準點的位置
-    public static final double BLUE_BACK_OFFSET_X = 300;
-    public static final double BLUE_SETTER_OFFSET_X = 50;
-    public static final double BLUE_QUICK_OFFSET_X = 5;
-    public static final double BLUE_WING_OFFSET_X = 167; //照比例換算 300 * 5/9
+    public static final double BLUE_BACK_OFFSET_X = 300 - PLAYER_NET_OVERLAP_X;
+    public static final double BLUE_SETTER_OFFSET_X = 30 - PLAYER_NET_OVERLAP_X;
+    public static final double BLUE_QUICK_OFFSET_X = 5 - PLAYER_NET_OVERLAP_X;
+    public static final double BLUE_WING_OFFSET_X = 140 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_BACK_SERVE_X = SCREEN_WIDTH + 100 - PLAYER_IMAGE_WIDTH;
     public static final double BLUE_BACK_SERVE_Y = PLAYER_BASE_Y;
     // blue 隊發球時，球相對於 blue backPlayer 圖片左上角的位置
