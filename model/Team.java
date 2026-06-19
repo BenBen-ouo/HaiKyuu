@@ -14,22 +14,8 @@ public class Team {
         double baseX = GameConfig.NET_X;
         double netX = GameConfig.NET_X;
 
-        /*
-         * 角色圖片是正方形，左右有留白。
-         *
-         * 這裡不是調整真正的網子寬度，而是調整「角色圖片允許靠近網子的範圍」。
-         *
-         * 紅隊：
-         *   Player.applyGravity() 會用 x + imageWidth 判斷右邊界，
-         *   所以 redMaxX 代表「圖片右邊界最多可以到哪裡」。
-         *
-         * 藍隊：
-         *   Player.applyGravity() 會用 x 判斷左邊界，
-         *   所以 blueMinX 代表「圖片左邊界最少可以到哪裡」。
-         *
-         * 因為圖片旁邊有留白，所以允許圖片邊界跨過網子中心 1/3 圖片寬度。
-         * 真正是否碰到球，仍然由各角色自己的 hitBox 決定。
-         */
+        // 因為圖片旁邊有留白，所以允許圖片邊界跨過網子中心 1/3 圖片寬度
+        // 真正是否碰到球，仍然由各角色自己的 hitBox 決定
         double playerNetOverlap = GameConfig.PLAYER_IMAGE_WIDTH / 3.0;
 
         if (redSide) {
@@ -66,18 +52,18 @@ public class Team {
 
     private void setupRedHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
-        backPlayer.hitBox.set(21, 50, 28, 10, 8, 8, 20);
-        setter.hitBox.set(21, 14, 28, 20, 8, 8, 0);
-        quickAttacker.hitBox.set(40, 0, 10, 30, 8, 8, 20);
-        wingSpiker.hitBox.set(21, 50, 28, 10, 8, 8, 20);
+        backPlayer.hitBox.set(40, 60, 25, 10, 10, 10, 20);
+        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        quickAttacker.hitBox.set(50, 30, 10, 30, 10, 10, 30);
+        wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
 
     private void setupBlueHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
-        backPlayer.hitBox.set(21, 50, 28, 10, 8, 8, -20);
-        setter.hitBox.set(21, 14, 28, 20, 8, 8, 0);
-        quickAttacker.hitBox.set(20, 0, 10, 30, 8, 8, -20);
-        wingSpiker.hitBox.set(21, 50, 28, 10, 8, 8, -20);
+        backPlayer.hitBox.set(35, 60, 25, 10, 10, 10, -20);
+        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        quickAttacker.hitBox.set(40, 30, 10, 30, 10, 10, -30);
+        wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
     }
 
     public Player[] getPlayers() {
