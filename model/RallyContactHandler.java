@@ -1,6 +1,6 @@
 /*
 處理來回中球與球員的一般碰撞、攻擊碰撞、傳球目標、觸球動畫與觸球紀錄。
-一般 hitBox 負責接球與舉球；attackHitBox 搭配攻擊鍵負責扣球。
+一般 hitBox 會依角色狀態決定是否啟用；MB block2 會用反彈，attackHitBox 會用扣球。
 */
 package model;
 
@@ -26,6 +26,10 @@ public class RallyContactHandler {
         for (Player player : team.getPlayers()) {
             if (player == lastHitter) {
                 continue;
+            }
+
+            if (tryBlockRebound(player)) {
+                break;
             }
 
             BallTarget target = BallTarget.forPlayer(team, redSide, hitCount, model.ball.x, player);
@@ -82,6 +86,20 @@ public class RallyContactHandler {
 
         model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
         model.ball.vy = GameConfig.SPIKE_SPEED_Y;
+    }
+
+    private boolean tryBlockRebound(Player player) {
+        if (!(player instanceof QuickAttacker) || !player.isBlockHitBoxActive()) {
+            return false;
+        }
+
+        if (!player.intersectsBall(model.ball)) {
+            return false;
+        }
+
+        pushBallOutsidePlayer(player);
+        reflectBallFromBlock(player);
+        return true;
     }
 
     private boolean collidePlayer(Player player, BallTarget target) {
@@ -144,6 +162,50 @@ public class RallyContactHandler {
         model.ball.y += dy / length * BALL_UNSTUCK_DISTANCE;
     }
 
+    private void reflectBallFromBlock(Player player) {
+        double normalX = model.ball.x - player.getHitBoxCenterX();
+        double normalY = model.ball.y - player.getHitBoxCenterY();
+        double normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
+
+        if (normalLength < 0.001) {
+            normalX = model.ball.vx == 0
+                    ? SideRules.directionTowardOpponent(player.redSide)
+                    : Math.signum(model.ball.vx);
+            normalY = -0.2;
+            normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
+        }
+
+        normalX /= normalLength;
+        normalY /= normalLength;
+
+        double dot = model.ball.vx * normalX + model.ball.vy * normalY;
+        double reflectedVx;
+        double reflectedVy;
+
+        if (dot < 0) {
+            reflectedVx = model.ball.vx - 2 * dot * normalX;
+            reflectedVy = model.ball.vy - 2 * dot * normalY;
+        } else {
+            double currentSpeed = Math.sqrt(model.ball.vx * model.ball.vx + model.ball.vy * model.ball.vy);
+            double speed = Math.max(currentSpeed, GameConfig.BLOCK_HITBOX_MIN_SPEED);
+            reflectedVx = normalX * speed;
+            reflectedVy = normalY * speed;
+        }
+
+        reflectedVx *= GameConfig.BLOCK_HITBOX_BOUNCE;
+        reflectedVy *= GameConfig.BLOCK_HITBOX_BOUNCE;
+
+        double reflectedSpeed = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
+        if (reflectedSpeed < GameConfig.BLOCK_HITBOX_MIN_SPEED) {
+            double scale = GameConfig.BLOCK_HITBOX_MIN_SPEED / Math.max(0.001, reflectedSpeed);
+            reflectedVx *= scale;
+            reflectedVy *= scale;
+        }
+
+        model.ball.vx = reflectedVx;
+        model.ball.vy = reflectedVy;
+    }
+
     private void setBallVelocity(BallTarget target) {
         double[] velocity = PhysicsUtils.calculateVelocityToTarget(
                 model.ball.x,
@@ -180,7 +242,7 @@ public class RallyContactHandler {
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y - 20, SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + 30, SETTER_PASS_POWER);
         }
 
         private static BallTarget attackTarget(boolean redSide) {

@@ -29,6 +29,10 @@ public final class GameConfig {
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
+    
+    // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
+    public static final double BLOCK_HITBOX_BOUNCE = 0.72;
+    public static final double BLOCK_HITBOX_MIN_SPEED = 6.0;
 
     // 球場範圍 (以網子中心點左右各 500)
     public static final double COURT_WIDTH = 1000;

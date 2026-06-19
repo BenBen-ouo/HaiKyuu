@@ -55,6 +55,10 @@ public class PlayerRenderer {
     }
 
     private void drawHitBox(Graphics2D g, Player player, boolean redTeam) {
+        if (!player.isDefaultHitBoxActive()) {
+            return;
+        }
+
         HitBox box = player.hitBox;
         GraphicsState graphicsState = GraphicsState.capture(g);
 

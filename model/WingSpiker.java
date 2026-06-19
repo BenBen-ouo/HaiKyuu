@@ -106,4 +106,14 @@ public class WingSpiker extends Player {
         applyGravity();
         animation.update();
     }
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        return action == PlayerAction.IDLE
+                && !jumping
+                && !attacking
+                && !blocking
+                && !diving
+                && Math.abs(vx) < 0.001
+                && Math.abs(vy) < 0.001;
+    }
 }
