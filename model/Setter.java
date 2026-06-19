@@ -8,10 +8,13 @@ public class Setter extends Player {
     @Override
     public void update(TeamInput input) {
         vx = 0;
+
         if (input.setterJump && !jumping) {
             vy = GameConfig.PLAYER_JUMP_SPEED * 0.92;
             jumping = true;
         }
+
         applyGravity();
+        updateActionAnimation();
     }
 }

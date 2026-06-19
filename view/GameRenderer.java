@@ -1,19 +1,19 @@
 package view;
 
 import java.awt.*;
-import java.awt.geom.AffineTransform;
 import model.*;
 
 public class GameRenderer {
     private final AssetLoader assets = new AssetLoader();
+    private final CourtRenderer courtRenderer = new CourtRenderer();
+    private final PlayerRenderer playerRenderer = new PlayerRenderer(assets);
+    private final BallRenderer ballRenderer = new BallRenderer(assets);
 
     public void render(Graphics2D g, GameModel model) {
-        drawBackground(g);
-        drawWorldBoundaryGuide(g);
-        drawCourt(g);
-        drawTeam(g, model.redTeam, true);
-        drawTeam(g, model.blueTeam, false);
-        drawBall(g, model.ball);
+        courtRenderer.draw(g);
+        playerRenderer.drawTeam(g, model.redTeam, true);
+        playerRenderer.drawTeam(g, model.blueTeam, false);
+        ballRenderer.draw(g, model.ball);
         drawScore(g, model);
     }
 

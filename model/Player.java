@@ -2,8 +2,6 @@ package model;
 
 public abstract class Player {
     public String assetName;
-
-    // 圖片左上角位置
     public double x;
     public double y;
 
@@ -14,19 +12,23 @@ public abstract class Player {
     public double vx;
     public double vy;
 
-    // 圖片顯示大小
     public int imageWidth = GameConfig.PLAYER_IMAGE_WIDTH;
     public int imageHeight = GameConfig.PLAYER_IMAGE_HEIGHT;
-
-    // 每個球員自己的碰撞箱
     public HitBox hitBox;
 
     public boolean jumping;
     public boolean attacking;
     public boolean blocking;
     public boolean diving;
-
     public boolean redSide;
+    public boolean mirrorImage = false;
+
+    protected final PlayerAnimation animation;
+    protected final PlayerActionAnimator actionAnimator;
+    protected PlayerAction action = PlayerAction.IDLE;
+
+    public double minX = GameConfig.WORLD_LEFT;
+    public double maxX = GameConfig.WORLD_RIGHT;
 
     public Player(String assetName, double x, double y, boolean redSide) {
         this.assetName = assetName;
@@ -36,6 +38,8 @@ public abstract class Player {
         this.initialY = y;
         this.redSide = redSide;
         this.hitBox = new HitBox(this);
+        this.animation = new PlayerAnimation(this, assetName);
+        this.actionAnimator = new PlayerActionAnimator(this, animation);
     }
 
     public void resetToInitial() {
@@ -51,31 +55,16 @@ public abstract class Player {
 
     public abstract void update(TeamInput input);
 
-    // 運動邊界限制
-    public double minX = GameConfig.WORLD_LEFT;
-    public double maxX = GameConfig.WORLD_RIGHT;
-
     public void applyGravity() {
         vy += GameConfig.GRAVITY;
         x += vx;
         y += vy;
 
-        // 用圖片底部判斷是否碰到地板
         if (y + imageHeight > GameConfig.FLOOR_Y) {
-            y = GameConfig.FLOOR_Y - imageHeight;
-            vy = 0;
-            jumping = false;
-            diving = false;
+            landOnFloor();
         }
 
-        // 限制移動邊界
-        if (x < minX) {
-            x = minX;
-        }
-
-        if (x + imageWidth > maxX) {
-            x = maxX - imageWidth;
-        }
+        clampToMovementBounds();
     }
 
     public boolean intersectsBall(Ball ball) {
@@ -88,5 +77,90 @@ public abstract class Player {
 
     public double getHitBoxCenterY() {
         return hitBox.getCenterY();
+    }
+
+    public boolean isAttackReady() {
+        return action == PlayerAction.ATTACK_READY;
+    }
+
+    public boolean isAttackSwinging() {
+        return action == PlayerAction.ATTACK_SWING;
+    }
+
+    public boolean isReceiving() {
+        return action == PlayerAction.RECEIVING;
+    }
+
+    public boolean isSetting() {
+        return action == PlayerAction.SETTING;
+    }
+
+    public boolean isMovementLockedByAnimation() {
+        return action == PlayerAction.RECEIVING;
+    }
+
+    public void playReceiveAnimation() {
+        actionAnimator.playReceive();
+    }
+
+    public void playSettingAnimation() {
+        actionAnimator.playSetting();
+    }
+
+    public void playDiveAnimation() {
+        actionAnimator.playDive();
+    }
+
+    protected void startAttackReady(double horizontalSpeed) {
+        actionAnimator.startAttackReady(horizontalSpeed);
+    }
+
+    protected void startAttackSwingAnimation() {
+        actionAnimator.startAttackSwing();
+    }
+
+    protected void startBlockAnimation() {
+        actionAnimator.startBlock();
+    }
+
+    protected void startRunApproachAnimation(int cycles) {
+        actionAnimator.startRunApproach(cycles);
+    }
+
+    protected void startRunLoopAnimation() {
+        actionAnimator.startRunLoop();
+    }
+
+    protected void updateActionAnimation() {
+        actionAnimator.updateActionState();
+    }
+
+    protected void finishAction() {
+        actionAnimator.finishAction();
+    }
+
+    protected String teamAsset(String actionName) {
+        return (redSide ? "player 1 " : "player 2 ") + actionName + ".png";
+    }
+
+    protected double directionTowardNet() {
+        return SideRules.directionTowardOpponent(redSide);
+    }
+
+    private void landOnFloor() {
+        y = GameConfig.FLOOR_Y - imageHeight;
+        vy = 0;
+        jumping = false;
+        diving = false;
+    }
+
+    private void clampToMovementBounds() {
+        if (x < minX) {
+            x = minX;
+        }
+
+        if (x + imageWidth > maxX) {
+            x = maxX - imageWidth;
+        }
     }
 }
