@@ -44,6 +44,10 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
+    public boolean isRestartPressed() {
+        return isPressed(KeyEvent.VK_R);
+    }
+
     private ServeType getRedServeType() {
         if (isPressed(KeyEvent.VK_W)) {
             return ServeType.CEILING;
@@ -54,9 +58,7 @@ public class KeyboardController implements KeyListener {
         if (isPressed(KeyEvent.VK_A)) {
             return ServeType.SHORT;
         }
-        if (isPressed(KeyEvent.VK_D)) {
-            return ServeType.JUMP;
-        }
+
         return ServeType.NORMAL;
     }
 
@@ -70,9 +72,7 @@ public class KeyboardController implements KeyListener {
         if (isPressed(KeyEvent.VK_RIGHT)) {
             return ServeType.SHORT;
         }
-        if (isPressed(KeyEvent.VK_LEFT)) {
-            return ServeType.JUMP;
-        }
+        
         return ServeType.NORMAL;
     }
 

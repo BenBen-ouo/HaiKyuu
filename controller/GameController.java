@@ -12,6 +12,9 @@ public class GameController {
     }
 
     public void update() {
+        if (keyboard.isRestartPressed()) {
+            model.restart();
+        }
         model.update(keyboard.getRedInput(), keyboard.getBlueInput());
     }
 }

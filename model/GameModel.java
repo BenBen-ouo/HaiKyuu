@@ -17,32 +17,82 @@ public class GameModel {
 
     private Player redLastHitter = null;
     private Player blueLastHitter = null;
+    private Boolean lastHitTeam = null; // true: red, false: blue, null: none
+    private boolean lastTouchWasBlock = false;
+
+    private boolean isRallyOver = false;
+    private int deadBallTimer = 0;
+
     private double lastBallX;
+
+    public GameModel() {
+        serveHandler.setWaitingForServe(true);
+    }
 
     public ServeHandler getServeHandler() {
         return serveHandler;
     }
 
+    public Boolean getLastHitTeam() {
+        return lastHitTeam;
+    }
+
+    public void setLastHitTeam(Boolean team) {
+        this.lastHitTeam = team;
+    }
+
     public void restart() {
         GameResetter.reset(this);
+        isRallyOver = false;
+        deadBallTimer = 0;
+        lastHitTeam = null;
+        lastTouchWasBlock = false;
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
         updateBallSideInfo(redInput, blueInput);
 
-        if (serveHandler.isWaitingForServe()) {
-            updateWaitingServeFrame(redInput, blueInput);
+        if (isRallyOver) {
+            updateDeadBall(redInput, blueInput);
+            return;
+        }
 
-            if (serveHandler.isWaitingForServe()) {
-                return;
+        lastBallX = ball.x;
+
+        serveHandler.updateBeforeTeams(redInput, blueInput);
+
+        if (serveHandler.shouldUseGameBackPlayerAction(true)) {
+            configureBackPlayerAction(redInput, redHitCount);
+        }
+
+        if (serveHandler.shouldUseGameBackPlayerAction(false)) {
+            configureBackPlayerAction(blueInput, blueHitCount);
+        }
+
+        updateTeams(redInput, blueInput);
+        serveHandler.updateAfterTeams();
+
+        if (serveHandler.shouldUpdateBall()) {
+            ball.update();
+            serveHandler.updateAfterBall();
+            processScoringIfBallLanded();
+
+            if (!isRallyOver) {
+                resetCountersIfBallCrossesNet();
             }
-        } else {
-            updateRallyFrame(redInput, blueInput);
         }
 
         ball.collideWithNet();
-        contactHandler.collideTeam(redTeam, true);
-        contactHandler.collideTeam(blueTeam, false);
+
+        if (!isRallyOver && serveHandler.canTeamCollideWithBall(true)) {
+            contactHandler.collideTeam(redTeam, true);
+        }
+
+        if (!isRallyOver && serveHandler.canTeamCollideWithBall(false)) {
+            contactHandler.collideTeam(blueTeam, false);
+        }
+
+        serveHandler.finishFrame();
     }
 
     public void resetCounters() {
@@ -50,6 +100,7 @@ public class GameModel {
         blueHitCount = 0;
         redLastHitter = null;
         blueLastHitter = null;
+        lastTouchWasBlock = false;
     }
 
     int getHitCount(boolean redSide) {
@@ -57,31 +108,66 @@ public class GameModel {
     }
 
     Player getLastHitter(boolean redSide) {
+        if (lastTouchWasBlock) {
+            return null;
+        }
+
         return redSide ? redLastHitter : blueLastHitter;
     }
 
     void recordHit(boolean redSide, Player hitter) {
+        lastHitTeam = redSide;
+        lastTouchWasBlock = hitter.blocking;
+
         if (redSide) {
-            redHitCount++;
             redLastHitter = hitter;
+            if (!hitter.blocking) {
+                redHitCount++;
+            }
         } else {
-            blueHitCount++;
             blueLastHitter = hitter;
+            if (!hitter.blocking) {
+                blueHitCount++;
+            }
         }
     }
 
-    private void updateWaitingServeFrame(TeamInput redInput, TeamInput blueInput) {
-        serveHandler.update(redInput, blueInput);
-        configureBackActions(redInput, blueInput);
+    private void updateDeadBall(TeamInput redInput, TeamInput blueInput) {
+        deadBallTimer--;
+        ball.update();
         updateTeams(redInput, blueInput);
+
+        if (deadBallTimer <= 0) {
+            isRallyOver = false;
+            serveHandler.setWaitingForServe(true);
+            resetCounters();
+            lastHitTeam = null;
+        }
     }
 
-    private void updateRallyFrame(TeamInput redInput, TeamInput blueInput) {
-        lastBallX = ball.x;
-        configureBackActions(redInput, blueInput);
-        updateTeams(redInput, blueInput);
-        ball.update();
-        resetCountersIfBallCrossesNet();
+    private void processScoringIfBallLanded() {
+        if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
+            processScoring();
+        }
+    }
+
+    private void processScoring() {
+        if (isRallyOver) {
+            return;
+        }
+
+        isRallyOver = true;
+        deadBallTimer = 60;
+
+        boolean redWins = ScoringLogic.determineWinner(ball.x, lastHitTeam, serveHandler.isRedServing());
+
+        if (redWins) {
+            redScore++;
+            serveHandler.setRedServing(true);
+        } else {
+            blueScore++;
+            serveHandler.setRedServing(false);
+        }
     }
 
     private void updateTeams(TeamInput redInput, TeamInput blueInput) {
@@ -98,11 +184,6 @@ public class GameModel {
         boolean ownSide = SideRules.isBallOnOwnSide(redSide, ball.x);
         input.ballOnOwnSide = ownSide;
         input.ballOnOpponentSide = !ownSide;
-    }
-
-    private void configureBackActions(TeamInput redInput, TeamInput blueInput) {
-        configureBackPlayerAction(redInput, redHitCount);
-        configureBackPlayerAction(blueInput, blueHitCount);
     }
 
     private void configureBackPlayerAction(TeamInput input, int hitCount) {

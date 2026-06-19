@@ -15,7 +15,7 @@ public final class GameConfig {
     public static final double GRAVITY = 0.25;
     public static final double PLAYER_SPEED = 4.3;
     public static final double PLAYER_JUMP_SPEED = -8;
-    public static final double DIVE_SPEED = 5.0; ///之後改成撲接時碰撞箱範圍變大，先不動
+    public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
     public static final double BALL_BOUNCE = 0.72;
@@ -25,6 +25,11 @@ public final class GameConfig {
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
+
+    // 球場範圍 (以網子中心點左右各 500)
+    public static final double COURT_WIDTH = 1000;
+    public static final double COURT_LEFT_X = NET_X - (COURT_WIDTH / 2.0);
+    public static final double COURT_RIGHT_X = NET_X + (COURT_WIDTH / 2.0);
 
     public static final int PLAYER_IMAGE_WIDTH = 100;
     public static final int PLAYER_IMAGE_HEIGHT = 100;
@@ -65,8 +70,15 @@ public final class GameConfig {
     public static final double SERVE_SHORT_VY = -14.0;
     public static final double SERVE_JUMP_VX = 11.5;
     public static final double SERVE_JUMP_VY = -9.5;
+
+    // 跳發第一段拋球的預計落地點。
+    // 之後你要調整跳發拋球位置，主要改這三個數值。
+    public static final double RED_JUMP_SERVE_TOSS_LANDING_X = 75;
+    public static final double BLUE_JUMP_SERVE_TOSS_LANDING_X = SCREEN_WIDTH - 75;
+    public static final double JUMP_SERVE_TOSS_LANDING_Y = FLOOR_Y - BALL_RADIUS;
+    public static final double JUMP_SERVE_TOSS_POWER = 14.0;
+
     // 發球隨機誤差範圍
     public static final double SERVE_RANDOM_VX_RANGE = 0.6;
     public static final double SERVE_RANDOM_VY_RANGE = 0.8;
-
 }
