@@ -107,6 +107,7 @@ public class PlayerActionAnimator {
 
     public void updateActionState() {
         animation.update();
+        disableAttackHitBoxAfterSwingMotion();
 
         if (shouldFinishAirAction() || shouldFinishHeldDive() || shouldFinishTimedGroundAction()) {
             finishAction();
@@ -139,6 +140,12 @@ public class PlayerActionAnimator {
 
     private boolean isRunLoopAction() {
         return player.action == PlayerAction.RUN_LOOP || player.action == PlayerAction.RUN_RETURN;
+    }
+    
+    private void disableAttackHitBoxAfterSwingMotion() {
+        if (player.action == PlayerAction.ATTACK_SWING && animation.isHoldingFrame()) {
+            player.attackHitBox.disable();
+        }
     }
 
     private boolean shouldFinishAirAction() {

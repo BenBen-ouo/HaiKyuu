@@ -141,9 +141,11 @@ public class BackPlayer extends Player {
     }
     @Override
     public boolean isDefaultHitBoxActive() {
-        return !diving
-                && !jumping
-                && action != PlayerAction.DIVE
+        if (diving || action == PlayerAction.DIVE) {
+            return true;
+        }
+
+        return !jumping
                 && action != PlayerAction.ATTACK_READY
                 && action != PlayerAction.ATTACK_SWING;
     }

@@ -86,6 +86,9 @@ public class RallyContactHandler {
 
         model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
         model.ball.vy = GameConfig.SPIKE_SPEED_Y;
+
+        // 命中一次後立刻關閉攻擊 hitBox，避免同一次起跳落地前再次影響球。
+        attacker.attackHitBox.disable();
     }
 
     private boolean tryBlockRebound(Player player) {
