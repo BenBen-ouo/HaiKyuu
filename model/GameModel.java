@@ -88,7 +88,7 @@ public class GameModel {
 
         updateBallIfNeeded();
         ball.collideWithNet();
-        collideTeamsIfAllowed();
+        collideTeamsIfAllowed(redInput, blueInput);
         serveHandler.finishFrame();
         effects.update();
     }
@@ -122,17 +122,17 @@ public class GameModel {
         }
     }
 
-    private void collideTeamsIfAllowed() {
+    private void collideTeamsIfAllowed(TeamInput redInput, TeamInput blueInput) {
         if (scorer.isRallyOver()) {
             return;
         }
 
         if (serveHandler.canTeamCollideWithBall(true)) {
-            contactHandler.collideTeam(redTeam, true);
+            contactHandler.collideTeam(redTeam, true, redInput);
         }
 
         if (serveHandler.canTeamCollideWithBall(false)) {
-            contactHandler.collideTeam(blueTeam, false);
+            contactHandler.collideTeam(blueTeam, false, blueInput);
         }
     }
 

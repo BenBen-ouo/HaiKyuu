@@ -85,6 +85,7 @@ public class WingSpiker extends Player {
         action = PlayerAction.RUN_RETURN;
         attacking = false;
         blocking = false;
+        attackHitBox.disable();
         vx = 0;
         startRunLoopAnimation();
     }

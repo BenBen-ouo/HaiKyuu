@@ -41,6 +41,20 @@ public final class GameConfig {
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
+    
+    // 調整這些數值即可自訂扣球判定區域。
+    public static final double ATTACK_HITBOX_WIDTH = 10;
+    public static final double ATTACK_HITBOX_HEIGHT = 25;
+    // 攻擊 hitBox，左隊放在角色右上角，右隊放在角色左上角。
+    public static final double RED_ATTACK_HITBOX_OFFSET_X = 55;
+    public static final double RED_ATTACK_HITBOX_OFFSET_Y = 35;
+    public static final double BLUE_ATTACK_HITBOX_OFFSET_X = 35;
+    public static final double BLUE_ATTACK_HITBOX_OFFSET_Y = 35;
+
+    // 扣球預設固定球速，之後可再依照 WASD 調整方向與力道。
+    public static final double SPIKE_SPEED_X = 17.0;
+    public static final double SPIKE_SPEED_Y = 7.5;
+
     // red 隊各角色相對基準點的位置
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_SETTER_OFFSET_X = -30 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;

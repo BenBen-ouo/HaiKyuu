@@ -1,6 +1,6 @@
 /*
-處理來回中球與球員的一般碰撞、傳球目標、觸球動畫與觸球紀錄。
-之後真正扣球邏輯可從攻擊狀態與 AttackContext 入口接入。
+處理來回中球與球員的一般碰撞、攻擊碰撞、傳球目標、觸球動畫與觸球紀錄。
+一般 hitBox 負責接球與舉球；attackHitBox 搭配攻擊鍵負責扣球。
 */
 package model;
 
@@ -15,9 +15,13 @@ public class RallyContactHandler {
         this.model = model;
     }
 
-    public void collideTeam(Team team, boolean redSide) {
+    public void collideTeam(Team team, boolean redSide, TeamInput input) {
         int hitCount = model.getHitCount(redSide);
         Player lastHitter = model.getLastHitter(redSide);
+
+        if (trySpikeContact(team, redSide, input, lastHitter)) {
+            return;
+        }
 
         for (Player player : team.getPlayers()) {
             if (player == lastHitter) {
@@ -31,6 +35,53 @@ public class RallyContactHandler {
                 break;
             }
         }
+    }
+
+    private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
+        for (Player player : team.getPlayers()) {
+            if (player == lastHitter || !canSpike(player, input)) {
+                continue;
+            }
+
+            if (player.attackHitBox.intersectsBall(model.ball)) {
+                performSpike(createAttackContext(player, redSide));
+                model.recordHit(redSide, player);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean canSpike(Player player, TeamInput input) {
+        boolean inAttackMode = player.isAttackReady() || player.isAttackSwinging();
+        return inAttackMode && player.jumping && isAttackKeyPressed(player, input);
+    }
+
+    private boolean isAttackKeyPressed(Player player, TeamInput input) {
+        if (player instanceof WingSpiker) {
+            return input.wingAttack;
+        }
+
+        if (player instanceof QuickAttacker) {
+            return input.quickAttack;
+        }
+
+        if (player instanceof BackPlayer) {
+            return input.backJump;
+        }
+
+        return false;
+    }
+
+    private void performSpike(AttackContext context) {
+        Player attacker = context.attacker;
+
+        pushBallOutsideAttackHitBox(attacker);
+        attacker.startAttackSwingAnimation();
+
+        model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
+        model.ball.vy = GameConfig.SPIKE_SPEED_Y;
     }
 
     private boolean collidePlayer(Player player, BallTarget target) {
@@ -71,14 +122,22 @@ public class RallyContactHandler {
     }
 
     private AttackContext createAttackContext(Player player, boolean redSide) {
-        // 目前只保留入口，不改球速。
-        // 之後扣球判斷可在這裡接 attackHitBox、攻擊按鍵與 WASD 球種。
         return new AttackContext(player, redSide);
     }
 
     private void pushBallOutsidePlayer(Player player) {
         double dx = model.ball.x - player.getHitBoxCenterX();
         double dy = model.ball.y - player.getHitBoxCenterY();
+        pushBall(dx, dy);
+    }
+
+    private void pushBallOutsideAttackHitBox(Player player) {
+        double dx = model.ball.x - player.attackHitBox.getCenterX();
+        double dy = model.ball.y - player.attackHitBox.getCenterY();
+        pushBall(dx, dy);
+    }
+
+    private void pushBall(double dx, double dy) {
         double length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
 
         model.ball.x += dx / length * BALL_UNSTUCK_DISTANCE;
