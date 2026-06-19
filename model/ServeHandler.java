@@ -5,7 +5,6 @@ import java.util.Random;
 public class ServeHandler {
     private enum ServeState {
         READY,
-        JUMP_TOSS,
         SERVE_LAUNCHED,
         IN_PLAY
     }
@@ -16,9 +15,6 @@ public class ServeHandler {
     private ServeState state = ServeState.READY;
     private boolean redServing = true;
     private boolean lastServePressed = false;
-
-    // 跳發第一段 D + Space 只拋球，必須放開 Space 後，下一次 Space 才能起跳。
-    private boolean waitForJumpServeFirstSpaceRelease = false;
 
     // 發球揮臂那一下 Space / 0 不能在落地進入比賽後，立刻被解讀成撲接。
     private boolean waitForPostServeSpaceRelease = false;
@@ -39,9 +35,7 @@ public class ServeHandler {
     }
 
     public boolean shouldUpdateBall() {
-        return state == ServeState.JUMP_TOSS
-                || state == ServeState.SERVE_LAUNCHED
-                || state == ServeState.IN_PLAY;
+        return state == ServeState.SERVE_LAUNCHED || state == ServeState.IN_PLAY;
     }
 
     public boolean shouldUseGameBackPlayerAction(boolean redSide) {
@@ -55,7 +49,7 @@ public class ServeHandler {
     }
 
     public boolean canTeamCollideWithBall(boolean redSide) {
-        if (state == ServeState.READY || state == ServeState.JUMP_TOSS) {
+        if (state == ServeState.READY) {
             return false;
         }
 
@@ -75,7 +69,6 @@ public class ServeHandler {
     public void setWaitingForServe(boolean waiting) {
         state = waiting ? ServeState.READY : ServeState.IN_PLAY;
         lastServePressed = false;
-        waitForJumpServeFirstSpaceRelease = false;
         waitForPostServeSpaceRelease = false;
         serveLaunchedThisFrame = false;
     }
@@ -84,7 +77,6 @@ public class ServeHandler {
         this.redServing = redServing;
         state = ServeState.READY;
         lastServePressed = false;
-        waitForJumpServeFirstSpaceRelease = false;
         waitForPostServeSpaceRelease = false;
         serveLaunchedThisFrame = false;
     }
@@ -93,7 +85,6 @@ public class ServeHandler {
         state = ServeState.READY;
         redServing = true;
         lastServePressed = false;
-        waitForJumpServeFirstSpaceRelease = false;
         waitForPostServeSpaceRelease = false;
         serveLaunchedThisFrame = false;
     }
@@ -102,7 +93,6 @@ public class ServeHandler {
         serveLaunchedThisFrame = false;
 
         TeamInput currentInput = redServing ? redInput : blueInput;
-        Player server = getServingTeam().backPlayer;
         boolean justPressedServe = currentInput.servePressed && !lastServePressed;
 
         if (state == ServeState.READY) {
@@ -110,32 +100,7 @@ public class ServeHandler {
             lockServingBackPlayer(currentInput);
 
             if (justPressedServe) {
-                if (currentInput.serveType == ServeType.JUMP) {
-                    startJumpServeToss(redServing);
-                    waitForJumpServeFirstSpaceRelease = true;
-                } else {
-                    launchServeFromCurrentBall(currentInput.serveType, redServing);
-                    state = ServeState.SERVE_LAUNCHED;
-                    waitForPostServeSpaceRelease = true;
-                    model.resetCounters();
-                }
-            }
-        } else if (state == ServeState.JUMP_TOSS) {
-            // 跳發拋球後：允許發球者左右移動與起跳，但禁止 Space 被當成撲接。
-            currentInput.backDive = false;
-
-            // 第一段 D + Space / Left + 0 只負責拋球，不允許同一次按鍵順便起跳。
-            if (waitForJumpServeFirstSpaceRelease) {
-                currentInput.backJump = false;
-
-                if (!currentInput.servePressed) {
-                    waitForJumpServeFirstSpaceRelease = false;
-                }
-            }
-
-            // 玩家已經在空中時，再按一次 Space / 0 才是揮臂發球。
-            if (!waitForJumpServeFirstSpaceRelease && justPressedServe && server.jumping) {
-                launchServeFromCurrentBall(ServeType.JUMP, redServing);
+                launchServeFromCurrentBall(currentInput.serveType, redServing);
                 state = ServeState.SERVE_LAUNCHED;
                 waitForPostServeSpaceRelease = true;
                 model.resetCounters();
@@ -165,12 +130,8 @@ public class ServeHandler {
     }
 
     public void updateAfterBall() {
-        // 跳發拋球後，如果玩家沒有在球落地前揮臂，就回到等待發球狀態。
-        if (state == ServeState.JUMP_TOSS && model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y - 1) {
-            state = ServeState.READY;
-            waitForJumpServeFirstSpaceRelease = false;
-            waitForPostServeSpaceRelease = false;
-        }
+        // 目前先移除跳飄拋球流程。
+        // 保留這個方法，是因為 GameModel.update() 仍然會呼叫它。
     }
 
     public void finishFrame() {
@@ -198,28 +159,6 @@ public class ServeHandler {
         input.backRight = false;
         input.backJump = false;
         input.backDive = false;
-    }
-
-    private void startJumpServeToss(boolean redSide) {
-        placeBallForServe(redSide);
-
-        double targetX = redSide
-                ? GameConfig.RED_JUMP_SERVE_TOSS_LANDING_X
-                : GameConfig.BLUE_JUMP_SERVE_TOSS_LANDING_X;
-
-        double[] velocity = PhysicsUtils.calculateVelocityToTarget(
-                model.ball.x,
-                model.ball.y,
-                targetX,
-                GameConfig.JUMP_SERVE_TOSS_LANDING_Y,
-                GameConfig.JUMP_SERVE_TOSS_POWER,
-                GameConfig.GRAVITY
-        );
-
-        model.ball.vx = velocity[0];
-        model.ball.vy = velocity[1];
-        state = ServeState.JUMP_TOSS;
-        model.resetCounters();
     }
 
     private void placeBallForServe(boolean redSide) {
