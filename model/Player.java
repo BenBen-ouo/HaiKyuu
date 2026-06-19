@@ -7,6 +7,10 @@ public abstract class Player {
     public double x;
     public double y;
 
+    // 初始位置
+    protected double initialX;
+    protected double initialY;
+
     public double vx;
     public double vy;
 
@@ -28,8 +32,21 @@ public abstract class Player {
         this.assetName = assetName;
         this.x = x;
         this.y = y;
+        this.initialX = x;
+        this.initialY = y;
         this.redSide = redSide;
         this.hitBox = new HitBox(this);
+    }
+
+    public void resetToInitial() {
+        this.x = initialX;
+        this.y = initialY;
+        this.vx = 0;
+        this.vy = 0;
+        this.jumping = false;
+        this.attacking = false;
+        this.blocking = false;
+        this.diving = false;
     }
 
     public abstract void update(TeamInput input);

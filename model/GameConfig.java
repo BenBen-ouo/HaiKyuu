@@ -26,6 +26,11 @@ public final class GameConfig {
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
 
+    // 球場範圍 (以網子中心點左右各 500)
+    public static final double COURT_WIDTH = 1000;
+    public static final double COURT_LEFT_X = NET_X - (COURT_WIDTH / 2.0);
+    public static final double COURT_RIGHT_X = NET_X + (COURT_WIDTH / 2.0);
+
     public static final int PLAYER_IMAGE_WIDTH = 100;
     public static final int PLAYER_IMAGE_HEIGHT = 100;
 

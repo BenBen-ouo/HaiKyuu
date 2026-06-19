@@ -64,6 +64,12 @@ public class Team {
         return new Player[]{backPlayer, setter, quickAttacker, wingSpiker};
     }
 
+    public void resetAllPlayers() {
+        for (Player p : getPlayers()) {
+            p.resetToInitial();
+        }
+    }
+
     public void update(TeamInput input) {
         for (Player p : getPlayers()) {
             p.update(input);
