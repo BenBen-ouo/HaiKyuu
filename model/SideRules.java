@@ -1,3 +1,7 @@
+/*
+集中管理紅藍左右場地、往對場方向、預設撲球方向與圖片翻轉規則。
+之後若紅藍場地左右對調，優先調整這個檔案。
+*/
 package model;
 
 public final class SideRules {

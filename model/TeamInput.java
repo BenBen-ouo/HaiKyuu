@@ -1,3 +1,7 @@
+/*
+單隊每幀輸入資料，保存後排、舉球員、快攻手、WS 與發球按鍵狀態。
+GameModel 也會填入球目前是否在本隊場或對方場。
+*/
 package model;
 
 public class TeamInput {

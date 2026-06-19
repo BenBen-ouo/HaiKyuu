@@ -1,3 +1,7 @@
+/*
+主攻手 WS 的角色邏輯，包含助跑、起跳、空中攻擊揮臂與落地回位。
+目前只處理攻擊動畫流程，真正扣球改變球速之後再從碰撞邏輯接入。
+*/
 package model;
 
 public class WingSpiker extends Player {

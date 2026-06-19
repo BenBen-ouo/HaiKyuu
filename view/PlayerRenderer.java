@@ -1,3 +1,7 @@
+/*
+負責繪製所有球員、圖片翻轉、碰撞箱與狀態文字。
+角色圖片、debug hitBox 與 ATK / BLK / DIVE 顯示都集中在這裡。
+*/
 package view;
 
 import java.awt.*;

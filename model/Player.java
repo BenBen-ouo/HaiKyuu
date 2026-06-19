@@ -1,3 +1,7 @@
+/*
+所有球員的共同基底類別，保存位置、速度、狀態、碰撞箱與動畫控制器。
+角色共用的接球、舉球、攻擊、攔網、撲球動畫入口也集中在這裡。
+*/
 package model;
 
 public abstract class Player {
@@ -5,7 +9,6 @@ public abstract class Player {
     public double x;
     public double y;
 
-    // 初始位置
     protected double initialX;
     protected double initialY;
 
@@ -15,6 +18,9 @@ public abstract class Player {
     public int imageWidth = GameConfig.PLAYER_IMAGE_WIDTH;
     public int imageHeight = GameConfig.PLAYER_IMAGE_HEIGHT;
     public HitBox hitBox;
+
+    // 預留給之後扣球判斷使用；目前不參與球的碰撞。
+    public AttackHitBox attackHitBox;
 
     public boolean jumping;
     public boolean attacking;
@@ -38,33 +44,21 @@ public abstract class Player {
         this.initialY = y;
         this.redSide = redSide;
         this.hitBox = new HitBox(this);
+        this.attackHitBox = new AttackHitBox(this);
         this.animation = new PlayerAnimation(this, assetName);
         this.actionAnimator = new PlayerActionAnimator(this, animation);
     }
 
-    public void resetToInitial() {
-        this.x = initialX;
-        this.y = initialY;
-        this.vx = 0;
-        this.vy = 0;
-        this.jumping = false;
-        this.attacking = false;
-        this.blocking = false;
-        this.diving = false;
-    }
-
     public abstract void update(TeamInput input);
 
+    public void resetToInitial() {
+        PlayerPhysics.resetToInitial(this);
+        finishAction();
+        attackHitBox.disable();
+    }
+
     public void applyGravity() {
-        vy += GameConfig.GRAVITY;
-        x += vx;
-        y += vy;
-
-        if (y + imageHeight > GameConfig.FLOOR_Y) {
-            landOnFloor();
-        }
-
-        clampToMovementBounds();
+        PlayerPhysics.applyGravity(this);
     }
 
     public boolean intersectsBall(Ball ball) {
@@ -145,22 +139,5 @@ public abstract class Player {
 
     protected double directionTowardNet() {
         return SideRules.directionTowardOpponent(redSide);
-    }
-
-    private void landOnFloor() {
-        y = GameConfig.FLOOR_Y - imageHeight;
-        vy = 0;
-        jumping = false;
-        diving = false;
-    }
-
-    private void clampToMovementBounds() {
-        if (x < minX) {
-            x = minX;
-        }
-
-        if (x + imageWidth > maxX) {
-            x = maxX - imageWidth;
-        }
     }
 }

@@ -1,3 +1,7 @@
+/*
+負責繪製排球圖片。
+依照 Ball 的中心點與半徑計算圖片位置與大小。
+*/
 package view;
 
 import java.awt.*;

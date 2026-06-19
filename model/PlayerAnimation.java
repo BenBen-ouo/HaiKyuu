@@ -1,3 +1,7 @@
+/*
+底層動畫播放器，依照圖片序列與停留 frame 數切換角色 assetName。
+支援一次性動畫、循環動畫與停在最後一張圖的 HOLD 動畫。
+*/
 package model;
 
 public class PlayerAnimation {

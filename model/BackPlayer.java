@@ -1,3 +1,7 @@
+/*
+後排球員的行為邏輯，包含左右移動、跑步動畫、撲球與後排攻擊流程。
+撲球細節交給 DiveController，攻擊動畫細節交給 PlayerActionAnimator。
+*/
 package model;
 
 public class BackPlayer extends Player {

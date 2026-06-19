@@ -1,14 +1,17 @@
+/*
+Swing 遊戲畫面面板，負責啟動 60 FPS 遊戲迴圈。
+每幀呼叫 controller 更新模型，再呼叫 renderer 重繪畫面。
+*/
 package view;
 
 import controller.GameController;
-import model.GameConfig;
-import model.GameModel;
-
-import javax.swing.JPanel;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import javax.swing.JPanel;
+import model.GameConfig;
+import model.GameModel;
 
 public class GamePanel extends JPanel {
     private final GameModel model;

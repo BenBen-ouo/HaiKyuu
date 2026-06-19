@@ -1,3 +1,7 @@
+/*
+預留給之後線上模式的 Server 端。
+未來由 Server 持有真正 GameModel，接收雙方輸入後統一更新遊戲。
+*/
 package network;
 
 public class GameServer {

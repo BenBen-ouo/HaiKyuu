@@ -1,3 +1,7 @@
+/*
+代表一整隊球員，負責建立 back、setter、MB、WS 四名角色。
+同時設定各角色初始位置、移動邊界與一般觸球碰撞箱。
+*/
 package model;
 
 public class Team {

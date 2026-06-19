@@ -1,3 +1,7 @@
+/*
+負責監聽鍵盤按下與放開，並轉換成紅隊與藍隊的 TeamInput。
+所有角色操作鍵、發球鍵與發球類型都從這裡整理成模型可讀的資料。
+*/
 package controller;
 
 import java.awt.event.KeyEvent;
@@ -39,6 +43,16 @@ public class KeyboardController implements KeyListener {
         input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
         input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
+
+        // 沒有獨立數字鍵測試用 之後會刪除
+        input.backJump = isPressed(KeyEvent.VK_0);
+        input.backDive = isPressed(KeyEvent.VK_0);
+        input.setterJump = isPressed(KeyEvent.VK_8);
+        input.quickAttack = isPressed(KeyEvent.VK_9);
+        input.quickBlock = isPressed(KeyEvent.VK_9);
+        input.wingAttack = isPressed(KeyEvent.VK_7);
+        input.servePressed = isPressed(KeyEvent.VK_0);
+        
         input.serveType = getBlueServeType();
 
         return input;
