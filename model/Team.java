@@ -11,135 +11,74 @@ public class Team {
         this.redSide = redSide;
 
         double baseY = GameConfig.PLAYER_BASE_Y;
+        double netX = GameConfig.NET_X;
+        double baseX = GameConfig.NET_X;
+
+        // 因為圖片旁邊有留白，所以允許圖片邊界跨過網子中心 1/3 圖片寬度
+        // 真正是否碰到球，仍然由各角色自己的 hitBox 決定
+        double playerNetOverlap = GameConfig.PLAYER_IMAGE_WIDTH / 3.0;
 
         if (redSide) {
-            double baseX = GameConfig.NET_X;
+            backPlayer = new BackPlayer("player 1 back.png", baseX + GameConfig.RED_BACK_OFFSET_X, baseY, true);
+            setter = new Setter("player 1 S.png", baseX + GameConfig.RED_SETTER_OFFSET_X, baseY, true);
+            quickAttacker = new QuickAttacker("player 1 MB.png", baseX + GameConfig.RED_QUICK_OFFSET_X, baseY, true);
+            wingSpiker = new WingSpiker("player 1 WS.png", baseX + GameConfig.RED_WING_OFFSET_X, baseY, true);
 
-            backPlayer = new BackPlayer(
-                    "player 1 back.png",
-                    baseX + GameConfig.RED_BACK_OFFSET_X,
-                    baseY
-            );
+            double redMinX = GameConfig.WORLD_LEFT;
+            double redMaxX = netX + playerNetOverlap;
 
-            setter = new Setter(
-                    "player 1 S.png",
-                    baseX + GameConfig.RED_SETTER_OFFSET_X,
-                    baseY
-            );
-
-            quickAttacker = new QuickAttacker(
-                    "player 1 MB.png",
-                    baseX + GameConfig.RED_QUICK_OFFSET_X,
-                    baseY
-            );
-
-            wingSpiker = new WingSpiker(
-                    "player 1 WS.png",
-                    baseX + GameConfig.RED_WING_OFFSET_X,
-                    baseY
-            );
-
+            setTeamBoundaries(redMinX, redMaxX);
             setupRedHitBoxes();
-
         } else {
-            double baseX = GameConfig.NET_X;
+            backPlayer = new BackPlayer("player 2 back.png", baseX + GameConfig.BLUE_BACK_OFFSET_X, baseY, false);
+            setter = new Setter("player 2 S.png", baseX + GameConfig.BLUE_SETTER_OFFSET_X, baseY, false);
+            quickAttacker = new QuickAttacker("player 2 MB.png", baseX + GameConfig.BLUE_QUICK_OFFSET_X, baseY, false);
+            wingSpiker = new WingSpiker("player 2 WS.png", baseX + GameConfig.BLUE_WING_OFFSET_X, baseY, false);
 
-            backPlayer = new BackPlayer(
-                    "player 2 back.png",
-                    baseX + GameConfig.BLUE_BACK_OFFSET_X,
-                    baseY
-            );
+            double blueMinX = netX - playerNetOverlap;
+            double blueMaxX = GameConfig.WORLD_RIGHT;
 
-            setter = new Setter(
-                    "player 2 S.png",
-                    baseX + GameConfig.BLUE_SETTER_OFFSET_X,
-                    baseY
-            );
-
-            quickAttacker = new QuickAttacker(
-                    "player 2 MB.png",
-                    baseX + GameConfig.BLUE_QUICK_OFFSET_X,
-                    baseY
-            );
-
-            wingSpiker = new WingSpiker(
-                    "player 2 WS.png",
-                    baseX + GameConfig.BLUE_WING_OFFSET_X,
-                    baseY
-            );
-
+            setTeamBoundaries(blueMinX, blueMaxX);
             setupBlueHitBoxes();
+        }
+    }
+
+    private void setTeamBoundaries(double min, double max) {
+        for (Player player : getPlayers()) {
+            player.minX = min;
+            player.maxX = max;
         }
     }
 
     private void setupRedHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
-
-        backPlayer.hitBox.set(
-                21, 50,
-                28, 10,
-                8, 8,
-                20
-        );
-
-        setter.hitBox.set(
-                21, 14,
-                28, 20,
-                8, 8,
-                0
-        );
-
-        quickAttacker.hitBox.set(
-                40, 0,
-                10, 30,
-                8, 8,
-                20
-        );
-
-        wingSpiker.hitBox.set(
-                21, 50,
-                28, 10,
-                8, 8,
-                20
-        );
+        backPlayer.hitBox.set(40, 60, 25, 10, 10, 10, 20);
+        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        quickAttacker.hitBox.set(50, 30, 10, 30, 10, 10, 40);
+        wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
 
     private void setupBlueHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
+        backPlayer.hitBox.set(35, 60, 25, 10, 10, 10, -20);
+        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        quickAttacker.hitBox.set(40, 30, 10, 30, 10, 10, -40);
+        wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
+    }
 
-        backPlayer.hitBox.set(
-                21, 50,
-                28, 10,
-                8, 8,
-                -20
-        );
+    public Player[] getPlayers() {
+        return new Player[]{backPlayer, setter, quickAttacker, wingSpiker};
+    }
 
-        setter.hitBox.set(
-                21, 14,
-                28, 20,
-                8, 8,
-                0
-        );
-
-        quickAttacker.hitBox.set(
-                20, 0,
-                10, 30,
-                8, 8,
-                -20
-        );
-
-        wingSpiker.hitBox.set(
-                21, 50,
-                28, 10,
-                8, 8,
-                -20
-        );
+    public void resetAllPlayers() {
+        for (Player p : getPlayers()) {
+            p.resetToInitial();
+        }
     }
 
     public void update(TeamInput input) {
-        backPlayer.update(input, redSide);
-        setter.update(input);
-        quickAttacker.update(input);
-        wingSpiker.update(input);
+        for (Player player : getPlayers()) {
+            player.update(input);
+        }
     }
-} 
+}

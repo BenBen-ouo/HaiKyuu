@@ -4,6 +4,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.HashSet;
 import java.util.Set;
+import model.ServeType;
 import model.TeamInput;
 
 public class KeyboardController implements KeyListener {
@@ -11,6 +12,7 @@ public class KeyboardController implements KeyListener {
 
     public TeamInput getRedInput() {
         TeamInput input = new TeamInput();
+
         input.backLeft = isPressed(KeyEvent.VK_A);
         input.backRight = isPressed(KeyEvent.VK_D);
         input.backJump = isPressed(KeyEvent.VK_SPACE);
@@ -19,11 +21,15 @@ public class KeyboardController implements KeyListener {
         input.quickAttack = isPressed(KeyEvent.VK_L);
         input.quickBlock = isPressed(KeyEvent.VK_L);
         input.wingAttack = isPressed(KeyEvent.VK_J);
+        input.servePressed = isPressed(KeyEvent.VK_SPACE);
+        input.serveType = getRedServeType();
+
         return input;
     }
 
     public TeamInput getBlueInput() {
         TeamInput input = new TeamInput();
+
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
         input.backRight = isPressed(KeyEvent.VK_RIGHT);
         input.backJump = isPressed(KeyEvent.VK_NUMPAD0);
@@ -32,7 +38,42 @@ public class KeyboardController implements KeyListener {
         input.quickAttack = isPressed(KeyEvent.VK_NUMPAD6);
         input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
         input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
+        input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
+        input.serveType = getBlueServeType();
+
         return input;
+    }
+
+    public boolean isRestartPressed() {
+        return isPressed(KeyEvent.VK_R);
+    }
+
+    private ServeType getRedServeType() {
+        if (isPressed(KeyEvent.VK_W)) {
+            return ServeType.CEILING;
+        }
+        if (isPressed(KeyEvent.VK_S)) {
+            return ServeType.LOW_NET;
+        }
+        if (isPressed(KeyEvent.VK_A)) {
+            return ServeType.SHORT;
+        }
+
+        return ServeType.NORMAL;
+    }
+
+    private ServeType getBlueServeType() {
+        if (isPressed(KeyEvent.VK_UP)) {
+            return ServeType.CEILING;
+        }
+        if (isPressed(KeyEvent.VK_DOWN)) {
+            return ServeType.LOW_NET;
+        }
+        if (isPressed(KeyEvent.VK_RIGHT)) {
+            return ServeType.SHORT;
+        }
+        
+        return ServeType.NORMAL;
     }
 
     private boolean isPressed(int keyCode) {

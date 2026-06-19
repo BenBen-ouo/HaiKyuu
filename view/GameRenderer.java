@@ -1,19 +1,19 @@
 package view;
 
 import java.awt.*;
-import java.awt.geom.AffineTransform;
 import model.*;
 
 public class GameRenderer {
     private final AssetLoader assets = new AssetLoader();
+    private final CourtRenderer courtRenderer = new CourtRenderer();
+    private final PlayerRenderer playerRenderer = new PlayerRenderer(assets);
+    private final BallRenderer ballRenderer = new BallRenderer(assets);
 
     public void render(Graphics2D g, GameModel model) {
-        drawBackground(g);
-        drawWorldBoundaryGuide(g);
-        drawCourt(g);
-        drawTeam(g, model.redTeam, true);
-        drawTeam(g, model.blueTeam, false);
-        drawBall(g, model.ball);
+        courtRenderer.draw(g);
+        playerRenderer.drawTeam(g, model.redTeam, true);
+        playerRenderer.drawTeam(g, model.blueTeam, false);
+        ballRenderer.draw(g, model.ball);
         drawScore(g, model);
     }
 
@@ -30,20 +30,30 @@ public class GameRenderer {
     }
 
     private void drawCourt(Graphics2D g) {
-        g.setColor(new Color(238, 190, 115));
-        g.fillRect(0, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT - (int) GameConfig.FLOOR_Y);
+        // 整體地板底色 (原本的顏色)
+        int floorY = (int) GameConfig.FLOOR_Y;
+        int floorH = GameConfig.SCREEN_HEIGHT - floorY;
+        int courtLeftX = (int) GameConfig.COURT_LEFT_X;
+        int courtRightX = (int) GameConfig.COURT_RIGHT_X;
+        int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
+
+        g.setColor(new Color(243, 146, 10));//地板底色
+        g.fillRect(0, floorY, GameConfig.SCREEN_WIDTH, floorH);
+
+        g.setColor(new Color(106, 200, 243)); // 綠色地面
+        g.fillRect(0, floorY, courtLeftX, floorH);// 左邊綠色區
+        g.fillRect(courtRightX, floorY, GameConfig.SCREEN_WIDTH - courtRightX, floorH);// 右邊綠色區
 
         g.setColor(Color.WHITE);
         g.setStroke(new BasicStroke(3));
-        g.drawLine(0, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH, (int) GameConfig.FLOOR_Y);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2, (int) GameConfig.FLOOR_Y, GameConfig.SCREEN_WIDTH / 2, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 167,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 - 167,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 167,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 + 167,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 500,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 - 500,GameConfig.SCREEN_HEIGHT);
-        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 500,(int) GameConfig.FLOOR_Y,GameConfig.SCREEN_WIDTH / 2 + 500,GameConfig.SCREEN_HEIGHT);
+        g.drawLine(0, floorY, GameConfig.SCREEN_WIDTH, floorY);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2, floorY, GameConfig.SCREEN_WIDTH / 2, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2 - 167, floorY, GameConfig.SCREEN_WIDTH / 2 - 167, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(GameConfig.SCREEN_WIDTH / 2 + 167, floorY, GameConfig.SCREEN_WIDTH / 2 + 167, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(courtLeftX, floorY, courtLeftX, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(courtRightX, floorY, courtRightX, GameConfig.SCREEN_HEIGHT);
 
-        int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
-        g.setColor(new Color(70, 70, 80));
+        g.setColor(new Color(70, 70, 80));// 網子顏色
         g.fillRect(netX, (int) GameConfig.NET_TOP_Y, (int) GameConfig.NET_WIDTH, (int) GameConfig.NET_HEIGHT);
     }
 
@@ -146,7 +156,7 @@ public class GameRenderer {
     }
 
     private void drawBall(Graphics2D g, Ball ball) {
-        Image img = assets.get("mikasa.jpg");
+        Image img = assets.get("mikasa.png");
 
         int d = (int) (ball.radius * 2);
         int x = (int) (ball.x - ball.radius);
@@ -154,12 +164,13 @@ public class GameRenderer {
 
         if (img != null) {
             g.drawImage(img, x, y, d, d, null);
-        } else {
-            g.setColor(new Color(245, 210, 60));
-            g.fillOval(x, y, d, d);
+        } 
+        else {
+            // g.setColor(new Color(245, 210, 60));
+            // g.fillOval(x, y, d, d);
 
-            g.setColor(Color.BLACK);
-            g.drawOval(x, y, d, d);
+            // g.setColor(Color.BLACK);
+            // g.drawOval(x, y, d, d);
         }
     }
 

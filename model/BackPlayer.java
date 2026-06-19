@@ -1,25 +1,138 @@
 package model;
 
 public class BackPlayer extends Player {
-    public BackPlayer(String assetName, double x, double y) {
-        super(assetName, x, y);
+    private static final double BACK_ATTACK_AIR_SPEED = 2.5;
+
+    private final DiveController diveController;
+    private boolean previousBackAction = false;
+
+    public BackPlayer(String assetName, double x, double y, boolean redSide) {
+        super(assetName, x, y, redSide);
+        this.diveController = new DiveController(this);
     }
 
-    public void update(TeamInput input, boolean redSide) {
-        vx = 0;
-        if (input.backLeft) vx -= GameConfig.PLAYER_SPEED;
-        if (input.backRight) vx += GameConfig.PLAYER_SPEED;
+    @Override
+    public void update(TeamInput input) {
+        boolean actionPressed = input.backJump || input.backDive;
+        boolean justPressedAction = actionPressed && !previousBackAction;
 
-        if (input.backJump && !jumping) {
-            vy = GameConfig.PLAYER_JUMP_SPEED;
-            jumping = true;
+        if (diveController.isActive()) {
+            diveController.update(actionPressed);
+            updateActionAnimation();
+            previousBackAction = actionPressed;
+            return;
         }
 
-        if (input.backDive && !jumping) {
-            diving = true;
-            vx = redSide ? GameConfig.DIVE_SPEED : -GameConfig.DIVE_SPEED;
+        if (isMovementLockedByAnimation()) {
+            vx = 0;
+            applyGravity();
+            updateActionAnimation();
+            diveController.rememberInput(input.backDive);
+            previousBackAction = actionPressed;
+            return;
+        }
+
+        if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
+            updateBackAttack(justPressedAction);
+            previousBackAction = actionPressed;
+            return;
+        }
+
+        if (action == PlayerAction.RUN_LOOP) {
+            if (tryStartPriorityAction(input, justPressedAction)) {
+                previousBackAction = actionPressed;
+                return;
+            }
+
+            updateNormalRun(input);
+            diveController.rememberInput(input.backDive);
+            previousBackAction = actionPressed;
+            return;
+        }
+
+        vx = 0;
+        attacking = false;
+
+        if (input.backJump && justPressedAction && !jumping) {
+            startAttackReady(directionTowardNet() * BACK_ATTACK_AIR_SPEED);
+        } else if (diveController.tryStartForBackPlayer(input)) {
+            diveController.update(input.backDive);
+            updateActionAnimation();
+            previousBackAction = actionPressed;
+            return;
+        } else {
+            moveHorizontallyWithRunAnimation(input);
+        }
+
+        diveController.rememberInput(input.backDive);
+        applyGravity();
+        updateActionAnimation();
+        previousBackAction = actionPressed;
+    }
+
+    private boolean tryStartPriorityAction(TeamInput input, boolean justPressedAction) {
+        if (input.backJump && justPressedAction && !jumping) {
+            startAttackReady(directionTowardNet() * BACK_ATTACK_AIR_SPEED);
+            diveController.rememberInput(input.backDive);
+            applyGravity();
+            updateActionAnimation();
+            return true;
+        }
+
+        if (diveController.tryStartForBackPlayer(input)) {
+            diveController.update(input.backDive);
+            updateActionAnimation();
+            return true;
+        }
+
+        return false;
+    }
+
+    private void updateBackAttack(boolean justPressedAction) {
+        if (action == PlayerAction.ATTACK_READY && justPressedAction && jumping) {
+            startAttackSwingAnimation();
+        }
+
+        if (jumping) {
+            vx = directionTowardNet() * BACK_ATTACK_AIR_SPEED;
+        } else {
+            vx = 0;
         }
 
         applyGravity();
+        updateActionAnimation();
+    }
+
+    private void updateNormalRun(TeamInput input) {
+        if (input.backLeft || input.backRight) {
+            vx = 0;
+            moveHorizontally(input);
+            startRunLoopAnimation();
+            applyGravity();
+            animation.update();
+        } else {
+            vx = 0;
+            finishAction();
+            applyGravity();
+        }
+    }
+
+    private void moveHorizontallyWithRunAnimation(TeamInput input) {
+        moveHorizontally(input);
+
+        if (vx != 0) {
+            action = PlayerAction.RUN_LOOP;
+            startRunLoopAnimation();
+        }
+    }
+
+    private void moveHorizontally(TeamInput input) {
+        if (input.backLeft) {
+            vx -= GameConfig.PLAYER_SPEED;
+        }
+
+        if (input.backRight) {
+            vx += GameConfig.PLAYER_SPEED;
+        }
     }
 }

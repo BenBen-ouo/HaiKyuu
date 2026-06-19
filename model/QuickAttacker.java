@@ -1,20 +1,46 @@
 package model;
 
 public class QuickAttacker extends Player {
-    public QuickAttacker(String assetName, double x, double y) {
-        super(assetName, x, y);
+    private boolean previousQuickAttack = false;
+
+    public QuickAttacker(String assetName, double x, double y, boolean redSide) {
+        super(assetName, x, y, redSide);
     }
 
+    @Override
     public void update(TeamInput input) {
-        vx = 0;
-        attacking = input.quickAttack;
-        blocking = input.quickBlock;
+        boolean justPressedQuick = input.quickAttack && !previousQuickAttack;
 
-        if ((input.quickAttack || input.quickBlock) && !jumping) {
-            vy = GameConfig.PLAYER_JUMP_SPEED;
-            jumping = true;
+        vx = 0;
+
+        if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
+            if (action == PlayerAction.ATTACK_READY && justPressedQuick && jumping) {
+                startAttackSwingAnimation();
+            }
+
+            applyGravity();
+            updateActionAnimation();
+            previousQuickAttack = input.quickAttack;
+            return;
+        }
+
+        if (action == PlayerAction.BLOCK) {
+            applyGravity();
+            updateActionAnimation();
+            previousQuickAttack = input.quickAttack;
+            return;
+        }
+
+        if (justPressedQuick) {
+            if (input.ballOnOwnSide) {
+                startAttackReady(0);
+            } else {
+                startBlockAnimation();
+            }
         }
 
         applyGravity();
+        updateActionAnimation();
+        previousQuickAttack = input.quickAttack;
     }
 }
