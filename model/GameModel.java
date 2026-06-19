@@ -8,21 +8,16 @@ public class GameModel {
     public int redScore = 0;
     public int blueScore = 0;
 
-    private final ServeHandler serveHandler = new ServeHandler(this);
-
-    // 擊球計數器
+    // 擊球計數器。保留 public 欄位，避免其他舊程式碼需要改。
     public int redHitCount = 0;
     public int blueHitCount = 0;
 
-    // 記錄最後一次觸球者，用於防止連擊
+    private final ServeHandler serveHandler = new ServeHandler(this);
+    private final RallyContactHandler contactHandler = new RallyContactHandler(this);
+
     private Player redLastHitter = null;
     private Player blueLastHitter = null;
-
     private double lastBallX;
-
-    public GameModel() {
-        // serveHandler 預設就會準備好第一次發球
-    }
 
     public ServeHandler getServeHandler() {
         return serveHandler;
@@ -33,39 +28,21 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
-        fillBallSideInfo(redInput, true);
-        fillBallSideInfo(blueInput, false);
+        updateBallSideInfo(redInput, blueInput);
 
         if (serveHandler.isWaitingForServe()) {
-            serveHandler.update(redInput, blueInput);
-            configureBackPlayerAction(redInput, redHitCount);
-            configureBackPlayerAction(blueInput, blueHitCount);
-
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
+            updateWaitingServeFrame(redInput, blueInput);
 
             if (serveHandler.isWaitingForServe()) {
                 return;
             }
         } else {
-            lastBallX = ball.x;
-            configureBackPlayerAction(redInput, redHitCount);
-            configureBackPlayerAction(blueInput, blueHitCount);
-
-            redTeam.update(redInput);
-            blueTeam.update(blueInput);
-            ball.update();
-
-            // 偵測球是否過網，過網則重置兩隊的計數器與最後觸球者
-            double netX = GameConfig.NET_X;
-            if ((lastBallX < netX && ball.x >= netX) || (lastBallX > netX && ball.x <= netX)) {
-                resetCounters();
-            }
+            updateRallyFrame(redInput, blueInput);
         }
 
         ball.collideWithNet();
-        collideTeam(redTeam, true);
-        collideTeam(blueTeam, false);
+        contactHandler.collideTeam(redTeam, true);
+        contactHandler.collideTeam(blueTeam, false);
     }
 
     public void resetCounters() {
@@ -75,120 +52,74 @@ public class GameModel {
         blueLastHitter = null;
     }
 
+    int getHitCount(boolean redSide) {
+        return redSide ? redHitCount : blueHitCount;
+    }
+
+    Player getLastHitter(boolean redSide) {
+        return redSide ? redLastHitter : blueLastHitter;
+    }
+
+    void recordHit(boolean redSide, Player hitter) {
+        if (redSide) {
+            redHitCount++;
+            redLastHitter = hitter;
+        } else {
+            blueHitCount++;
+            blueLastHitter = hitter;
+        }
+    }
+
+    private void updateWaitingServeFrame(TeamInput redInput, TeamInput blueInput) {
+        serveHandler.update(redInput, blueInput);
+        configureBackActions(redInput, blueInput);
+        updateTeams(redInput, blueInput);
+    }
+
+    private void updateRallyFrame(TeamInput redInput, TeamInput blueInput) {
+        lastBallX = ball.x;
+        configureBackActions(redInput, blueInput);
+        updateTeams(redInput, blueInput);
+        ball.update();
+        resetCountersIfBallCrossesNet();
+    }
+
+    private void updateTeams(TeamInput redInput, TeamInput blueInput) {
+        redTeam.update(redInput);
+        blueTeam.update(blueInput);
+    }
+
+    private void updateBallSideInfo(TeamInput redInput, TeamInput blueInput) {
+        fillBallSideInfo(redInput, true);
+        fillBallSideInfo(blueInput, false);
+    }
+
     private void fillBallSideInfo(TeamInput input, boolean redSide) {
-        boolean ownSide = redSide ? ball.x <= GameConfig.NET_X : ball.x >= GameConfig.NET_X;
+        boolean ownSide = SideRules.isBallOnOwnSide(redSide, ball.x);
         input.ballOnOwnSide = ownSide;
         input.ballOnOpponentSide = !ownSide;
     }
 
+    private void configureBackActions(TeamInput redInput, TeamInput blueInput) {
+        configureBackPlayerAction(redInput, redHitCount);
+        configureBackPlayerAction(blueInput, blueHitCount);
+    }
+
     private void configureBackPlayerAction(TeamInput input, int hitCount) {
         boolean actionPressed = input.backJump || input.backDive;
+        boolean firstTouchNotCompleted = hitCount == 0;
 
-        if (hitCount == 0) {
-            // 還沒有接起本隊第一球：Space / 0 是撲球，不是起跳攻擊。
-            input.backJump = false;
-            input.backDive = actionPressed;
-        } else {
-            // 已經接起第一球後：Space / 0 才進入 back 攻擊起跳與空中揮臂判斷。
-            input.backJump = actionPressed;
-            input.backDive = false;
-        }
+        input.backJump = actionPressed && !firstTouchNotCompleted;
+        input.backDive = actionPressed && firstTouchNotCompleted;
     }
 
-    private void collideTeam(Team team, boolean redSide) {
-        int currentHitCount = redSide ? redHitCount : blueHitCount;
-        Player lastHitter = redSide ? redLastHitter : blueLastHitter;
+    private void resetCountersIfBallCrossesNet() {
+        double netX = GameConfig.NET_X;
+        boolean crossedLeftToRight = lastBallX < netX && ball.x >= netX;
+        boolean crossedRightToLeft = lastBallX > netX && ball.x <= netX;
 
-        double targetX;
-        double targetY;
-        double power;
-
-        if (currentHitCount == 0 || currentHitCount == 1) {
-            // 第一、二球：固定接到舉球員頭上
-            targetX = team.setter.x + team.setter.imageWidth / 2.0;
-            targetY = team.setter.y - 20;
-            power = 13.5;
-        } else {
-            // 第三球及以後：傳到對面場地
-            targetX = redSide ? (GameConfig.SCREEN_WIDTH * 0.8) : (GameConfig.SCREEN_WIDTH * 0.2);
-            targetY = GameConfig.FLOOR_Y - 50;
-            power = 15.5;
+        if (crossedLeftToRight || crossedRightToLeft) {
+            resetCounters();
         }
-
-        for (Player player : team.getPlayers()) {
-            if (player == lastHitter) continue;
-
-            // 如果是舉球員本人接到，傳到自己正上方
-            double currentTargetX = (player == team.setter && (currentHitCount == 0 || currentHitCount == 1))
-                    ? ball.x
-                    : targetX;
-
-            if (collidePlayer(player, power, currentTargetX, targetY)) {
-                playTouchAnimation(player, currentHitCount);
-
-                if (redSide) {
-                    redHitCount++;
-                    redLastHitter = player;
-                } else {
-                    blueHitCount++;
-                    blueLastHitter = player;
-                }
-                break;
-            }
-        }
-    }
-
-    private void playTouchAnimation(Player player, int currentHitCount) {
-        if (player instanceof Setter) {
-            if (currentHitCount <= 2) {
-                player.playSettingAnimation();
-            }
-            return;
-        }
-
-        if (player.isAttackReady() || player.isAttackSwinging()) {
-            // 之後真正扣球邏輯可以從這裡接：
-            // if (player.isAttackSwinging()) { 改成扣球速度 / 方向 }
-            return;
-        }
-
-        if (player instanceof WingSpiker) {
-            player.playReceiveAnimation();
-            return;
-        }
-
-        if (player instanceof BackPlayer && !player.diving) {
-            player.playReceiveAnimation();
-        }
-    }
-
-    private boolean collidePlayer(Player player, double power, double targetX, double targetY) {
-        if (!player.intersectsBall(ball)) {
-            return false;
-        }
-
-        double centerX = player.getHitBoxCenterX();
-        double centerY = player.getHitBoxCenterY();
-
-        double dx = ball.x - centerX;
-        double dy = ball.y - centerY;
-        double len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-
-        // 避免球卡在人物身上
-        ball.x += dx / len * 6;
-        ball.y += dy / len * 6;
-
-        double[] vel = PhysicsUtils.calculateVelocityToTarget(
-                ball.x,
-                ball.y,
-                targetX,
-                targetY,
-                power,
-                GameConfig.GRAVITY
-        );
-        ball.vx = vel[0];
-        ball.vy = vel[1];
-
-        return true;
     }
 }

@@ -2,33 +2,28 @@ package model;
 
 public abstract class Player {
     public String assetName;
-
-    // 圖片左上角位置
     public double x;
     public double y;
-
     public double vx;
     public double vy;
 
-    // 圖片顯示大小
     public int imageWidth = GameConfig.PLAYER_IMAGE_WIDTH;
     public int imageHeight = GameConfig.PLAYER_IMAGE_HEIGHT;
-
-    // 每個球員自己的碰撞箱
     public HitBox hitBox;
 
     public boolean jumping;
     public boolean attacking;
     public boolean blocking;
     public boolean diving;
-
     public boolean redSide;
-
-    // true 時，Renderer 會把目前圖片水平左右反轉。主要用在 back 往反方向撲接。
     public boolean mirrorImage = false;
 
     protected final PlayerAnimation animation;
+    protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
+
+    public double minX = GameConfig.WORLD_LEFT;
+    public double maxX = GameConfig.WORLD_RIGHT;
 
     public Player(String assetName, double x, double y, boolean redSide) {
         this.assetName = assetName;
@@ -37,35 +32,21 @@ public abstract class Player {
         this.redSide = redSide;
         this.hitBox = new HitBox(this);
         this.animation = new PlayerAnimation(this, assetName);
+        this.actionAnimator = new PlayerActionAnimator(this, animation);
     }
 
     public abstract void update(TeamInput input);
-
-    // 運動邊界限制
-    public double minX = GameConfig.WORLD_LEFT;
-    public double maxX = GameConfig.WORLD_RIGHT;
 
     public void applyGravity() {
         vy += GameConfig.GRAVITY;
         x += vx;
         y += vy;
 
-        // 用圖片底部判斷是否碰到地板
         if (y + imageHeight > GameConfig.FLOOR_Y) {
-            y = GameConfig.FLOOR_Y - imageHeight;
-            vy = 0;
-            jumping = false;
-            diving = false;
+            landOnFloor();
         }
 
-        // 限制移動邊界
-        if (x < minX) {
-            x = minX;
-        }
-
-        if (x + imageWidth > maxX) {
-            x = maxX - imageWidth;
-        }
+        clampToMovementBounds();
     }
 
     public boolean intersectsBall(Ball ball) {
@@ -101,172 +82,43 @@ public abstract class Player {
     }
 
     public void playReceiveAnimation() {
-        if (action == PlayerAction.DIVE
-                || action == PlayerAction.ATTACK_READY
-                || action == PlayerAction.ATTACK_SWING
-                || action == PlayerAction.BLOCK) {
-            return;
-        }
-
-        mirrorImage = false;
-        action = PlayerAction.RECEIVING;
-        attacking = false;
-        blocking = false;
-        vx = 0;
-        animation.play(new String[]{teamAsset("receive")}, new int[]{30});
+        actionAnimator.playReceive();
     }
 
     public void playSettingAnimation() {
-        mirrorImage = false;
-        action = PlayerAction.SETTING;
-        attacking = false;
-        blocking = false;
-
-        // 目前素材有 setting1 / setting2，所以中間長停用 setting2。
-        animation.play(
-                new String[]{teamAsset("setting1"), teamAsset("setting2"), teamAsset("setting1")},
-                new int[]{5, 30, 5}
-        );
+        actionAnimator.playSetting();
     }
 
     public void playDiveAnimation() {
-        action = PlayerAction.DIVE;
-        attacking = false;
-        blocking = false;
-        animation.play(
-                new String[]{teamAsset("dive1"), teamAsset("dive2"), teamAsset("dive3")},
-                new int[]{5, 10, -1}
-        );
+        actionAnimator.playDive();
     }
 
     protected void startAttackReady(double horizontalSpeed) {
-        mirrorImage = false;
-        action = PlayerAction.ATTACK_READY;
-        attacking = true;
-        blocking = false;
-        diving = false;
-        vx = horizontalSpeed;
-        vy = GameConfig.PLAYER_JUMP_SPEED;
-        jumping = true;
-        animation.show(teamAsset("attack1"));
+        actionAnimator.startAttackReady(horizontalSpeed);
     }
 
     protected void startAttackSwingAnimation() {
-        mirrorImage = false;
-        action = PlayerAction.ATTACK_SWING;
-        attacking = true;
-        blocking = false;
-        animation.play(
-                new String[]{teamAsset("attack2"), teamAsset("attack3")},
-                new int[]{5, -1}
-        );
+        actionAnimator.startAttackSwing();
     }
 
     protected void startBlockAnimation() {
-        mirrorImage = false;
-        action = PlayerAction.BLOCK;
-        blocking = true;
-        attacking = false;
-        diving = false;
-
-        if (!jumping) {
-            vy = GameConfig.PLAYER_JUMP_SPEED;
-            jumping = true;
-        }
-
-        animation.play(
-                new String[]{teamAsset("block1"), teamAsset("block2"), teamAsset("block1")},
-                new int[]{20, 20, -1}
-        );
+        actionAnimator.startBlock();
     }
 
     protected void startRunApproachAnimation(int cycles) {
-        mirrorImage = false;
-        action = PlayerAction.RUN_APPROACH;
-        attacking = false;
-        blocking = false;
-        diving = false;
-        playRunAnimationCycles(cycles);
+        actionAnimator.startRunApproach(cycles);
     }
 
     protected void startRunLoopAnimation() {
-        if (animation.isLooping()
-                && (action == PlayerAction.RUN_LOOP || action == PlayerAction.RUN_RETURN)) {
-            return;
-        }
-
-        playRunAnimationLoop();
-    }
-
-    private void playRunAnimationCycles(int cycles) {
-        int safeCycles = Math.max(1, cycles);
-        String[] oneCycleFrames = getRunCycleFrames();
-        int[] oneCycleDurations = getRunCycleDurations();
-        String[] frames = new String[oneCycleFrames.length * safeCycles];
-        int[] durations = new int[oneCycleDurations.length * safeCycles];
-
-        for (int cycle = 0; cycle < safeCycles; cycle++) {
-            for (int i = 0; i < oneCycleFrames.length; i++) {
-                int index = cycle * oneCycleFrames.length + i;
-                frames[index] = oneCycleFrames[i];
-                durations[index] = oneCycleDurations[i];
-            }
-        }
-
-        animation.play(frames, durations);
-    }
-
-    private void playRunAnimationLoop() {
-        animation.playLoop(getRunCycleFrames(), getRunCycleDurations());
-    }
-
-    private String[] getRunCycleFrames() {
-        return new String[]{
-                teamAsset("run1"),
-                teamAsset("run2"),
-                teamAsset("run3"),
-                teamAsset("run2")
-        };
-    }
-
-    private int[] getRunCycleDurations() {
-        return new int[]{2, 2, 2, 2};
+        actionAnimator.startRunLoop();
     }
 
     protected void updateActionAnimation() {
-        animation.update();
-
-        if (action == PlayerAction.ATTACK_READY && !jumping) {
-            finishAction();
-            return;
-        }
-
-        if (action == PlayerAction.ATTACK_SWING && !jumping && animation.isHoldingFrame()) {
-            finishAction();
-            return;
-        }
-
-        if (action == PlayerAction.BLOCK && !jumping && animation.isHoldingFrame()) {
-            finishAction();
-            return;
-        }
-
-        if (action == PlayerAction.DIVE && !diving && animation.isHoldingFrame()) {
-            finishAction();
-            return;
-        }
-
-        if ((action == PlayerAction.RECEIVING || action == PlayerAction.SETTING) && !animation.isPlaying()) {
-            finishAction();
-        }
+        actionAnimator.updateActionState();
     }
 
     protected void finishAction() {
-        mirrorImage = false;
-        action = PlayerAction.IDLE;
-        attacking = false;
-        blocking = false;
-        animation.stopToIdle();
+        actionAnimator.finishAction();
     }
 
     protected String teamAsset(String actionName) {
@@ -274,6 +126,23 @@ public abstract class Player {
     }
 
     protected double directionTowardNet() {
-        return redSide ? 1.0 : -1.0;
+        return SideRules.directionTowardOpponent(redSide);
+    }
+
+    private void landOnFloor() {
+        y = GameConfig.FLOOR_Y - imageHeight;
+        vy = 0;
+        jumping = false;
+        diving = false;
+    }
+
+    private void clampToMovementBounds() {
+        if (x < minX) {
+            x = minX;
+        }
+
+        if (x + imageWidth > maxX) {
+            x = maxX - imageWidth;
+        }
     }
 }

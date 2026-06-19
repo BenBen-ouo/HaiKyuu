@@ -1,8 +1,8 @@
 package model;
 
 public class WingSpiker extends Player {
-    private static final double APPROACH_SPEED = 6.0;
-    private static final double RETURN_SPEED = 6.0;
+    private static final double APPROACH_SPEED = 4.0;
+    private static final double RETURN_SPEED = 4.0;
 
     private final double homeX;
     private boolean previousWingAttack = false;
