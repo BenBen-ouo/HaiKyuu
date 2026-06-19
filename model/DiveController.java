@@ -2,10 +2,10 @@ package model;
 
 public class DiveController {
     private static final int TOTAL_FRAMES = 60;
-    private static final double HITBOX_WIDTH = 96;
-    private static final double HITBOX_HEIGHT = 16;
+    private static final double HITBOX_WIDTH = 80;
+    private static final double HITBOX_HEIGHT = 5;
     private static final double HITBOX_OFFSET_Y = GameConfig.PLAYER_IMAGE_HEIGHT - HITBOX_HEIGHT - 2;
-    private static final double HITBOX_FORWARD_OFFSET_X = 6;
+    private static final double HITBOX_FORWARD_OFFSET_X = 20;
 
     private final Player player;
 
@@ -97,8 +97,8 @@ public class DiveController {
                 HITBOX_OFFSET_Y,
                 HITBOX_WIDTH,
                 HITBOX_HEIGHT,
-                0,
-                0,
+                5,
+                5,
                 0
         );
     }
