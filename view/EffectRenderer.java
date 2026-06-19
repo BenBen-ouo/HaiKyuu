@@ -1,3 +1,7 @@
+/*
+負責繪製 EffectManager 中保存的視覺特效。
+之後球軌跡、落地煙霧等圖片效果會由這裡顯示。
+*/
 package view;
 
 import java.awt.*;

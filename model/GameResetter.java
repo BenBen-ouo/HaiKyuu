@@ -1,3 +1,7 @@
+/*
+負責將整場遊戲重置為初始狀態。
+重設分數、球、隊伍、觸球計數與發球狀態。
+*/
 package model;
 
 public class GameResetter {

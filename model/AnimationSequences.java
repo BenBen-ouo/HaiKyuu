@@ -1,3 +1,7 @@
+/*
+集中管理共用動畫序列，例如跑步循環、圖片檔名組合與每張圖停留時間。
+讓角色動畫流程不用在各個 Player 類別中重複寫 frame 與 duration。
+*/
 package model;
 
 public final class AnimationSequences {

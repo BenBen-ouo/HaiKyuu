@@ -1,3 +1,7 @@
+/*
+單一視覺特效資料，保存圖片名稱、位置與剩餘顯示時間。
+由 EffectManager 更新生命週期，由 EffectRenderer 負責繪製。
+*/
 package model;
 
 public class VisualEffect {

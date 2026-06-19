@@ -1,3 +1,7 @@
+/*
+舉球員 S 的角色邏輯。
+目前只處理起跳與重力更新，觸球時的舉球動畫由 RallyContactHandler 觸發。
+*/
 package model;
 
 public class Setter extends Player {

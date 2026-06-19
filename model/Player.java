@@ -1,3 +1,7 @@
+/*
+所有球員的共同基底類別，保存位置、速度、狀態、碰撞箱與動畫控制器。
+角色共用的接球、舉球、攻擊、攔網、撲球動畫入口也集中在這裡。
+*/
 package model;
 
 public abstract class Player {

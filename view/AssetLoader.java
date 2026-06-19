@@ -1,3 +1,7 @@
+/*
+圖片資源載入器，負責從 assets/images 或 assets 讀取圖片。
+已載入過的圖片會快取，避免每幀重複讀取檔案。
+*/
 package view;
 
 import java.awt.Image;

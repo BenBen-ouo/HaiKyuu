@@ -1,8 +1,8 @@
+/*
+集中管理發球階段允許哪些隊伍碰球。
+之後修正發球碰到自家球員或對手攔網得分規則時，優先改這裡。
+*/
 package model;
-
-//ㄏ集中管理發球期間誰可以碰球。
-// TODO：之後修發球得分 bug 時，可在這裡加入「發球方先碰到自家球員」與
-// 「對手攔網先碰到」的判斷，不需要散落在 GameModel 或 RallyContactHandler。
 
 public class ServeContactPolicy {
     public boolean canTeamCollide(ServeState state, boolean redSide, boolean redServing,

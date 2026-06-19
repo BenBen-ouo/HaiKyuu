@@ -1,3 +1,7 @@
+/*
+發球流程用的輸入鎖定工具。
+可禁止發球方 backPlayer 移動、撲球、跳躍，或等待發球鍵放開後再恢復操作。
+*/
 package model;
 
 public final class ServeInputLocker {

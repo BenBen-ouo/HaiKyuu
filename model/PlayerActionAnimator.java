@@ -1,3 +1,7 @@
+/*
+集中控制球員動作動畫的開始、播放與結束條件。
+包含接球、舉球、撲球、攻擊、攔網與跑步動畫的狀態切換。
+*/
 package model;
 
 public class PlayerActionAnimator {

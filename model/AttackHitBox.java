@@ -1,7 +1,8 @@
+/*
+預留給攻擊動作使用的碰撞箱資料。
+目前只保存攻擊碰撞箱的位置、大小與開關，不參與球的碰撞邏輯。
+*/
 package model;
-
-// 預留給之後扣球判斷使用的攻擊碰撞箱。
-// 目前只保存位置與開關，不參與任何球的碰撞邏輯。
 
 public class AttackHitBox {
     private final Player owner;

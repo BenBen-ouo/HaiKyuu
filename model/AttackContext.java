@@ -1,7 +1,8 @@
+/*
+預留給之後扣球判斷使用的攻擊上下文資料。
+之後可加入攻擊者、攻擊方向、按鍵球種與攻擊碰撞箱命中資訊。
+*/
 package model;
-
-// 預留給之後扣球邏輯使用。
-// 之後可以加入攻擊者、按鍵方向、球種、攻擊碰撞箱是否命中等資訊。
 
 public class AttackContext {
     public final Player attacker;

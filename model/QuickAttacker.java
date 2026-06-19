@@ -1,3 +1,7 @@
+/*
+快攻手 MB 的角色邏輯，依照球在本場或對場決定攻擊或攔網。
+本場按攻擊鍵會起跳準備攻擊，對場按攻擊鍵會進入攔網動畫。
+*/
 package model;
 
 public class QuickAttacker extends Player {

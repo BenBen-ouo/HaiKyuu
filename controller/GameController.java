@@ -1,3 +1,7 @@
+/*
+控制層入口，負責把鍵盤輸入轉交給 GameModel 更新遊戲狀態。
+也在每幀檢查重新開始按鍵，觸發整場遊戲重置。
+*/
 package controller;
 
 import model.GameModel;

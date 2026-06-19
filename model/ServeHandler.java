@@ -1,3 +1,7 @@
+/*
+控制發球流程狀態，包含等待發球、球已發出與進入正式來回。
+負責鎖住發球方 backPlayer 輸入，避免發球 Space 被誤判成撲球或攻擊。
+*/
 package model;
 
 public class ServeHandler {

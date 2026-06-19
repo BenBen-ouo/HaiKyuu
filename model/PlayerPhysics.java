@@ -1,3 +1,7 @@
+/*
+球員物理與位置工具，處理重力、落地、邊界限制與重置到初始位置。
+讓 Player 本體不用直接保存太多移動細節。
+*/
 package model;
 
 public final class PlayerPhysics {

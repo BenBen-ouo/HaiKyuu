@@ -1,3 +1,7 @@
+/*
+專門處理發球時球的位置與速度。
+包含發球前擺球、一般發球出球與發球速度隨機誤差。
+*/
 package model;
 
 import java.util.Random;

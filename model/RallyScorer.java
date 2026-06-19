@@ -1,3 +1,7 @@
+/*
+處理球落地後的得分、死球等待時間與下一球發球方準備。
+目前依照落點、最後觸球隊伍與發球方決定得分隊伍。
+*/
 package model;
 
 public class RallyScorer {

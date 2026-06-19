@@ -1,3 +1,7 @@
+/*
+負責監聽鍵盤按下與放開，並轉換成紅隊與藍隊的 TeamInput。
+所有角色操作鍵、發球鍵與發球類型都從這裡整理成模型可讀的資料。
+*/
 package controller;
 
 import java.awt.event.KeyEvent;

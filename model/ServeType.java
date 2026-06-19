@@ -1,3 +1,7 @@
+/*
+發球類型列舉，保存每種發球的基礎水平與垂直速度。
+目前包含一般發球、高拋發球、低網發球與短球發球。
+*/
 package model;
 
 public enum ServeType {

@@ -1,3 +1,7 @@
+/*
+專門控制後排撲球流程，包含撲球方向、滑行減速、碰撞箱切換與恢復。
+也負責依照左右方向設定圖片是否水平翻轉。
+*/
 package model;
 
 public class DiveController {

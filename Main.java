@@ -1,3 +1,7 @@
+/*
+程式進入點，負責建立遊戲模型、鍵盤控制器、畫面面板與視窗。
+啟動 Swing 視窗後，將焦點交給 GamePanel 並開始遊戲更新迴圈。
+*/
 import controller.GameController;
 import controller.KeyboardController;
 import javax.swing.JFrame;

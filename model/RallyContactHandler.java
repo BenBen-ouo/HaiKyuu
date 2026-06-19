@@ -1,3 +1,7 @@
+/*
+處理來回中球與球員的一般碰撞、傳球目標、觸球動畫與觸球紀錄。
+之後真正扣球邏輯可從攻擊狀態與 AttackContext 入口接入。
+*/
 package model;
 
 public class RallyContactHandler {

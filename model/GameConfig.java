@@ -1,3 +1,7 @@
+/*
+遊戲全域設定檔，集中管理畫面大小、重力、球速、球場位置與角色站位。
+調整遊戲手感、發球參數、網子與角色初始位置時優先修改這裡。
+*/
 package model;
 
 public final class GameConfig {

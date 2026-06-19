@@ -1,3 +1,7 @@
+/*
+保存單次來回中的觸球狀態。
+包含紅藍觸球次數、最後觸球者、最後觸球隊伍與是否為攔網觸球。
+*/
 package model;
 
 public class RallyState {

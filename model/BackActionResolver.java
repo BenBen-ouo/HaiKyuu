@@ -1,3 +1,7 @@
+/*
+負責判斷後排球員 Space / 0 目前應該是撲球還是起跳攻擊。
+依照本隊是否已接起第一球，將輸入轉換成 backDive 或 backJump。
+*/
 package model;
 
 public final class BackActionResolver {
