@@ -1,8 +1,7 @@
 package model;
 
-/**
- * 專門負責判斷得分邏輯的類別
- */
+// 專門負責判斷得分邏輯的類別
+
 public class ScoringLogic {
     /**
      * 判斷哪一隊得分

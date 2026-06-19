@@ -1,10 +1,10 @@
 package model;
 
 public class GameResetter {
-    /**
-     * 將遊戲模型重置為初始狀態。
-     * @param model 要重置的 GameModel 實例
-     */
+
+    // 將遊戲模型重置為初始狀態。
+    // model 要重置的 GameModel 實例
+    
     public static void reset(GameModel model) {
         // 重置分數
         model.redScore = 0;
