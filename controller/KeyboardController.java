@@ -45,13 +45,13 @@ public class KeyboardController implements KeyListener {
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
 
         // 沒有獨立數字鍵測試用 之後會刪除
-        input.backJump = isPressed(KeyEvent.VK_0);
-        input.backDive = isPressed(KeyEvent.VK_0);
-        input.setterJump = isPressed(KeyEvent.VK_8);
-        input.quickAttack = isPressed(KeyEvent.VK_9);
-        input.quickBlock = isPressed(KeyEvent.VK_9);
-        input.wingAttack = isPressed(KeyEvent.VK_7);
-        input.servePressed = isPressed(KeyEvent.VK_0);
+        // input.backJump = isPressed(KeyEvent.VK_0);
+        // input.backDive = isPressed(KeyEvent.VK_0);
+        // input.setterJump = isPressed(KeyEvent.VK_8);
+        // input.quickAttack = isPressed(KeyEvent.VK_9);
+        // input.quickBlock = isPressed(KeyEvent.VK_9);
+        // input.wingAttack = isPressed(KeyEvent.VK_7);
+        // input.servePressed = isPressed(KeyEvent.VK_0);
         
         input.serveType = getBlueServeType();
 
