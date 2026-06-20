@@ -20,7 +20,83 @@ public class GameRenderer {
         playerRenderer.drawTeam(g, model.blueTeam, false);
         ballRenderer.draw(g, model.ball);
         effectRenderer.draw(g, model.effects);
+        drawSpikeEffects(g, model.spikeEffect);
         drawScore(g, model);
+    }
+
+    private void drawSpikeEffects(Graphics2D g, SpikeEffect spikeEffect) {
+        // 1. 繪製扣球軌跡 (Spike Trail) - 單一層帶羽化線段的光束
+        java.util.List<SpikeEffect.TrailPoint> points = spikeEffect.getTrailPoints();
+        if (points.size() >= 2) {
+            Stroke origStroke = g.getStroke();
+            Object origAntialias = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            for (int i = 0; i < points.size() - 1; i++) {
+                SpikeEffect.TrailPoint p1 = points.get(i);
+                SpikeEffect.TrailPoint p2 = points.get(i + 1);
+
+                // 確保是同一隊的軌跡線段
+                if (p1.isRedTeam != p2.isRedTeam) {
+                    continue;
+                }
+
+                double lifeRatio = ((double) p1.remainingFrames / p1.maxFrames + (double) p2.remainingFrames / p2.maxFrames) / 2.0;
+                if (lifeRatio <= 0) continue;
+
+                float hue = p1.isRedTeam ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE;
+                Color baseColor = Color.getHSBColor(hue, SpikeEffect.TRAIL_SATURATION, SpikeEffect.TRAIL_BRIGHTNESS);
+
+                // 1.1 外層羽化發光邊界
+                int alphaOuter = (int) (100 * lifeRatio);
+                g.setColor(new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), alphaOuter));
+                g.setStroke(new BasicStroke((float) (12.0 * lifeRatio), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
+
+                // 1.2 內層實心核心 (形成單一條帶羽化邊緣的光條)
+                int alphaCore = (int) (225 * lifeRatio);
+                g.setColor(new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), alphaCore));
+                g.setStroke(new BasicStroke((float) (5.0 * lifeRatio), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
+            }
+
+            g.setStroke(origStroke);
+            if (origAntialias != null) {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, origAntialias);
+            }
+        }
+
+        // 2. 繪製落地煙霧 (Landing Smoke) - 圖片效果（左半場使用 smoke_effect2.jpg，右半場使用 smoke_effect.jpg）
+        java.util.List<SpikeEffect.SmokeParticle> smokeParticles = spikeEffect.getSmokeParticles();
+        if (!smokeParticles.isEmpty()) {
+            String smokeImgName = spikeEffect.shouldUseSmokeEffect2() ? "smoke2.png" : "smoke.png";
+            Image smokeImg = assets.get(smokeImgName);
+            if (smokeImg != null) {
+                Composite origComposite = g.getComposite();
+                java.awt.geom.AffineTransform oldXform = g.getTransform();
+
+                for (SpikeEffect.SmokeParticle p : smokeParticles) {
+                    double lifeRatio = (double) p.remainingFrames / p.maxFrames;
+                    if (lifeRatio <= 0) continue;
+
+                    // 顏色淡雅，最大透明度約 0.32
+                    float alpha = (float) (0.32 * lifeRatio);
+                    g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+
+                    int size = (int) (p.currentRadius * 2);
+
+                    // 平移到粒子中心，移除旋轉以避免影像轉動
+                    g.translate(p.x, p.y);
+
+                    // 繪製以中心點對齊的煙霧圖片（不旋轉）
+                    g.drawImage(smokeImg, -size / 2, -size / 2, size, size, null);
+
+                    // 恢復原轉換矩陣，避免平移累加
+                    g.setTransform(oldXform);
+                }
+                g.setComposite(origComposite);
+            }
+        }
     }
 
     private void drawScore(Graphics2D g, GameModel model) {

@@ -38,9 +38,7 @@ public class SpikeEffect {
         public double maxRadius;
         public int remainingFrames;
         public int maxFrames;
-        public double rotation;
-        public double spinSpeed;
-
+        
         public SmokeParticle(double x, double y, double vx, double vy, double startRadius, double maxRadius, int maxFrames) {
             this.x = x;
             this.y = y;
@@ -51,8 +49,6 @@ public class SpikeEffect {
             this.maxRadius = maxRadius;
             this.maxFrames = maxFrames;
             this.remainingFrames = maxFrames;
-            this.rotation = Math.random() * Math.PI * 2;
-            this.spinSpeed = (Math.random() - 0.5) * 0.06; // 隨機自旋速度
         }
 
         public void update() {
@@ -61,9 +57,6 @@ public class SpikeEffect {
             // 阻尼減速與紊流，無定風速影響，使粒子自然擴散
             vx = vx * 0.91 + (Math.random() - 0.5) * 0.12;
             vy = vy * 0.91 - 0.08 + (Math.random() - 0.5) * 0.08; // 稍微向上飄移
-            
-            rotation += spinSpeed;
-            spinSpeed *= 0.98; // 自旋隨時間略微減速
             
             double progress = 1.0 - ((double) remainingFrames / maxFrames);
             currentRadius = startRadius + (maxRadius - startRadius) * progress;
