@@ -139,4 +139,14 @@ public class BackPlayer extends Player {
             vx += GameConfig.PLAYER_SPEED;
         }
     }
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        if (diving || action == PlayerAction.DIVE) {
+            return true;
+        }
+
+        return !jumping
+                && action != PlayerAction.ATTACK_READY
+                && action != PlayerAction.ATTACK_SWING;
+    }
 }

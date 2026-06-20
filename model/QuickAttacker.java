@@ -47,4 +47,8 @@ public class QuickAttacker extends Player {
         updateActionAnimation();
         previousQuickAttack = input.quickAttack;
     }
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        return isBlockHitBoxActive();
+    }
 }

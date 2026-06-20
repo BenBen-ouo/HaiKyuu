@@ -62,7 +62,19 @@ public abstract class Player {
     }
 
     public boolean intersectsBall(Ball ball) {
-        return hitBox.intersectsBall(ball);
+        return isDefaultHitBoxActive() && hitBox.intersectsBall(ball);
+    }
+
+    public boolean isDefaultHitBoxActive() {
+        return true;
+    }
+
+    public boolean isBlockHitBoxActive() {
+        return action == PlayerAction.BLOCK && isShowingActionFrame("block2");
+    }
+
+    protected boolean isShowingActionFrame(String actionName) {
+        return assetName.equals(teamAsset(actionName));
     }
 
     public double getHitBoxCenterX() {

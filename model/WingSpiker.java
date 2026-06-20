@@ -74,7 +74,9 @@ public class WingSpiker extends Player {
 
         vx = 0;
         applyGravity();
-        animation.update();
+
+        // 不能直接 animation.update()，否則會跳過 attack hitBox 的關閉判斷。
+        updateActionAnimation();
 
         if (!jumping) {
             startReturnToHome();
@@ -85,6 +87,7 @@ public class WingSpiker extends Player {
         action = PlayerAction.RUN_RETURN;
         attacking = false;
         blocking = false;
+        attackHitBox.disable();
         vx = 0;
         startRunLoopAnimation();
     }
@@ -104,5 +107,15 @@ public class WingSpiker extends Player {
         startRunLoopAnimation();
         applyGravity();
         animation.update();
+    }
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        return action == PlayerAction.IDLE
+                && !jumping
+                && !attacking
+                && !blocking
+                && !diving
+                && Math.abs(vx) < 0.001
+                && Math.abs(vy) < 0.001;
     }
 }

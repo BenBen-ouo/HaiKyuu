@@ -29,6 +29,10 @@ public final class GameConfig {
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
+    
+    // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
+    public static final double BLOCK_HITBOX_BOUNCE = 0.72;
+    public static final double BLOCK_HITBOX_MIN_SPEED = 6.0;
 
     // 球場範圍 (以網子中心點左右各 500)
     public static final double COURT_WIDTH = 1000;
@@ -40,6 +44,19 @@ public final class GameConfig {
     public static final double PLAYER_NET_OVERLAP_X = PLAYER_IMAGE_WIDTH / 3.0;
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
+    
+    // 調整這些數值即可自訂扣球判定區域。
+    public static final double ATTACK_HITBOX_WIDTH = 10;
+    public static final double ATTACK_HITBOX_HEIGHT = 25;
+    // 攻擊 hitBox，左隊放在角色右上角，右隊放在角色左上角。
+    public static final double RED_ATTACK_HITBOX_OFFSET_X = 55;
+    public static final double RED_ATTACK_HITBOX_OFFSET_Y = 35;
+    public static final double BLUE_ATTACK_HITBOX_OFFSET_X = 35;
+    public static final double BLUE_ATTACK_HITBOX_OFFSET_Y = 35;
+
+    // 扣球預設固定球速，之後可再依照 WASD 調整方向與力道。
+    public static final double SPIKE_SPEED_X = 17.0;
+    public static final double SPIKE_SPEED_Y = 7.5;
 
     // red 隊各角色相對基準點的位置
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
