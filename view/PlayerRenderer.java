@@ -48,9 +48,9 @@ public class PlayerRenderer {
     }
 
     private void drawFallbackBody(Graphics2D g, Player player, boolean redTeam, int x, int y) {
+        g.setColor(redTeam ? new Color(0, 0, 0) : new Color(0, 0, 0)); 
+        //測試用看有顏色的攻擊 hitBox，最後後刪除
         g.setColor(redTeam ? new Color(220, 90, 90) : new Color(80, 125, 220));
-        //測試用完全透明的攻擊 hitBox
-        // g.setColor(redTeam ? new Color(0, 0, 0) : new Color(0, 0, 0)); 
         g.fillRoundRect(x, y, player.imageWidth, player.imageHeight, 14, 14);
     }
 
@@ -70,18 +70,18 @@ public class PlayerRenderer {
     }
 
     private void fillHitBox(Graphics2D g, HitBox box, boolean redTeam) {
-        g.setColor(redTeam ? new Color(255, 40, 40, 70) : new Color(0, 90, 255, 70));
-        //測試用完全透明的攻擊 hitBox
-        // g.setColor(redTeam ? new Color(0, 0, 0) : new Color(0, 0, 0)); 
+        g.setColor(redTeam ? new Color(0, 0, 0, 0) : new Color(0, 0, 0, 0)); 
+        //測試用看有顏色的攻擊 hitBox，最後後刪除
+        g.setColor(redTeam ? new Color(255, 40, 40, 70) : new Color(0, 90, 255, 70));      
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
         g.fillRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
     }
 
     private void strokeHitBox(Graphics2D g, HitBox box, boolean redTeam) {
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+        g.setColor(redTeam ? new Color(0, 0, 0, 0) : new Color(0, 0, 0, 0)); 
+        //測試用看有顏色的攻擊 hitBox，最後後刪除
         g.setColor(redTeam ? new Color(220, 0, 0) : new Color(0, 60, 220));
-        //測試用完全透明的攻擊 hitBox
-        // g.setColor(redTeam ? new Color(0, 0, 0) : new Color(0, 0, 0)); 
         g.setStroke(new BasicStroke(2));
         g.drawRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
     }
@@ -93,13 +93,15 @@ public class PlayerRenderer {
         }
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+        g.setColor(new Color(0, 0, 0, 0));
+        //測試用看有顏色的攻擊 hitBox
         g.setColor(new Color(255, 190, 0, 80));
-        // g.setColor(new Color(0, 0, 0, 0)); //測試用完全透明的攻擊 hitBox
         g.fillRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+        g.setColor(new Color(0, 0, 0, 0));
+        //測試用看有顏色的攻擊 hitBox
         g.setColor(new Color(255, 140, 0));
-        // g.setColor(new Color(0, 0, 0, 0)); //測試用完全透明的攻擊 hitBox
         g.setStroke(new BasicStroke(2));
         g.drawRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
     }

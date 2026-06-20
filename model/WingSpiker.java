@@ -74,7 +74,9 @@ public class WingSpiker extends Player {
 
         vx = 0;
         applyGravity();
-        animation.update();
+
+        // 不能直接 animation.update()，否則會跳過 attack hitBox 的關閉判斷。
+        updateActionAnimation();
 
         if (!jumping) {
             startReturnToHome();

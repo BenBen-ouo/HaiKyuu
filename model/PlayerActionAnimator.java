@@ -39,7 +39,7 @@ public class PlayerActionAnimator {
         player.blocking = false;
         animation.play(
                 AnimationSequences.frames(player, "dive1", "dive2", "dive3"),
-                AnimationSequences.durations(5, 10, AnimationSequences.HOLD)
+                AnimationSequences.durations(5, 5, AnimationSequences.HOLD)
         );
     }
 
@@ -83,7 +83,7 @@ public class PlayerActionAnimator {
 
         animation.play(
                 AnimationSequences.frames(player, "block1", "block2", "block1"),
-                AnimationSequences.durations(20, 20, AnimationSequences.HOLD)
+                AnimationSequences.durations(15, 30, AnimationSequences.HOLD)
         );
     }
 

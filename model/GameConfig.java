@@ -44,7 +44,6 @@ public final class GameConfig {
     public static final double PLAYER_NET_OVERLAP_X = PLAYER_IMAGE_WIDTH / 3.0;
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
-
     
     // 調整這些數值即可自訂扣球判定區域。
     public static final double ATTACK_HITBOX_WIDTH = 10;
