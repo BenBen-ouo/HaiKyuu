@@ -48,7 +48,7 @@ public class RallyContactHandler {
             }
 
             if (player.attackHitBox.intersectsBall(model.ball)) {
-                performSpike(createAttackContext(player, redSide));
+                performSpike(createAttackContext(player, redSide), input);
                 model.recordHit(redSide, player);
                 return true;
             }
@@ -78,17 +78,40 @@ public class RallyContactHandler {
         return false;
     }
 
-    private void performSpike(AttackContext context) {
+    private void performSpike(AttackContext context, TeamInput input) {
         Player attacker = context.attacker;
 
         pushBallOutsideAttackHitBox(attacker);
         attacker.startAttackSwingAnimation();
-
-        model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
-        model.ball.vy = GameConfig.SPIKE_SPEED_Y;
+        setSpikeVelocity(context.redSide, input);
 
         // 命中一次後立刻關閉攻擊 hitBox，避免同一次起跳落地前再次影響球。
         attacker.attackHitBox.disable();
+    }
+
+    private void setSpikeVelocity(boolean redSide, TeamInput input) {
+        double speedX = GameConfig.SPIKE_SPEED_X;
+        double speedY = GameConfig.SPIKE_SPEED_Y;
+
+        if (input.spikeLob && input.spikeFlat) {
+            speedX = GameConfig.LONG_LOB_SPIKE_SPEED_X;
+            speedY = GameConfig.LONG_LOB_SPIKE_SPEED_Y;
+        } else if (input.spikeLob) {
+            speedX = GameConfig.LOB_SPIKE_SPEED_X;
+            speedY = GameConfig.LOB_SPIKE_SPEED_Y;
+        } else if (input.spikeShort && input.spikeFlat) {
+            speedX = GameConfig.LONG_SPIKE_SPEED_X;
+            speedY = GameConfig.LONG_SPIKE_SPEED_Y;
+        } else if (input.spikeFlat) {
+            speedX = GameConfig.FLAT_SPIKE_SPEED_X;
+            speedY = GameConfig.FLAT_SPIKE_SPEED_Y;
+        } else if (input.spikeShort) {
+            speedX = GameConfig.SHORT_SPIKE_SPEED_X;
+            speedY = GameConfig.SHORT_SPIKE_SPEED_Y;
+        }
+
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
+        model.ball.vy = speedY;
     }
 
     private boolean tryBlockRebound(Player player) {
