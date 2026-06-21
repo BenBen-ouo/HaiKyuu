@@ -34,6 +34,7 @@ public class RallyContactHandler {
 
             BallTarget target = BallTarget.forPlayer(team, redSide, hitCount, model.ball.x, player);
             if (collidePlayer(player, target)) {
+                model.spikeEffect.stopSpikeTrail();
                 handleTouchAnimation(player, hitCount, redSide);
                 model.recordHit(redSide, player);
                 break;
@@ -87,6 +88,8 @@ public class RallyContactHandler {
         model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
         model.ball.vy = GameConfig.SPIKE_SPEED_Y;
 
+        model.spikeEffect.startSpikeTrail(context.redSide);
+
         // 命中一次後立刻關閉攻擊 hitBox，避免同一次起跳落地前再次影響球。
         attacker.attackHitBox.disable();
     }
@@ -102,6 +105,18 @@ public class RallyContactHandler {
 
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
+
+        if (model.spikeEffect.isSpikeTrailActive()) {
+            if (model.ball.vy > 0) {
+                // 情況 1：被攔網罩死 -> 繼續顯示軌跡與落地煙霧
+            } else {
+                // 情況 2：Touch 到 -> 軌跡結束，且不增加煙霧
+                model.spikeEffect.stopSpikeTrail();
+            }
+        }
+
+        model.recordHit(player.redSide, player);
+
         return true;
     }
 

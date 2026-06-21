@@ -17,6 +17,7 @@ public class GameModel {
     public int blueHitCount = 0;
 
     public final EffectManager effects = new EffectManager();
+    public final SpikeEffect spikeEffect = new SpikeEffect();
 
     private final RallyState rallyState = new RallyState();
     private final ServeHandler serveHandler = new ServeHandler(this);
@@ -47,6 +48,7 @@ public class GameModel {
         rallyState.resetAll();
         syncPublicHitCounters();
         effects.clear();
+        spikeEffect.clear();
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
@@ -91,6 +93,7 @@ public class GameModel {
         collideTeamsIfAllowed(redInput, blueInput);
         serveHandler.finishFrame();
         effects.update();
+        spikeEffect.update();
     }
 
     private void configureBackActions(TeamInput redInput, TeamInput blueInput) {
@@ -114,6 +117,7 @@ public class GameModel {
         }
 
         ball.update();
+        spikeEffect.addTrailPoint(ball.x, ball.y);
         serveHandler.updateAfterBall();
         scorer.checkBallLanding();
 

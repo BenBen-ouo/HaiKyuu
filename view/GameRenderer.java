@@ -77,17 +77,20 @@ public class GameRenderer {
                 double lifeRatio = (double) p.remainingFrames / p.maxFrames;
                 if (lifeRatio <= 0) continue;
 
-                // 顏色淡雅，最大透明度約 0.32
-                float alpha = (float) (0.32 * lifeRatio);
+                // 使用較暗的灰色漸層，並提高最大透明度以便在淺色背景可見
+                float alpha = (float) (0.6 * lifeRatio);
 
                 float radius = (float) p.currentRadius;
                 float cx = (float) p.x;
                 float cy = (float) p.y;
 
-                float[] dist = {0.0f, 0.6f, 1.0f};
+                float[] dist = {0.0f, 0.65f, 1.0f};
                 Color[] colors = {
-                    new Color(1f, 1f, 1f, alpha),
-                    new Color(0.9f, 0.9f, 0.9f, alpha * 0.6f),
+                    // 中心較深的灰色
+                    new Color(0.58f, 0.58f, 0.6f, alpha),
+                    // 中間淡灰
+                    new Color(0.38f, 0.38f, 0.4f, alpha * 0.5f),
+                    // 邊緣透明
                     new Color(0f, 0f, 0f, 0f)
                 };
 
