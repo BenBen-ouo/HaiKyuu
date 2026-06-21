@@ -73,7 +73,6 @@ public class GameRenderer {
             Image smokeImg = assets.get(smokeImgName);
             if (smokeImg != null) {
                 Composite origComposite = g.getComposite();
-                java.awt.geom.AffineTransform oldXform = g.getTransform();
 
                 for (SpikeEffect.SmokeParticle p : smokeParticles) {
                     double lifeRatio = (double) p.remainingFrames / p.maxFrames;
@@ -85,14 +84,8 @@ public class GameRenderer {
 
                     int size = (int) (p.currentRadius * 2);
 
-                    // 平移到粒子中心，移除旋轉以避免影像轉動
-                    g.translate(p.x, p.y);
-
-                    // 繪製以中心點對齊的煙霧圖片（不旋轉）
-                    g.drawImage(smokeImg, -size / 2, -size / 2, size, size, null);
-
-                    // 恢復原轉換矩陣，避免平移累加
-                    g.setTransform(oldXform);
+                    // 直接在粒子中心以座標繪製（不改變 transform）
+                    g.drawImage(smokeImg, (int) (p.x - size / 2), (int) (p.y - size / 2), size, size, null);
                 }
                 g.setComposite(origComposite);
             }
