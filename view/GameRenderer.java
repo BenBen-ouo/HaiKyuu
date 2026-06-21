@@ -24,7 +24,7 @@ public class GameRenderer {
     }
 
     private void drawScore(Graphics2D g, GameModel model) {
-        if (model.matchOver != null && model.matchOver) {
+        if (model.matchOver) {
             String msg = (model.matchWinnerRed != null && model.matchWinnerRed) ? "RED WINS" : "BLUE WINS";
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial", Font.BOLD, 48));
