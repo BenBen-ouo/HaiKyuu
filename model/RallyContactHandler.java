@@ -28,6 +28,14 @@ public class RallyContactHandler {
                 continue;
             }
 
+            BallTarget target = BallTarget.forPlayer(
+                    team,
+                    redSide,
+                    hitCount,
+                    model.ball.x,
+                    player
+            );
+
             if (tryBlockRebound(player)) {
                 break;
             }
