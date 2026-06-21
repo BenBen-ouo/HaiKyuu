@@ -43,11 +43,19 @@ public class RallyContactHandler {
 
     private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
         for (Player player : team.getPlayers()) {
-            if (player == lastHitter || !canSpike(player, input)) {
+            if (player == lastHitter) {
                 continue;
             }
 
+            // 如果攻擊 hitbox 與球相交，優先處理（不完全依賴當前輸入狀態）
             if (player.attackHitBox.intersectsBall(model.ball)) {
+                // 只有在空中攻擊或正在做攻擊動畫才視為扣球
+                boolean isAirAttack = player.jumping || player.isAttackReady() || player.isAttackSwinging();
+                if (!isAirAttack) {
+                    // 不是攻擊，忽略
+                    continue;
+                }
+
                 // 若是後排球員，檢查是否在三米線內起跳（違規）
                 if (player instanceof BackPlayer) {
                     double startX = ((BackPlayer) player).jumpStartX;
@@ -72,9 +80,22 @@ public class RallyContactHandler {
                     }
                 }
 
-                performSpike(createAttackContext(player, redSide));
-                model.recordHit(redSide, player);
+                // 非後排違規或合法攻擊：執行扣球
+                // 只有當 canSpike 為真（代表攻擊按鍵/動畫等條件）才算正式扣球以記錄觸球次數
+                if (canSpike(player, input)) {
+                    performSpike(createAttackContext(player, redSide));
+                    model.recordHit(redSide, player);
+                } else {
+                    // 若未滿足 canSpike，但確實在空中碰到球，仍視為觸球（例如被攔網罩住的情況）
+                    performSpike(createAttackContext(player, redSide));
+                }
+
                 return true;
+            }
+
+            // 若尚未 intersect，但原本 canSpike 為 true，我們仍要保留早期判斷
+            if (!canSpike(player, input)) {
+                continue;
             }
         }
 
