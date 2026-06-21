@@ -43,14 +43,24 @@ public class RallyScorer {
     }
 
     private void finishRally() {
-        rallyOver = true;
-        deadBallTimer = DEAD_BALL_FRAMES;
-
+        // 原先結束來回時的得分流程，改用 handlePoint 以便重用
         boolean redWins = ScoringLogic.determineWinner(
                 model.ball.x,
                 model.getLastHitTeam(),
                 model.getServeHandler().isRedServing()
         );
+        handlePoint(redWins);
+    }
+
+    // 公開 API：直接給點（故障、四連擊等）
+    public void awardPoint(boolean redWins) {
+        handlePoint(redWins);
+    }
+
+    private void handlePoint(boolean redWins) {
+        if (rallyOver) return; // already ended
+        rallyOver = true;
+        deadBallTimer = DEAD_BALL_FRAMES;
 
         if (redWins) {
             model.redScore++;
@@ -58,6 +68,12 @@ public class RallyScorer {
         } else {
             model.blueScore++;
             model.getServeHandler().setRedServing(false);
+        }
+
+        // 檢查比賽勝利（25 分制，需領先 2 分）
+        if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
+            model.matchOver = true;
+            model.matchWinnerRed = model.redScore > model.blueScore;
         }
     }
 

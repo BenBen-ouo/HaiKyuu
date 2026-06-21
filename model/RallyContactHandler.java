@@ -48,6 +48,26 @@ public class RallyContactHandler {
             }
 
             if (player.attackHitBox.intersectsBall(model.ball)) {
+                // 若是後排球員，檢查是否在三米線內起跳（違規）
+                if (player instanceof BackPlayer) {
+                    double startX = ((BackPlayer) player).jumpStartX;
+                    if (!Double.isNaN(startX)) {
+                        if (player.redSide) {
+                            if (startX > GameConfig.NET_X - GameConfig.THREE_METER_PX) {
+                                // 違規：紅隊後排在三米線內起跳並攻擊 -> 對方得分
+                                model.awardPoint(false);
+                                return true;
+                            }
+                        } else {
+                            if (startX < GameConfig.NET_X + GameConfig.THREE_METER_PX) {
+                                // 違規：藍隊後排在三米線內起跳並攻擊 -> 對方得分
+                                model.awardPoint(true);
+                                return true;
+                            }
+                        }
+                    }
+                }
+
                 performSpike(createAttackContext(player, redSide));
                 model.recordHit(redSide, player);
                 return true;

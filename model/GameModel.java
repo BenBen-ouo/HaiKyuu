@@ -18,6 +18,10 @@ public class GameModel {
 
     public final EffectManager effects = new EffectManager();
 
+    // 比賽狀態
+    public boolean matchOver = false;
+    public Boolean matchWinnerRed = null;
+
     private final RallyState rallyState = new RallyState();
     private final ServeHandler serveHandler = new ServeHandler(this);
     private final RallyScorer scorer = new RallyScorer(this);
@@ -74,8 +78,17 @@ public class GameModel {
     }
 
     void recordHit(boolean redSide, Player hitter) {
+        // 若比賽結束，忽略後續擊球
+        if (matchOver) return;
+
         rallyState.recordHit(redSide, hitter);
         syncPublicHitCounters();
+
+        // 四連擊判定：若本隊擊球數超過 3，則對方得分
+        if (rallyState.getHitCount(redSide) > 3) {
+            // 對方得分
+            scorer.awardPoint(!redSide);
+        }
     }
 
     private void updateActiveFrame(TeamInput redInput, TeamInput blueInput) {
@@ -148,5 +161,10 @@ public class GameModel {
     private void syncPublicHitCounters() {
         redHitCount = rallyState.getHitCount(true);
         blueHitCount = rallyState.getHitCount(false);
+    }
+
+    // 外部呼叫：直接給點（例如四連擊、後排三米線違規）
+    public void awardPoint(boolean redWins) {
+        scorer.awardPoint(redWins);
     }
 }
