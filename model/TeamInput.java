@@ -17,6 +17,11 @@ public class TeamInput {
 
     public boolean wingAttack;
 
+    // 扣球命中當下的球路修正鍵。
+    public boolean spikeFlat;
+    public boolean spikeShort;
+    public boolean spikeLob;
+    
     public boolean servePressed;
     public ServeType serveType = ServeType.NORMAL;
 

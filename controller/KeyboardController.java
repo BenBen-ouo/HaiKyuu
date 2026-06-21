@@ -25,6 +25,9 @@ public class KeyboardController implements KeyListener {
         input.quickAttack = isPressed(KeyEvent.VK_L);
         input.quickBlock = isPressed(KeyEvent.VK_L);
         input.wingAttack = isPressed(KeyEvent.VK_J);
+        input.spikeFlat = isPressed(KeyEvent.VK_D);
+        input.spikeShort = isPressed(KeyEvent.VK_S);
+        input.spikeLob = isPressed(KeyEvent.VK_W);
         input.servePressed = isPressed(KeyEvent.VK_SPACE);
         input.serveType = getRedServeType();
 
@@ -42,6 +45,9 @@ public class KeyboardController implements KeyListener {
         input.quickAttack = isPressed(KeyEvent.VK_NUMPAD6);
         input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
         input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
+        input.spikeFlat = isPressed(KeyEvent.VK_RIGHT);
+        input.spikeShort = isPressed(KeyEvent.VK_DOWN);
+        input.spikeLob = isPressed(KeyEvent.VK_UP);
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
 
         // 沒有獨立數字鍵測試用 之後會刪除
