@@ -105,8 +105,27 @@ public class GameRenderer {
                     RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx_i, cy_i), rBlob, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
                     g.setPaint(rgp);
 
-                    // 每個 blob 縮短高度一半以維持扁平的煙霧感
-                    g.fill(new Ellipse2D.Float(cx_i - rBlob, cy_i - rBlob / 2f, rBlob * 2, rBlob));
+                    // 每個 blob 縮短高度一半以維持扁平的煙霧感，並以隨機角度旋轉以打破橢圓規則性
+                    // 使用多邊形近似不規則 blob（採用事前產生的 radius offsets）
+                    float[] offsets = p.shapeOffset[i];
+                    int pts = offsets.length;
+                    Path2D.Float poly = new Path2D.Float();
+                    for (int pi = 0; pi < pts; pi++) {
+                        double ang = 2.0 * Math.PI * pi / pts;
+                        float mul = offsets[pi];
+                        float sx = cx_i + (float) Math.cos(ang) * rBlob * mul;
+                        float sy = cy_i + (float) Math.sin(ang) * rBlob * mul * 0.6f; // y 壓扁
+                        if (pi == 0) {
+                            poly.moveTo(sx, sy);
+                        } else {
+                            poly.lineTo(sx, sy);
+                        }
+                    }
+                    poly.closePath();
+
+                    AffineTransform at = AffineTransform.getRotateInstance(p.rot[i], cx_i, cy_i);
+                    Shape transformed = at.createTransformedShape(poly);
+                    g.fill(transformed);
                 }
             }
 

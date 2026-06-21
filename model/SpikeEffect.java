@@ -44,6 +44,8 @@ public class SpikeEffect {
         public float[] ox, oy; // offsets
         public float[] br; // radius multiplier
         public float[] ba; // alpha multiplier
+        public float[] rot; // rotation per blob (radians)
+        public float[][] shapeOffset; // per-blob radial offsets for polygon shape
         
         public SmokeParticle(double x, double y, double vx, double vy, double startRadius, double maxRadius, int maxFrames) {
             this.x = x;
@@ -62,6 +64,10 @@ public class SpikeEffect {
             this.oy = new float[blobCount];
             this.br = new float[blobCount];
             this.ba = new float[blobCount];
+            this.rot = new float[blobCount];
+
+            int shapePoints = 6; // 每個 blob 的多邊形點數
+            this.shapeOffset = new float[blobCount][shapePoints];
 
             for (int i = 0; i < blobCount; i++) {
                 // x 偏移較大、y 偏移較小以產生扁平外觀
@@ -69,6 +75,12 @@ public class SpikeEffect {
                 this.oy[i] = (float) ((Math.random() * 2.0 - 1.0) * startRadius * 0.25);
                 this.br[i] = (float) (0.6 + Math.random() * 0.9); // radius multiplier 0.6 - 1.5
                 this.ba[i] = (float) (0.6 + Math.random() * 0.6); // alpha multiplier 0.6 - 1.2
+                this.rot[i] = (float) ((Math.random() * 2.0 - 1.0) * Math.PI * 0.35); // -~63deg..+~63deg
+
+                // shape offsets: 每個點的 radius multiplier（0.6 - 1.4）
+                for (int j = 0; j < shapePoints; j++) {
+                    this.shapeOffset[i][j] = (float) (0.6 + Math.random() * 0.8);
+                }
             }
         }
 
