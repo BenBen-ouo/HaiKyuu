@@ -19,6 +19,7 @@ public class GameModel {
     public int blueHitCount = 0;
 
     public final EffectManager effects = new EffectManager();
+    public final SpikeEffect spikeEffect = new SpikeEffect();
 
     // 比賽狀態
     public boolean matchOver = false;
@@ -66,6 +67,7 @@ public class GameModel {
         rallyState.resetAll();
         syncPublicHitCounters();
         effects.clear();
+        spikeEffect.clear();
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
@@ -127,6 +129,7 @@ public class GameModel {
 
         serveHandler.finishFrame();
         effects.update();
+        spikeEffect.update();
 
         // 遞減暫時訊息計時器
         if (transientMessageTimer > 0) {
@@ -159,6 +162,7 @@ public class GameModel {
         }
 
         ball.update();
+        spikeEffect.addTrailPoint(ball.x, ball.y);
         ball.collideWithNet(netHitBox);
 
         serveHandler.updateAfterBall();

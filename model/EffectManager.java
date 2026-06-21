@@ -20,7 +20,14 @@ public class EffectManager {
     }
 
     public void spawnLandingSmoke(double x, double y) {
-        effects.add(new VisualEffect("smoke.png", x, y, 20));
+        // Backwards-compatible no-op. Use spawnLandingSmoke(x, y, spikeEffect) to trigger procedural smoke.
+    }
+
+    // Trigger procedural smoke on the provided SpikeEffect instance
+    public void spawnLandingSmoke(double x, double y, SpikeEffect spikeEffect) {
+        if (spikeEffect != null) {
+            spikeEffect.spawnSmoke(x, y);
+        }
     }
 
     public void update() {

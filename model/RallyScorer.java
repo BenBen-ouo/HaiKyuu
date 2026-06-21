@@ -28,6 +28,7 @@ public class RallyScorer {
         deadBallTimer--;
         model.ball.update();
         model.effects.update();
+        model.spikeEffect.update();
         model.redTeam.update(redInput);
         model.blueTeam.update(blueInput);
 
@@ -38,6 +39,10 @@ public class RallyScorer {
 
     public void checkBallLanding() {
         if (!rallyOver && model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y) {
+            if (model.spikeEffect.isSpikeTrailActive()) {
+                model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+                model.spikeEffect.stopSpikeTrail();
+            }
             finishRally();
         }
     }
