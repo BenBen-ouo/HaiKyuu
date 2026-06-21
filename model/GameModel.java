@@ -32,6 +32,12 @@ public class GameModel {
     // 短暫訊息（例如違規提示），每幀遞減
     public String transientMessage = null;
     public int transientMessageTimer = 0;
+    // 若非 null，代表暫時訊息要以該隊顏色顯示：true=紅隊, false=藍隊, null=無顏色
+    public Boolean transientMessageIsRed = null;
+
+    // 預期的攔網造成 out（等待落地再顯示與給分）
+    public boolean pendingTouchOut = false;
+    public Boolean pendingTouchOutWinner = null;
 
     public GameModel() {
         serveHandler.setWaitingForServe(true);
@@ -115,7 +121,10 @@ public class GameModel {
         // 遞減暫時訊息計時器
         if (transientMessageTimer > 0) {
             transientMessageTimer--;
-            if (transientMessageTimer == 0) transientMessage = null;
+            if (transientMessageTimer == 0) {
+                transientMessage = null;
+                transientMessageIsRed = null;
+            }
         }
     }
 

@@ -52,8 +52,8 @@ public class PlayerActionAnimator {
         player.attackHitBox.enable();
         player.vx = horizontalSpeed;
         player.vy = GameConfig.PLAYER_JUMP_SPEED;
-        // 紀錄起跳時的 X 座標以便後續三米線判定
-        player.jumpStartX = player.x;
+        // 紀錄起跳時的 X 座標以便後續三米線判定（以圖片中心為基準）
+        player.jumpStartX = player.x + player.imageWidth / 2.0;
         player.jumping = true;
         animation.show(player.teamAsset("attack1"));
     }

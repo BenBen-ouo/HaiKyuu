@@ -30,5 +30,12 @@ public class GameResetter {
 
         // 重置發球狀態
         model.getServeHandler().reset();
+
+        // 清除暫時顯示與 pending touch out
+        model.transientMessage = null;
+        model.transientMessageTimer = 0;
+        model.transientMessageIsRed = null;
+        model.pendingTouchOut = false;
+        model.pendingTouchOutWinner = null;
     }
 }

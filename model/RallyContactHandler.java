@@ -56,26 +56,35 @@ public class RallyContactHandler {
                     continue;
                 }
 
+
                 // 若是後排球員，檢查是否在三米線內起跳（違規）
                 if (player instanceof BackPlayer) {
                     double startX = ((BackPlayer) player).jumpStartX;
                     if (!Double.isNaN(startX)) {
+                        boolean isFault = false;
+                        boolean awardRed = false;
                         if (player.redSide) {
                             if (startX > GameConfig.NET_X - GameConfig.THREE_METER_PX) {
-                                // 違規：紅隊後排在三米線內起跳並攻擊 -> 對方得分
-                                model.transientMessage = "Red back-row jump fault";
-                                model.transientMessageTimer = 90;
-                                model.awardPoint(false);
-                                return true;
+                                isFault = true;
+                                awardRed = false; // award to blue
                             }
                         } else {
                             if (startX < GameConfig.NET_X + GameConfig.THREE_METER_PX) {
-                                // 違規：藍隊後排在三米線內起跳並攻擊 -> 對方得分
-                                model.transientMessage = "Blue back-row jump fault";
-                                model.transientMessageTimer = 90;
-                                model.awardPoint(true);
-                                return true;
+                                isFault = true;
+                                awardRed = true; // award to red
                             }
+                        }
+
+                        if (isFault) {
+                            // 違規情境：仍執行扣球效果，但分數判給對方
+                            performSpike(createAttackContext(player, redSide));
+                            model.recordHit(redSide, player);
+                            // 顯示中文提示然後給分，並以得分隊配色顯示框
+                            model.transientMessage = "後排三米線";
+                            model.transientMessageTimer = 42;
+                            model.transientMessageIsRed = awardRed;
+                            model.awardPoint(awardRed);
+                            return true;
                         }
                     }
                 }
@@ -147,6 +156,42 @@ public class RallyContactHandler {
 
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
+
+        // 檢查此次攔網後球是否會落在界外（touch out）
+        // 若是，則判定為 touch out，攻擊方（最後觸球隊）得分
+        Boolean lastHitTeam = model.getLastHitTeam();
+        if (lastHitTeam != null && lastHitTeam != player.redSide) {
+            // 模擬飛行到地面時的 X 座標
+            double bx = model.ball.x;
+            double by = model.ball.y;
+            double bvx = model.ball.vx;
+            double bvy = model.ball.vy;
+            double g = GameConfig.GRAVITY;
+
+            // 求解 0.5*g*t^2 + bvy*t + (by - (FLOOR_Y - radius)) = 0
+            double a = 0.5 * g;
+            double b = bvy;
+            double c = by - (GameConfig.FLOOR_Y - model.ball.radius);
+            double disc = b * b - 4 * a * c;
+            if (disc >= 0) {
+                double t = (-b + Math.sqrt(disc)) / (2 * a);
+                if (t < 0) {
+                    t = (-b - Math.sqrt(disc)) / (2 * a);
+                }
+                if (t > 0) {
+                    double landingX = bx + bvx * t;
+                    boolean isIn = landingX >= GameConfig.COURT_LEFT_X && landingX <= GameConfig.COURT_RIGHT_X;
+                    if (!isIn) {
+                        // touch out：延後到落地時再顯示並給分（設定 pending flag）
+                        model.pendingTouchOut = true;
+                        model.pendingTouchOutWinner = lastHitTeam;
+                        // 不立即 awardPoint，等到球落地時由 RallyScorer 處理
+                        return true;
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
