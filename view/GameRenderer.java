@@ -13,8 +13,15 @@ public class GameRenderer {
     private final PlayerRenderer playerRenderer = new PlayerRenderer(assets);
     private final BallRenderer ballRenderer = new BallRenderer(assets);
     private final EffectRenderer effectRenderer = new EffectRenderer(assets);
+    private final MatchDisplay matchDisplay = new MatchDisplay();
 
     public void render(Graphics2D g, GameModel model) {
+        // 啟用文字抗鋸齒，提升中文顯示品質。
+        g.setRenderingHint(
+                RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON
+        );
+
         courtRenderer.draw(g);
 
         // 畫在角色前方、球的下方，方便觀察網子實際碰撞範圍。
@@ -22,10 +29,12 @@ public class GameRenderer {
 
         playerRenderer.drawTeam(g, model.redTeam, true);
         playerRenderer.drawTeam(g, model.blueTeam, false);
+
         ballRenderer.draw(g, model.ball);
         effectRenderer.draw(g, model.effects);
 
-        drawScore(g, model);
+        // MatchDisplay 統一處理比分、規則提示與比賽結束畫面。
+        matchDisplay.draw(g, model);
     }
 
     private void drawNetHitBox(Graphics2D g) {
@@ -37,26 +46,16 @@ public class GameRenderer {
         int width = (int) Math.round(GameConfig.NET_HITBOX_WIDTH);
         int height = (int) Math.round(GameConfig.NET_HITBOX_HEIGHT);
 
-        // 使用複製後的 Graphics2D，避免透明度與線條粗細影響後續角色、球與分數繪製。
+        // 使用複製後的 Graphics2D，避免透明度與線條粗細影響後續繪製。
         Graphics2D debugGraphics = (Graphics2D) g.create();
 
-        //測試用看有顏色的攻擊 hitBox，最後後刪除
         debugGraphics.setColor(new Color(40, 210, 90, 70));
         debugGraphics.fillRect(x, y, width, height);
+
         debugGraphics.setColor(new Color(0, 135, 55));
         debugGraphics.setStroke(new BasicStroke(2));
         debugGraphics.drawRect(x, y, width, height);
 
         debugGraphics.dispose();
-    }
-
-    private void drawScore(Graphics2D g, GameModel model) {
-        g.setColor(Color.BLACK);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString(
-                model.redScore + " : " + model.blueScore,
-                GameConfig.SCREEN_WIDTH / 2 - 28,
-                44
-        );
     }
 }

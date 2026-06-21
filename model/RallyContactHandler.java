@@ -43,18 +43,57 @@ public class RallyContactHandler {
 
     private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
         for (Player player : team.getPlayers()) {
-            if (player == lastHitter || !canSpike(player, input)) {
+            if (player == lastHitter) {
                 continue;
             }
 
-            if (player.attackHitBox.intersectsBall(model.ball)) {
+            if (!canSpike(player, input)) {
+                continue;
+            }
+
+            if (!player.attackHitBox.intersectsBall(model.ball)) {
+                continue;
+            }
+
+            // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
+            if (isBackRowAttackFault(player, redSide)) {
                 performSpike(createAttackContext(player, redSide), input);
                 model.recordHit(redSide, player);
+
+                boolean awardRed = !redSide;
+                model.transientMessage = "後排三米線";
+                model.transientMessageTimer = 42;
+                model.transientMessageIsRed = awardRed;
+                model.awardPoint(awardRed);
                 return true;
             }
+
+            // 合法扣球：保留 attack_way 的球路與旋轉邏輯。
+            performSpike(createAttackContext(player, redSide), input);
+            model.recordHit(redSide, player);
+            return true;
         }
 
         return false;
+    }
+  
+    private boolean isBackRowAttackFault(Player player, boolean redSide) {
+        if (!(player instanceof BackPlayer)) {
+            return false;
+        }
+
+        double jumpStartX = ((BackPlayer) player).jumpStartX;
+        if (Double.isNaN(jumpStartX)) {
+            return false;
+        }
+
+        if (redSide) {
+            // 紅隊在左側：起跳位置越過左側三米線、靠近網子時違規。
+            return jumpStartX > GameConfig.NET_X - GameConfig.THREE_METER_PX;
+        }
+
+        // 藍隊在右側：起跳位置越過右側三米線、靠近網子時違規。
+        return jumpStartX < GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
     private boolean canSpike(Player player, TeamInput input) {
@@ -141,6 +180,44 @@ public class RallyContactHandler {
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
         model.ball.useFastFloorBounceSpin();
+
+        /*
+         * 攔網後預測球落地位置。
+         * 若攻擊方最後觸球、攔網後球飛出界，則記錄 touch out，
+         * 等球真正落地時交給 RallyScorer 判定攻擊方得分。
+         */
+        Boolean lastHitTeam = model.getLastHitTeam();
+        if (lastHitTeam != null && lastHitTeam != player.redSide) {
+            double ballX = model.ball.x;
+            double ballY = model.ball.y;
+            double velocityX = model.ball.vx;
+            double velocityY = model.ball.vy;
+
+            double a = 0.5 * GameConfig.GRAVITY;
+            double b = velocityY;
+            double c = ballY - (GameConfig.FLOOR_Y - model.ball.radius);
+            double discriminant = b * b - 4 * a * c;
+
+            if (discriminant >= 0) {
+                double landingTime = (-b + Math.sqrt(discriminant)) / (2 * a);
+
+                if (landingTime < 0) {
+                    landingTime = (-b - Math.sqrt(discriminant)) / (2 * a);
+                }
+
+                if (landingTime > 0) {
+                    double landingX = ballX + velocityX * landingTime;
+                    boolean inCourt = landingX >= GameConfig.COURT_LEFT_X
+                            && landingX <= GameConfig.COURT_RIGHT_X;
+
+                    if (!inCourt) {
+                        model.pendingTouchOut = true;
+                        model.pendingTouchOutWinner = lastHitTeam;
+                    }
+                }
+            }
+        }
+
         return true;
     }
 

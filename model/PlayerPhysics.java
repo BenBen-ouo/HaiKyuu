@@ -48,6 +48,8 @@ public final class PlayerPhysics {
         player.vy = 0;
         player.jumping = false;
         player.diving = false;
+        // 重置起跳座標，避免殘留影響三米線判定
+        player.jumpStartX = Double.NaN;
     }
 
     private static void clampToMovementBounds(Player player) {

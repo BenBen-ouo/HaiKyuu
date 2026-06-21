@@ -29,6 +29,8 @@ public abstract class Player {
     public boolean redSide;
     public boolean mirrorImage = false;
 
+    // 當次跳起的起跳 X 座標（用於判定三米線違規）
+    public double jumpStartX = Double.NaN;
     protected final PlayerAnimation animation;
     protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
