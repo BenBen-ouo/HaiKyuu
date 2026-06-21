@@ -25,6 +25,16 @@ public final class GameConfig {
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
+    // 球旋轉：正值為畫面上的順時針，負值為逆時針；單位為每幀角度。
+    public static final double RECEIVE_SPIN_SPEED = 4.0;
+    public static final double DIVE_RECEIVE_SPIN_SPEED = 20.0;
+    public static final double SPIKE_SPIN_SPEED = 25.0;
+    public static final double LOB_SPIKE_SPIN_SPEED = 5.0;
+
+    // 球落地時，依上一個觸球類型設定的旋轉速度。
+    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 10.0;
+    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 6.0;
+
     public static final double NET_WIDTH = 6;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
@@ -54,9 +64,29 @@ public final class GameConfig {
     public static final double BLUE_ATTACK_HITBOX_OFFSET_X = 35;
     public static final double BLUE_ATTACK_HITBOX_OFFSET_Y = 35;
 
-    // 扣球預設固定球速，之後可再依照 WASD 調整方向與力道。
+    // 扣球球路。vy 為正時往下，為負時往上。
     public static final double SPIKE_SPEED_X = 17.0;
-    public static final double SPIKE_SPEED_Y = 7.5;
+    public static final double SPIKE_SPEED_Y = 7.0;
+    
+    // D / →：平打，橫向速度更大。
+    public static final double FLAT_SPIKE_SPEED_X = 20.0;
+    public static final double FLAT_SPIKE_SPEED_Y = 4.5;
+
+    // S / ↓：短球，向下速度更大。
+    public static final double SHORT_SPIKE_SPEED_X = 15.0;
+    public static final double SHORT_SPIKE_SPEED_Y = 10.0;
+
+    // S + D / ↓ + →：比普通球再更多力量。
+    public static final double LONG_SPIKE_SPEED_X = 10.0;
+    public static final double LONG_SPIKE_SPEED_Y = 10.0;
+
+    // W / ↑：吊球，慢速上拋後越過攔網。
+    public static final double LOB_SPIKE_SPEED_X = 3.0;
+    public static final double LOB_SPIKE_SPEED_Y = -3.0;
+
+    // W + D / ↑ + →：吊長球。
+    public static final double LONG_LOB_SPIKE_SPEED_X = 8.0;
+    public static final double LONG_LOB_SPIKE_SPEED_Y = -4.5;
 
     // red 隊各角色相對基準點的位置
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;

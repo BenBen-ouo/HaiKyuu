@@ -1,6 +1,6 @@
 /*
-負責繪製排球圖片。
-依照 Ball 的中心點與半徑計算圖片位置與大小。
+負責繪製排球圖片與畫面上的旋轉效果。
+依照 Ball 的中心點、半徑與 rotationDegrees 計算圖片的位置與旋轉角度。
 */
 package view;
 
@@ -25,6 +25,9 @@ public class BallRenderer {
         int x = (int) (ball.x - ball.radius);
         int y = (int) (ball.y - ball.radius);
 
-        g.drawImage(image, x, y, diameter, diameter, null);
+        Graphics2D rotatedGraphics = (Graphics2D) g.create();
+        rotatedGraphics.rotate(Math.toRadians(ball.rotationDegrees), ball.x, ball.y);
+        rotatedGraphics.drawImage(image, x, y, diameter, diameter, null);
+        rotatedGraphics.dispose();
     }
 }
