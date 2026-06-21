@@ -28,6 +28,8 @@ public class ServeBallController {
     public void launchServe(ServeType serveType, boolean redSide) {
         double direction = SideRules.directionTowardOpponent(redSide);
         model.setLastHitTeam(redSide);
+        model.ball.stopRotation();
+        model.ball.useSlowFloorBounceSpin();
         setBallVelocity(serveType.baseVx * direction, serveType.baseVy);
     }
 
@@ -41,6 +43,8 @@ public class ServeBallController {
         ball.y = server.y + serveBallOffsetY(redSide);
         ball.vx = 0;
         ball.vy = 0;
+        ball.stopRotation();
+        ball.useSlowFloorBounceSpin();
     }
 
     private double serveBallOffsetY(boolean redSide) {

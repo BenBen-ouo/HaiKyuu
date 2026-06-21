@@ -6,6 +6,8 @@ package model;
 
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
+    public final NetHitBox netHitBox = new NetHitBox();
+
     public Team redTeam = new Team(true);
     public Team blueTeam = new Team(false);
 
@@ -121,8 +123,8 @@ public class GameModel {
         serveHandler.updateAfterTeams();
 
         updateBallIfNeeded();
-        ball.collideWithNet();
         collideTeamsIfAllowed(redInput, blueInput);
+
         serveHandler.finishFrame();
         effects.update();
 
@@ -157,6 +159,8 @@ public class GameModel {
         }
 
         ball.update();
+        ball.collideWithNet(netHitBox);
+
         serveHandler.updateAfterBall();
         scorer.checkBallLanding();
 
