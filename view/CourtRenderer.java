@@ -59,8 +59,10 @@ public class CourtRenderer {
         g.setStroke(new BasicStroke(3));
         g.drawLine(0, floorY, GameConfig.SCREEN_WIDTH, floorY);
         g.drawLine(centerX, floorY, centerX, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(centerX - 167, floorY, centerX - 167, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(centerX + 167, floorY, centerX + 167, GameConfig.SCREEN_HEIGHT);
+        // 三米線位置使用 GameConfig.THREE_METER_PX 確保與規則判定一致
+        int threeMeter = (int) GameConfig.THREE_METER_PX;
+        g.drawLine(centerX - threeMeter, floorY, centerX - threeMeter, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(centerX + threeMeter, floorY, centerX + threeMeter, GameConfig.SCREEN_HEIGHT);
         g.drawLine(courtLeftX, floorY, courtLeftX, GameConfig.SCREEN_HEIGHT);
         g.drawLine(courtRightX, floorY, courtRightX, GameConfig.SCREEN_HEIGHT);
     }

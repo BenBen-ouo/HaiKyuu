@@ -48,14 +48,49 @@ public class RallyScorer {
     }
 
     private void finishRally() {
-        rallyOver = true;
-        deadBallTimer = DEAD_BALL_FRAMES;
+        // 若之前標記為 pending touch out，等落地後再決定是否為 TOUCH OUT
+        if (model.pendingTouchOut) {
+            boolean isInNow = model.ball.x >= GameConfig.COURT_LEFT_X && model.ball.x <= GameConfig.COURT_RIGHT_X;
+            Boolean winner = model.pendingTouchOutWinner;
+            // 先清除 pending
+            model.pendingTouchOut = false;
+            model.pendingTouchOutWinner = null;
 
+            if (!isInNow) {
+                // 確認為 TOUCH OUT（落地仍在界外）
+                model.transientMessage = "TOUCH OUT";
+                model.transientMessageTimer = 42; // 0.7s
+                model.transientMessageIsRed = winner;
+                handlePoint(winner != null && winner);
+                return;
+            }
+            // 若實際落地為 IN，則繼續正常判定
+        }
+
+        // 原先結束來回時的得分流程，改用 handlePoint 以便重用
+        boolean isIn = model.ball.x >= GameConfig.COURT_LEFT_X && model.ball.x <= GameConfig.COURT_RIGHT_X;
         boolean redWins = ScoringLogic.determineWinner(
                 model.ball.x,
                 model.getLastHitTeam(),
                 model.getServeHandler().isRedServing()
         );
+        // 顯示得分方式 IN / OUT，並且以得分隊配色顯示
+        model.transientMessage = isIn ? "IN" : "OUT";
+        model.transientMessageTimer = 42; // 0.7s
+        model.transientMessageIsRed = redWins;
+
+        handlePoint(redWins);
+    }
+
+    // 公開 API：直接給點（故障、四連擊等）
+    public void awardPoint(boolean redWins) {
+        handlePoint(redWins);
+    }
+
+    private void handlePoint(boolean redWins) {
+        if (rallyOver) return; // already ended
+        rallyOver = true;
+        deadBallTimer = DEAD_BALL_FRAMES;
 
         if (redWins) {
             model.redScore++;
@@ -63,6 +98,14 @@ public class RallyScorer {
         } else {
             model.blueScore++;
             model.getServeHandler().setRedServing(false);
+        }
+
+        // 檢查比賽勝利（25 分制，需領先 2 分）
+        if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
+            model.matchOver = true;
+            model.matchWinnerRed = model.redScore > model.blueScore;
+            // 設定延遲倒數（1.5 秒）在 stop 更新前繼續畫面/動畫
+            model.matchOverCountdownFrames = GameConfig.MATCH_OVER_DELAY_FRAMES;
         }
     }
 

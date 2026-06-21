@@ -15,153 +15,262 @@ public class GameRenderer {
     private final PlayerRenderer playerRenderer = new PlayerRenderer(assets);
     private final BallRenderer ballRenderer = new BallRenderer(assets);
     private final EffectRenderer effectRenderer = new EffectRenderer(assets);
+    private final MatchDisplay matchDisplay = new MatchDisplay();
 
     public void render(Graphics2D g, GameModel model) {
+        // 啟用文字抗鋸齒，提升中文顯示品質。
+        g.setRenderingHint(
+                RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON
+        );
+
         courtRenderer.draw(g);
+
+        // 畫在角色前方、球的下方，方便觀察網子實際碰撞範圍。
+        drawNetHitBox(g);
+
         playerRenderer.drawTeam(g, model.redTeam, true);
         playerRenderer.drawTeam(g, model.blueTeam, false);
+
         ballRenderer.draw(g, model.ball);
         effectRenderer.draw(g, model.effects);
+
+        // 扣球軌跡與落地煙霧。
         drawSpikeEffects(g, model.spikeEffect);
-        drawScore(g, model);
+
+        // 統一處理比分、規則提示與比賽結束畫面。
+        matchDisplay.draw(g, model);
     }
 
     private void drawSpikeEffects(Graphics2D g, SpikeEffect spikeEffect) {
-        // 1. 繪製扣球軌跡 (Spike Trail) - 單一層帶羽化線段的光束
+        // 1. 繪製扣球軌跡。
         java.util.List<SpikeEffect.TrailPoint> points = spikeEffect.getTrailPoints();
         if (points.size() >= 2) {
-            Stroke origStroke = g.getStroke();
-            Object origAntialias = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Stroke originalStroke = g.getStroke();
+            Object originalAntialias = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+
+            g.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON
+            );
 
             for (int i = 0; i < points.size() - 1; i++) {
                 SpikeEffect.TrailPoint p1 = points.get(i);
                 SpikeEffect.TrailPoint p2 = points.get(i + 1);
 
-                // 確保是同一隊的軌跡線段
+                // 不把紅、藍兩隊不同扣球的軌跡接成一條線。
                 if (p1.isRedTeam != p2.isRedTeam) {
                     continue;
                 }
 
-                double lifeRatio = ((double) p1.remainingFrames / p1.maxFrames + (double) p2.remainingFrames / p2.maxFrames) / 2.0;
-                if (lifeRatio <= 0) continue;
+                double lifeRatio = (
+                        (double) p1.remainingFrames / p1.maxFrames
+                                + (double) p2.remainingFrames / p2.maxFrames
+                ) / 2.0;
 
-                float hue = p1.isRedTeam ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE;
-                Color baseColor = Color.getHSBColor(hue, SpikeEffect.TRAIL_SATURATION, SpikeEffect.TRAIL_BRIGHTNESS);
+                if (lifeRatio <= 0) {
+                    continue;
+                }
 
-                // 1.1 外層羽化發光邊界
-                int alphaOuter = (int) (100 * lifeRatio);
-                g.setColor(new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), alphaOuter));
-                g.setStroke(new BasicStroke((float) (12.0 * lifeRatio), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                float hue = p1.isRedTeam
+                        ? SpikeEffect.RED_HUE
+                        : SpikeEffect.BLUE_HUE;
+
+                Color baseColor = Color.getHSBColor(
+                        hue,
+                        SpikeEffect.TRAIL_SATURATION,
+                        SpikeEffect.TRAIL_BRIGHTNESS
+                );
+
+                // 外層羽化光暈。
+                int outerAlpha = (int) (100 * lifeRatio);
+                g.setColor(new Color(
+                        baseColor.getRed(),
+                        baseColor.getGreen(),
+                        baseColor.getBlue(),
+                        outerAlpha
+                ));
+                g.setStroke(new BasicStroke(
+                        (float) (12.0 * lifeRatio),
+                        BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND
+                ));
                 g.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
 
-                // 1.2 內層實心核心 (形成單一條帶羽化邊緣的光條)
-                int alphaCore = (int) (225 * lifeRatio);
-                g.setColor(new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), alphaCore));
-                g.setStroke(new BasicStroke((float) (5.0 * lifeRatio), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                // 內層核心。
+                int coreAlpha = (int) (225 * lifeRatio);
+                g.setColor(new Color(
+                        baseColor.getRed(),
+                        baseColor.getGreen(),
+                        baseColor.getBlue(),
+                        coreAlpha
+                ));
+                g.setStroke(new BasicStroke(
+                        (float) (5.0 * lifeRatio),
+                        BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND
+                ));
                 g.drawLine((int) p1.x, (int) p1.y, (int) p2.x, (int) p2.y);
             }
 
-            g.setStroke(origStroke);
-            if (origAntialias != null) {
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, origAntialias);
+            g.setStroke(originalStroke);
+
+            if (originalAntialias != null) {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, originalAntialias);
             }
         }
 
-        // 2. 繪製落地煙霧 (Landing Smoke) - 程式化粒子煙霧（取代原本的圖片效果）
-        java.util.List<SpikeEffect.SmokeParticle> smokeParticles = spikeEffect.getSmokeParticles();
-        if (!smokeParticles.isEmpty()) {
-            Composite origComposite = g.getComposite();
-            Paint origPaint = g.getPaint();
+        // 2. 繪製球落地時的煙霧。
+        java.util.List<SpikeEffect.SmokeParticle> smokeParticles =
+                spikeEffect.getSmokeParticles();
 
-            // 離屏圖層（整張畫面大小，簡單但可靠）
-            int w = GameConfig.SCREEN_WIDTH;
-            int h = GameConfig.SCREEN_HEIGHT;
-            BufferedImage smokeLayer = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D sg = smokeLayer.createGraphics();
-            sg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        if (smokeParticles.isEmpty()) {
+            return;
+        }
 
-            for (SpikeEffect.SmokeParticle p : smokeParticles) {
-                double lifeRatio = (double) p.remainingFrames / p.maxFrames;
-                if (lifeRatio <= 0) continue;
+        Composite originalComposite = g.getComposite();
+        Paint originalPaint = g.getPaint();
 
-                // 更淡的基礎 alpha，讓煙霧更透明（進一步調淡）
-                float baseAlpha = (float) (0.20 * lifeRatio);
+        int width = GameConfig.SCREEN_WIDTH;
+        int height = GameConfig.SCREEN_HEIGHT;
 
-                float radius = (float) p.currentRadius;
-                float cx = (float) p.x;
-                float cy = (float) p.y;
+        BufferedImage smokeLayer = new BufferedImage(
+                width,
+                height,
+                BufferedImage.TYPE_INT_ARGB
+        );
 
-                int blobs = p.blobCount;
-                for (int i = 0; i < blobs; i++) {
-                    float ox = p.ox[i];
-                    float oy = p.oy[i];
-                    float br = p.br[i];
-                    float ba = p.ba[i];
+        Graphics2D smokeGraphics = smokeLayer.createGraphics();
+        smokeGraphics.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+        );
 
-                    float rBlob = radius * br;
-                    float cx_i = cx + ox;
-                    float cy_i = cy + oy;
+        for (SpikeEffect.SmokeParticle particle : smokeParticles) {
+            double lifeRatio = (double) particle.remainingFrames / particle.maxFrames;
+            if (lifeRatio <= 0) {
+                continue;
+            }
 
-                    float[] dist = {0.0f, 0.6f, 1.0f};
-                    Color[] colors = new Color[] {
-                        new Color(0.18f, 0.18f, 0.18f, baseAlpha * ba),
-                        new Color(0.12f, 0.12f, 0.12f, baseAlpha * ba * 0.5f),
+            float baseAlpha = (float) (0.20 * lifeRatio);
+            float radius = (float) particle.currentRadius;
+            float centerX = (float) particle.x;
+            float centerY = (float) particle.y;
+
+            for (int i = 0; i < particle.blobCount; i++) {
+                float blobRadius = radius * particle.br[i];
+                float blobX = centerX + particle.ox[i];
+                float blobY = centerY + particle.oy[i];
+
+                float[] distances = {0.0f, 0.6f, 1.0f};
+                Color[] colors = {
+                        new Color(
+                                0.18f,
+                                0.18f,
+                                0.18f,
+                                baseAlpha * particle.ba[i]
+                        ),
+                        new Color(
+                                0.12f,
+                                0.12f,
+                                0.12f,
+                                baseAlpha * particle.ba[i] * 0.5f
+                        ),
                         new Color(0f, 0f, 0f, 0f)
-                    };
+                };
 
-                    RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx_i, cy_i), rBlob, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
-                    sg.setPaint(rgp);
+                RadialGradientPaint gradient = new RadialGradientPaint(
+                        new Point2D.Float(blobX, blobY),
+                        blobRadius,
+                        distances,
+                        colors,
+                        MultipleGradientPaint.CycleMethod.NO_CYCLE
+                );
 
-                    // 使用多邊形近似不規則 blob（採用事前產生的 radius offsets）
-                    float[] offsets = p.shapeOffset[i];
-                    int pts = offsets.length;
-                    Path2D.Float poly = new Path2D.Float();
-                    for (int pi = 0; pi < pts; pi++) {
-                        double ang = 2.0 * Math.PI * pi / pts;
-                        float mul = offsets[pi];
-                        float sx = cx_i + (float) Math.cos(ang) * rBlob * mul;
-                        float sy = cy_i + (float) Math.sin(ang) * rBlob * mul * 0.6f; // y 壓扁
-                        if (pi == 0) {
-                            poly.moveTo(sx, sy);
-                        } else {
-                            poly.lineTo(sx, sy);
-                        }
+                smokeGraphics.setPaint(gradient);
+
+                float[] offsets = particle.shapeOffset[i];
+                Path2D.Float shape = new Path2D.Float();
+
+                for (int pointIndex = 0; pointIndex < offsets.length; pointIndex++) {
+                    double angle = 2.0 * Math.PI * pointIndex / offsets.length;
+                    float multiplier = offsets[pointIndex];
+
+                    float x = blobX
+                            + (float) Math.cos(angle) * blobRadius * multiplier;
+
+                    float y = blobY
+                            + (float) Math.sin(angle) * blobRadius * multiplier * 0.6f;
+
+                    if (pointIndex == 0) {
+                        shape.moveTo(x, y);
+                    } else {
+                        shape.lineTo(x, y);
                     }
-                    poly.closePath();
-
-                    AffineTransform at = AffineTransform.getRotateInstance(p.rot[i], cx_i, cy_i);
-                    Shape transformed = at.createTransformedShape(poly);
-                    sg.fill(transformed);
                 }
+
+                shape.closePath();
+
+                AffineTransform rotation = AffineTransform.getRotateInstance(
+                        particle.rot[i],
+                        blobX,
+                        blobY
+                );
+
+                Shape rotatedShape = rotation.createTransformedShape(shape);
+                smokeGraphics.fill(rotatedShape);
             }
-
-            sg.dispose();
-
-            // 5x5 高斯近似核
-            int[] gk = {1, 4, 6, 4, 1};
-            float[] kernel = new float[25];
-            for (int i = 0; i < 5; i++) {
-                for (int j = 0; j < 5; j++) {
-                    kernel[i * 5 + j] = (gk[i] * gk[j]) / 256f; // normalize by 16*16
-                }
-            }
-
-            ConvolveOp cop = new ConvolveOp(new Kernel(5, 5, kernel), ConvolveOp.EDGE_NO_OP, null);
-            BufferedImage blurred = cop.filter(smokeLayer, null);
-
-            // 把模糊後的煙霧以較低 alpha 疊回主畫面（讓煙霧更淡）
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
-            g.drawImage(blurred, 0, 0, null);
-
-            g.setPaint(origPaint);
-            g.setComposite(origComposite);
         }
+
+        smokeGraphics.dispose();
+
+        // 5 × 5 高斯近似模糊核心。
+        int[] gaussianValues = {1, 4, 6, 4, 1};
+        float[] kernelValues = new float[25];
+
+        for (int row = 0; row < 5; row++) {
+            for (int column = 0; column < 5; column++) {
+                kernelValues[row * 5 + column] =
+                        (gaussianValues[row] * gaussianValues[column]) / 256f;
+            }
+        }
+
+        ConvolveOp blur = new ConvolveOp(
+                new Kernel(5, 5, kernelValues),
+                ConvolveOp.EDGE_NO_OP,
+                null
+        );
+
+        BufferedImage blurredSmoke = blur.filter(smokeLayer, null);
+
+        g.setComposite(AlphaComposite.getInstance(
+                AlphaComposite.SRC_OVER,
+                0.6f
+        ));
+        g.drawImage(blurredSmoke, 0, 0, null);
+
+        g.setPaint(originalPaint);
+        g.setComposite(originalComposite);
     }
 
-    private void drawScore(Graphics2D g, GameModel model) {
-        g.setColor(Color.BLACK);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString(model.redScore + " : " + model.blueScore, GameConfig.SCREEN_WIDTH / 2 - 28, 44);
+    private void drawNetHitBox(Graphics2D g) {
+        int x = (int) Math.round(
+                GameConfig.NET_HITBOX_CENTER_X
+                        - GameConfig.NET_HITBOX_WIDTH / 2.0
+        );
+        int y = (int) Math.round(GameConfig.NET_HITBOX_TOP_Y);
+        int width = (int) Math.round(GameConfig.NET_HITBOX_WIDTH);
+        int height = (int) Math.round(GameConfig.NET_HITBOX_HEIGHT);
+
+        Graphics2D debugGraphics = (Graphics2D) g.create();
+
+        debugGraphics.setColor(new Color(40, 210, 90, 70));
+        debugGraphics.fillRect(x, y, width, height);
+
+        debugGraphics.setColor(new Color(0, 135, 55));
+        debugGraphics.setStroke(new BasicStroke(2));
+        debugGraphics.drawRect(x, y, width, height);
+
+        debugGraphics.dispose();
     }
 }

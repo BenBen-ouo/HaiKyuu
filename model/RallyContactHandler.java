@@ -32,9 +32,10 @@ public class RallyContactHandler {
                 break;
             }
 
-            BallTarget target = BallTarget.forPlayer(team, redSide, hitCount, model.ball.x, player);
-            if (collidePlayer(player, target)) {
+            if (collidePlayer(player, target, redSide)) {
+                // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
+
                 handleTouchAnimation(player, hitCount, redSide);
                 model.recordHit(redSide, player);
                 break;
@@ -44,18 +45,57 @@ public class RallyContactHandler {
 
     private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
         for (Player player : team.getPlayers()) {
-            if (player == lastHitter || !canSpike(player, input)) {
+            if (player == lastHitter) {
                 continue;
             }
 
-            if (player.attackHitBox.intersectsBall(model.ball)) {
-                performSpike(createAttackContext(player, redSide));
+            if (!canSpike(player, input)) {
+                continue;
+            }
+
+            if (!player.attackHitBox.intersectsBall(model.ball)) {
+                continue;
+            }
+
+            // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
+            if (isBackRowAttackFault(player, redSide)) {
+                performSpike(createAttackContext(player, redSide), input);
                 model.recordHit(redSide, player);
+
+                boolean awardRed = !redSide;
+                model.transientMessage = "後排三米線";
+                model.transientMessageTimer = 42;
+                model.transientMessageIsRed = awardRed;
+                model.awardPoint(awardRed);
                 return true;
             }
+
+            // 合法扣球：保留 attack_way 的球路與旋轉邏輯。
+            performSpike(createAttackContext(player, redSide), input);
+            model.recordHit(redSide, player);
+            return true;
         }
 
         return false;
+    }
+  
+    private boolean isBackRowAttackFault(Player player, boolean redSide) {
+        if (!(player instanceof BackPlayer)) {
+            return false;
+        }
+
+        double jumpStartX = ((BackPlayer) player).jumpStartX;
+        if (Double.isNaN(jumpStartX)) {
+            return false;
+        }
+
+        if (redSide) {
+            // 紅隊在左側：起跳位置越過左側三米線、靠近網子時違規。
+            return jumpStartX > GameConfig.NET_X - GameConfig.THREE_METER_PX;
+        }
+
+        // 藍隊在右側：起跳位置越過右側三米線、靠近網子時違規。
+        return jumpStartX < GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
     private boolean canSpike(Player player, TeamInput input) {
@@ -79,19 +119,57 @@ public class RallyContactHandler {
         return false;
     }
 
-    private void performSpike(AttackContext context) {
+    private void performSpike(AttackContext context, TeamInput input) {
         Player attacker = context.attacker;
 
         pushBallOutsideAttackHitBox(attacker);
         attacker.startAttackSwingAnimation();
-
-        model.ball.vx = SideRules.directionTowardOpponent(context.redSide) * GameConfig.SPIKE_SPEED_X;
-        model.ball.vy = GameConfig.SPIKE_SPEED_Y;
+        setSpikeVelocity(context.redSide, input);
 
         model.spikeEffect.startSpikeTrail(context.redSide);
 
         // 命中一次後立刻關閉攻擊 hitBox，避免同一次起跳落地前再次影響球。
         attacker.attackHitBox.disable();
+    }
+
+    private void setSpikeVelocity(boolean redSide, TeamInput input) {
+        double speedX = GameConfig.SPIKE_SPEED_X;
+        double speedY = GameConfig.SPIKE_SPEED_Y;
+
+        if (input.spikeLob && input.spikeFlat) {
+            speedX = GameConfig.LONG_LOB_SPIKE_SPEED_X;
+            speedY = GameConfig.LONG_LOB_SPIKE_SPEED_Y;
+        } else if (input.spikeLob) {
+            speedX = GameConfig.LOB_SPIKE_SPEED_X;
+            speedY = GameConfig.LOB_SPIKE_SPEED_Y;
+        } else if (input.spikeShort && input.spikeFlat) {
+            speedX = GameConfig.LONG_SPIKE_SPEED_X;
+            speedY = GameConfig.LONG_SPIKE_SPEED_Y;
+        } else if (input.spikeFlat) {
+            speedX = GameConfig.FLAT_SPIKE_SPEED_X;
+            speedY = GameConfig.FLAT_SPIKE_SPEED_Y;
+        } else if (input.spikeShort) {
+            speedX = GameConfig.SHORT_SPIKE_SPEED_X;
+            speedY = GameConfig.SHORT_SPIKE_SPEED_Y;
+        }
+
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
+        model.ball.vy = speedY;
+        model.ball.setRotationSpeed(spikeSpinSpeed(redSide, input));
+
+        if (input.spikeLob) {
+            model.ball.useSlowFloorBounceSpin();
+        } else {
+            model.ball.useFastFloorBounceSpin();
+        }
+    }
+
+    private double spikeSpinSpeed(boolean redSide, TeamInput input) {
+        double spinSpeed = input.spikeLob
+                ? GameConfig.LOB_SPIKE_SPIN_SPEED
+                : GameConfig.SPIKE_SPIN_SPEED;
+
+        return redSide ? spinSpeed : -spinSpeed;
     }
 
     private boolean tryBlockRebound(Player player) {
@@ -106,22 +184,90 @@ public class RallyContactHandler {
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
 
-        // 攔網後：保持軌跡持續顯示，直到球落地或被其他球員接到
-        //（移除之前依 vy 判斷立即停止軌跡的行為）
+        // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
+        model.ball.useFastFloorBounceSpin();
 
-        model.recordHit(player.redSide, player);
+        /*
+         * 攔網後不停止扣球軌跡。
+         * 軌跡會持續到球落地，或被其他球員一般接球時才停止。
+         */
+
+        /*
+         * 攔網後預測球落地位置。
+         * 若攻擊方最後觸球，且攔網後球將飛出界，
+         * 則記錄 touch out，等球實際落地時由 RallyScorer 判定攻擊方得分。
+         */
+        Boolean lastHitTeam = model.getLastHitTeam();
+        if (lastHitTeam != null && lastHitTeam != player.redSide) {
+            double ballX = model.ball.x;
+            double ballY = model.ball.y;
+            double velocityX = model.ball.vx;
+            double velocityY = model.ball.vy;
+
+            double a = 0.5 * GameConfig.GRAVITY;
+            double b = velocityY;
+            double c = ballY - (GameConfig.FLOOR_Y - model.ball.radius);
+            double discriminant = b * b - 4 * a * c;
+
+            if (discriminant >= 0) {
+                double landingTime = (-b + Math.sqrt(discriminant)) / (2 * a);
+
+                if (landingTime < 0) {
+                    landingTime = (-b - Math.sqrt(discriminant)) / (2 * a);
+                }
+
+                if (landingTime > 0) {
+                    double landingX = ballX + velocityX * landingTime;
+                    boolean inCourt = landingX >= GameConfig.COURT_LEFT_X
+                            && landingX <= GameConfig.COURT_RIGHT_X;
+
+                    if (!inCourt) {
+                        model.pendingTouchOut = true;
+                        model.pendingTouchOutWinner = lastHitTeam;
+                    }
+                }
+            }
+        }
 
         return true;
     }
 
-    private boolean collidePlayer(Player player, BallTarget target) {
+    private boolean collidePlayer(Player player, BallTarget target, boolean redSide) {
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
 
         pushBallOutsidePlayer(player);
         setBallVelocity(target);
+        setRotationForRegularTouch(player, redSide);
         return true;
+    }
+
+    private void setRotationForRegularTouch(Player player, boolean redSide) {
+        if (player instanceof BackPlayer && player.diving) {
+            double diveSpin = redSide
+                    ? -GameConfig.DIVE_RECEIVE_SPIN_SPEED
+                    : GameConfig.DIVE_RECEIVE_SPIN_SPEED;
+
+            model.ball.setRotationSpeed(diveSpin);
+            model.ball.useFastFloorBounceSpin();
+            return;
+        }
+
+        model.ball.useSlowFloorBounceSpin();
+
+        if (player instanceof Setter) {
+            model.ball.stopRotation();
+            return;
+        }
+
+        if (player instanceof BackPlayer || player instanceof WingSpiker) {
+            double receiveSpin = redSide
+                    ? -GameConfig.RECEIVE_SPIN_SPEED
+                    : GameConfig.RECEIVE_SPIN_SPEED;
+
+            model.ball.setRotationSpeed(receiveSpin);
+        }
     }
 
     private void handleTouchAnimation(Player player, int hitCountBeforeTouch, boolean redSide) {
