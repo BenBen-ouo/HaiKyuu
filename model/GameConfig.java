@@ -25,6 +25,16 @@ public final class GameConfig {
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
+    // 球旋轉：正值為畫面上的順時針，負值為逆時針；單位為每幀角度。
+    public static final double RECEIVE_SPIN_SPEED = 4.0;
+    public static final double DIVE_RECEIVE_SPIN_SPEED = 20.0;
+    public static final double SPIKE_SPIN_SPEED = 25.0;
+    public static final double LOB_SPIKE_SPIN_SPEED = 5.0;
+
+    // 球落地時，依上一個觸球類型設定的旋轉速度。
+    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 10.0;
+    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 6.0;
+
     public static final double NET_WIDTH = 6;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;

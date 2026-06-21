@@ -33,7 +33,7 @@ public class RallyContactHandler {
             }
 
             BallTarget target = BallTarget.forPlayer(team, redSide, hitCount, model.ball.x, player);
-            if (collidePlayer(player, target)) {
+            if (collidePlayer(player, target, redSide)) {
                 handleTouchAnimation(player, hitCount, redSide);
                 model.recordHit(redSide, player);
                 break;
@@ -112,6 +112,21 @@ public class RallyContactHandler {
 
         model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
         model.ball.vy = speedY;
+        model.ball.setRotationSpeed(spikeSpinSpeed(redSide, input));
+
+        if (input.spikeLob) {
+            model.ball.useSlowFloorBounceSpin();
+        } else {
+            model.ball.useFastFloorBounceSpin();
+        }
+    }
+
+    private double spikeSpinSpeed(boolean redSide, TeamInput input) {
+        double spinSpeed = input.spikeLob
+                ? GameConfig.LOB_SPIKE_SPIN_SPEED
+                : GameConfig.SPIKE_SPIN_SPEED;
+
+        return redSide ? spinSpeed : -spinSpeed;
     }
 
     private boolean tryBlockRebound(Player player) {
@@ -125,17 +140,46 @@ public class RallyContactHandler {
 
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
+        model.ball.useFastFloorBounceSpin();
         return true;
     }
 
-    private boolean collidePlayer(Player player, BallTarget target) {
+    private boolean collidePlayer(Player player, BallTarget target, boolean redSide) {
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
 
         pushBallOutsidePlayer(player);
         setBallVelocity(target);
+        setRotationForRegularTouch(player, redSide);
         return true;
+    }
+
+    private void setRotationForRegularTouch(Player player, boolean redSide) {
+        if (player instanceof BackPlayer && player.diving) {
+            double diveSpin = redSide
+                    ? -GameConfig.DIVE_RECEIVE_SPIN_SPEED
+                    : GameConfig.DIVE_RECEIVE_SPIN_SPEED;
+
+            model.ball.setRotationSpeed(diveSpin);
+            model.ball.useFastFloorBounceSpin();
+            return;
+        }
+
+        model.ball.useSlowFloorBounceSpin();
+
+        if (player instanceof Setter) {
+            model.ball.stopRotation();
+            return;
+        }
+
+        if (player instanceof BackPlayer || player instanceof WingSpiker) {
+            double receiveSpin = redSide
+                    ? -GameConfig.RECEIVE_SPIN_SPEED
+                    : GameConfig.RECEIVE_SPIN_SPEED;
+
+            model.ball.setRotationSpeed(receiveSpin);
+        }
     }
 
     private void handleTouchAnimation(Player player, int hitCountBeforeTouch, boolean redSide) {
