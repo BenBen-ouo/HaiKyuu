@@ -36,11 +36,20 @@ public class GameRenderer {
             Composite orig = g.getComposite();
             g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
             g.setColor(Color.WHITE);
-            g.fillRect(x - 16, y - fm.getAscent(), w + 32, fm.getAscent() + 12);
+            g.fillRect(x - 16, y - fm.getAscent(), w + 32, fm.getAscent() + 36);
             g.setComposite(orig);
 
             g.setColor(Color.BLACK);
             g.drawString(msg, x, y + fm.getAscent() / 2);
+
+            // 顯示重開提示
+            String hint = "Press R to restart";
+            g.setFont(new Font("Arial", Font.PLAIN, 20));
+            FontMetrics hf = g.getFontMetrics();
+            int hw = hf.stringWidth(hint);
+            int hx = GameConfig.SCREEN_WIDTH / 2 - hw / 2;
+            int hy = y + fm.getAscent() + 20;
+            g.drawString(hint, hx, hy);
             return;
         }
 
