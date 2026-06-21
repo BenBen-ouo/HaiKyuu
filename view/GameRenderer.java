@@ -50,6 +50,17 @@ public class GameRenderer {
             int hx = GameConfig.SCREEN_WIDTH / 2 - hw / 2;
             int hy = y + fm.getAscent() + 20;
             g.drawString(hint, hx, hy);
+
+            // 顯示暫時訊息（例如違規提示）
+            if (model.transientMessage != null && model.transientMessageTimer > 0) {
+                g.setFont(new Font("Arial", Font.PLAIN, 18));
+                FontMetrics mf = g.getFontMetrics();
+                int mw = mf.stringWidth(model.transientMessage);
+                int mx = GameConfig.SCREEN_WIDTH / 2 - mw / 2;
+                int my = hy + 26;
+                g.drawString(model.transientMessage, mx, my);
+            }
+
             return;
         }
 

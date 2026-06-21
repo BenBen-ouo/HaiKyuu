@@ -55,12 +55,16 @@ public class RallyContactHandler {
                         if (player.redSide) {
                             if (startX > GameConfig.NET_X - GameConfig.THREE_METER_PX) {
                                 // 違規：紅隊後排在三米線內起跳並攻擊 -> 對方得分
+                                model.transientMessage = "Red back-row jump fault";
+                                model.transientMessageTimer = 90;
                                 model.awardPoint(false);
                                 return true;
                             }
                         } else {
                             if (startX < GameConfig.NET_X + GameConfig.THREE_METER_PX) {
                                 // 違規：藍隊後排在三米線內起跳並攻擊 -> 對方得分
+                                model.transientMessage = "Blue back-row jump fault";
+                                model.transientMessageTimer = 90;
                                 model.awardPoint(true);
                                 return true;
                             }

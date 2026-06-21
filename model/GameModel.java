@@ -29,6 +29,10 @@ public class GameModel {
 
     private double lastBallX;
 
+    // 短暫訊息（例如違規提示），每幀遞減
+    public String transientMessage = null;
+    public int transientMessageTimer = 0;
+
     public GameModel() {
         serveHandler.setWaitingForServe(true);
     }
@@ -107,6 +111,12 @@ public class GameModel {
         collideTeamsIfAllowed(redInput, blueInput);
         serveHandler.finishFrame();
         effects.update();
+
+        // 遞減暫時訊息計時器
+        if (transientMessageTimer > 0) {
+            transientMessageTimer--;
+            if (transientMessageTimer == 0) transientMessage = null;
+        }
     }
 
     private void configureBackActions(TeamInput redInput, TeamInput blueInput) {
