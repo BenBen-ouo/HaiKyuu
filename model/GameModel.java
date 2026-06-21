@@ -39,6 +39,9 @@ public class GameModel {
     public boolean pendingTouchOut = false;
     public Boolean pendingTouchOutWinner = null;
 
+    // matchOver 決定後，延遲幾幀才停止遊戲更新（用於顯示勝利動畫/效果）
+    public int matchOverCountdownFrames = 0;
+
     public GameModel() {
         serveHandler.setWaitingForServe(true);
     }
@@ -64,8 +67,8 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
-        // 當比賽結束時暫停遊戲更新（仍由 controller 捕捉重開鍵）
-        if (matchOver) return;
+        // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
+        if (matchOver && matchOverCountdownFrames <= 0) return;
 
         BallSideTracker.updateInputs(ball, redInput, blueInput);
 
@@ -75,6 +78,11 @@ public class GameModel {
         }
 
         updateActiveFrame(redInput, blueInput);
+
+        // 若處於 matchOver 的顯示倒數中，遞減計時器
+        if (matchOver && matchOverCountdownFrames > 0) {
+            matchOverCountdownFrames--;
+        }
     }
 
     public void resetCounters() {

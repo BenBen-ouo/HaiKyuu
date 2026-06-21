@@ -99,6 +99,8 @@ public class RallyScorer {
         if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
             model.matchOver = true;
             model.matchWinnerRed = model.redScore > model.blueScore;
+            // 設定延遲倒數（1.5 秒）在 stop 更新前繼續畫面/動畫
+            model.matchOverCountdownFrames = GameConfig.MATCH_OVER_DELAY_FRAMES;
         }
     }
 

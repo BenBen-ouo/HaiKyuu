@@ -95,6 +95,9 @@ public final class GameConfig {
     // 三米線距離（像素），後排球員不得在此線內起跳攻擊
     public static final double THREE_METER_PX = 167.0;
 
+    // 比賽結束後延遲停止遊戲的幀數（60FPS），1.5秒 = 90 幀
+    public static final int MATCH_OVER_DELAY_FRAMES = 90;
+
     // 跳發第一段拋球的預計落地點。
     // 之後你要調整跳發拋球位置，主要改這三個數值。
     public static final double RED_JUMP_SERVE_TOSS_LANDING_X = 75;
