@@ -5,6 +5,7 @@
 package view;
 
 import java.awt.*;
+import java.awt.geom.*;
 import model.*;
 
 public class GameRenderer {
@@ -69,26 +70,35 @@ public class GameRenderer {
         // 2. 繪製落地煙霧 (Landing Smoke) - 圖片效果（左半場使用 smoke_effect2.jpg，右半場使用 smoke_effect.jpg）
         java.util.List<SpikeEffect.SmokeParticle> smokeParticles = spikeEffect.getSmokeParticles();
         if (!smokeParticles.isEmpty()) {
-            String smokeImgName = spikeEffect.shouldUseSmokeEffect2() ? "smoke2.png" : "smoke.png";
-            Image smokeImg = assets.get(smokeImgName);
-            if (smokeImg != null) {
-                Composite origComposite = g.getComposite();
+            Composite origComposite = g.getComposite();
+            Paint origPaint = g.getPaint();
 
-                for (SpikeEffect.SmokeParticle p : smokeParticles) {
-                    double lifeRatio = (double) p.remainingFrames / p.maxFrames;
-                    if (lifeRatio <= 0) continue;
+            for (SpikeEffect.SmokeParticle p : smokeParticles) {
+                double lifeRatio = (double) p.remainingFrames / p.maxFrames;
+                if (lifeRatio <= 0) continue;
 
-                    // 顏色淡雅，最大透明度約 0.32
-                    float alpha = (float) (0.32 * lifeRatio);
-                    g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+                // 顏色淡雅，最大透明度約 0.32
+                float alpha = (float) (0.32 * lifeRatio);
 
-                    int size = (int) (p.currentRadius * 2);
+                float radius = (float) p.currentRadius;
+                float cx = (float) p.x;
+                float cy = (float) p.y;
 
-                    // 直接在粒子中心以座標繪製（不改變 transform）
-                    g.drawImage(smokeImg, (int) (p.x - size / 2), (int) (p.y - size / 2), size, size, null);
-                }
-                g.setComposite(origComposite);
+                float[] dist = {0.0f, 0.6f, 1.0f};
+                Color[] colors = {
+                    new Color(1f, 1f, 1f, alpha),
+                    new Color(0.9f, 0.9f, 0.9f, alpha * 0.6f),
+                    new Color(0f, 0f, 0f, 0f)
+                };
+
+                RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx, cy), radius, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
+                g.setPaint(rgp);
+
+                g.fill(new Ellipse2D.Float(cx - radius, cy - radius, radius * 2, radius * 2));
             }
+
+            g.setPaint(origPaint);
+            g.setComposite(origComposite);
         }
     }
 
