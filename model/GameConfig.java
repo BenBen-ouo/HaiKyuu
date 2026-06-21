@@ -25,7 +25,7 @@ public final class GameConfig {
     public static final double BALL_BOUNCE = 0.72;
     public static final double NET_BOUNCE = 0.4;
 
-    public static final double NET_WIDTH = 6;
+    public static final double NET_WIDTH = 4;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
