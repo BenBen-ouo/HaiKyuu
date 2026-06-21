@@ -6,6 +6,7 @@ package view;
 
 import java.awt.*;
 import java.awt.geom.*;
+import java.awt.image.*;
 import model.*;
 
 public class GameRenderer {
@@ -67,11 +68,18 @@ public class GameRenderer {
             }
         }
 
-        // 2. 繪製落地煙霧 (Landing Smoke) - 圖片效果（左半場使用 smoke_effect2.jpg，右半場使用 smoke_effect.jpg）
+        // 2. 繪製落地煙霧 (Landing Smoke) - 程式化粒子煙霧（取代原本的圖片效果）
         java.util.List<SpikeEffect.SmokeParticle> smokeParticles = spikeEffect.getSmokeParticles();
         if (!smokeParticles.isEmpty()) {
             Composite origComposite = g.getComposite();
             Paint origPaint = g.getPaint();
+
+            // 離屏圖層（整張畫面大小，簡單但可靠）
+            int w = GameConfig.SCREEN_WIDTH;
+            int h = GameConfig.SCREEN_HEIGHT;
+            BufferedImage smokeLayer = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D sg = smokeLayer.createGraphics();
+            sg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
             for (SpikeEffect.SmokeParticle p : smokeParticles) {
                 double lifeRatio = (double) p.remainingFrames / p.maxFrames;
@@ -103,9 +111,8 @@ public class GameRenderer {
                     };
 
                     RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx_i, cy_i), rBlob, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
-                    g.setPaint(rgp);
+                    sg.setPaint(rgp);
 
-                    // 每個 blob 縮短高度一半以維持扁平的煙霧感，並以隨機角度旋轉以打破橢圓規則性
                     // 使用多邊形近似不規則 blob（採用事前產生的 radius offsets）
                     float[] offsets = p.shapeOffset[i];
                     int pts = offsets.length;
@@ -125,9 +132,27 @@ public class GameRenderer {
 
                     AffineTransform at = AffineTransform.getRotateInstance(p.rot[i], cx_i, cy_i);
                     Shape transformed = at.createTransformedShape(poly);
-                    g.fill(transformed);
+                    sg.fill(transformed);
                 }
             }
+
+            sg.dispose();
+
+            // 5x5 高斯近似核
+            int[] gk = {1, 4, 6, 4, 1};
+            float[] kernel = new float[25];
+            for (int i = 0; i < 5; i++) {
+                for (int j = 0; j < 5; j++) {
+                    kernel[i * 5 + j] = (gk[i] * gk[j]) / 256f; // normalize by 16*16
+                }
+            }
+
+            ConvolveOp cop = new ConvolveOp(new Kernel(5, 5, kernel), ConvolveOp.EDGE_NO_OP, null);
+            BufferedImage blurred = cop.filter(smokeLayer, null);
+
+            // 把模糊後的煙霧疊回主畫面
+            g.setComposite(AlphaComposite.SrcOver);
+            g.drawImage(blurred, 0, 0, null);
 
             g.setPaint(origPaint);
             g.setComposite(origComposite);

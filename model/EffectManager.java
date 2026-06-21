@@ -20,7 +20,7 @@ public class EffectManager {
     }
 
     public void spawnLandingSmoke(double x, double y) {
-        effects.add(new VisualEffect("smoke.png", x, y, 20));
+        // Image-based smoke removed; use SpikeEffect procedural smoke instead if needed.
     }
 
     public void update() {

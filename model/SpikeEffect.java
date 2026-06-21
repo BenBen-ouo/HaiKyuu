@@ -101,7 +101,6 @@ public class SpikeEffect {
     private final List<SmokeParticle> smokeParticles = new ArrayList<>();
     private boolean spikeTrailActive = false;
     private boolean currentSpikeIsRed = false;
-    private boolean useSmokeEffect2 = false; // 是否使用 smoke_effect2.jpg
 
     public void startSpikeTrail(boolean isRedTeam) {
         this.spikeTrailActive = true;
@@ -114,10 +113,6 @@ public class SpikeEffect {
 
     public boolean isSpikeTrailActive() {
         return spikeTrailActive;
-    }
-
-    public boolean shouldUseSmokeEffect2() {
-        return useSmokeEffect2;
     }
 
     public List<TrailPoint> getTrailPoints() {
@@ -135,10 +130,6 @@ public class SpikeEffect {
     }
 
     public void spawnSmoke(double x, double y) {
-        // 判定落地點是在左半場還是右半場
-        // 網子 x 座標是 GameConfig.NET_X，左半場使用 smoke2.png，右半場使用 smoke.png
-        this.useSmokeEffect2 = (x <= GameConfig.NET_X);
-
         // 只產生一個煙霧圖層，移除先前的粒子後直接在落地點淡出
         smokeParticles.clear();
         double startRad = 25;
@@ -173,6 +164,5 @@ public class SpikeEffect {
         trailPoints.clear();
         smokeParticles.clear();
         spikeTrailActive = false;
-        useSmokeEffect2 = false;
     }
 }
