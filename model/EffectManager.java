@@ -20,7 +20,14 @@ public class EffectManager {
     }
 
     public void spawnLandingSmoke(double x, double y) {
-        // Image-based smoke removed; use SpikeEffect procedural smoke instead if needed.
+        // Backwards-compatible no-op. Use spawnLandingSmoke(x, y, spikeEffect) to trigger procedural smoke.
+    }
+
+    // Trigger procedural smoke on the provided SpikeEffect instance
+    public void spawnLandingSmoke(double x, double y, SpikeEffect spikeEffect) {
+        if (spikeEffect != null) {
+            spikeEffect.spawnSmoke(x, y);
+        }
     }
 
     public void update() {
