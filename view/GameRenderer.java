@@ -77,27 +77,37 @@ public class GameRenderer {
                 double lifeRatio = (double) p.remainingFrames / p.maxFrames;
                 if (lifeRatio <= 0) continue;
 
-                // 使用較暗的灰色漸層，並提高最大透明度以便在淺色背景可見
-                float alpha = (float) (0.6 * lifeRatio);
+                // 更深的基礎 alpha，並利用多個重疊 blob 形成不規則形狀
+                float baseAlpha = (float) (0.6 * lifeRatio);
 
                 float radius = (float) p.currentRadius;
                 float cx = (float) p.x;
                 float cy = (float) p.y;
 
-                float[] dist = {0.0f, 0.65f, 1.0f};
-                Color[] colors = {
-                    // 中心較深的灰色
-                    new Color(0.58f, 0.58f, 0.6f, alpha),
-                    // 中間淡灰
-                    new Color(0.38f, 0.38f, 0.4f, alpha * 0.5f),
-                    // 邊緣透明
-                    new Color(0f, 0f, 0f, 0f)
-                };
+                int blobs = p.blobCount;
+                for (int i = 0; i < blobs; i++) {
+                    float ox = p.ox[i];
+                    float oy = p.oy[i];
+                    float br = p.br[i];
+                    float ba = p.ba[i];
 
-                RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx, cy), radius, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
-                g.setPaint(rgp);
+                    float rBlob = radius * br;
+                    float cx_i = cx + ox;
+                    float cy_i = cy + oy;
 
-                g.fill(new Ellipse2D.Float(cx - radius, cy - radius, radius * 2, radius * 2));
+                    float[] dist = {0.0f, 0.6f, 1.0f};
+                    Color[] colors = new Color[] {
+                        new Color(0.18f, 0.18f, 0.18f, baseAlpha * ba),
+                        new Color(0.12f, 0.12f, 0.12f, baseAlpha * ba * 0.5f),
+                        new Color(0f, 0f, 0f, 0f)
+                    };
+
+                    RadialGradientPaint rgp = new RadialGradientPaint(new Point2D.Float(cx_i, cy_i), rBlob, dist, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
+                    g.setPaint(rgp);
+
+                    // 每個 blob 縮短高度一半以維持扁平的煙霧感
+                    g.fill(new Ellipse2D.Float(cx_i - rBlob, cy_i - rBlob / 2f, rBlob * 2, rBlob));
+                }
             }
 
             g.setPaint(origPaint);

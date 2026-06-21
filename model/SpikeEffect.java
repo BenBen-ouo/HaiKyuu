@@ -38,6 +38,12 @@ public class SpikeEffect {
         public double maxRadius;
         public int remainingFrames;
         public int maxFrames;
+
+        // 用於產生不規則形狀的子彈子（多個重疊漸層）
+        public int blobCount;
+        public float[] ox, oy; // offsets
+        public float[] br; // radius multiplier
+        public float[] ba; // alpha multiplier
         
         public SmokeParticle(double x, double y, double vx, double vy, double startRadius, double maxRadius, int maxFrames) {
             this.x = x;
@@ -49,6 +55,21 @@ public class SpikeEffect {
             this.maxRadius = maxRadius;
             this.maxFrames = maxFrames;
             this.remainingFrames = maxFrames;
+
+            // 初始化不規則 blob
+            this.blobCount = 3;
+            this.ox = new float[blobCount];
+            this.oy = new float[blobCount];
+            this.br = new float[blobCount];
+            this.ba = new float[blobCount];
+
+            for (int i = 0; i < blobCount; i++) {
+                // x 偏移較大、y 偏移較小以產生扁平外觀
+                this.ox[i] = (float) ((Math.random() * 2.0 - 1.0) * startRadius * 0.5);
+                this.oy[i] = (float) ((Math.random() * 2.0 - 1.0) * startRadius * 0.25);
+                this.br[i] = (float) (0.6 + Math.random() * 0.9); // radius multiplier 0.6 - 1.5
+                this.ba[i] = (float) (0.6 + Math.random() * 0.6); // alpha multiplier 0.6 - 1.2
+            }
         }
 
         public void update() {
