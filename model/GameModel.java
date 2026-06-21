@@ -54,6 +54,9 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
+        // 當比賽結束時暫停遊戲更新（仍由 controller 捕捉重開鍵）
+        if (matchOver) return;
+
         BallSideTracker.updateInputs(ball, redInput, blueInput);
 
         if (scorer.isRallyOver()) {

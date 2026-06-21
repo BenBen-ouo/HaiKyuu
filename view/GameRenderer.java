@@ -24,6 +24,26 @@ public class GameRenderer {
     }
 
     private void drawScore(Graphics2D g, GameModel model) {
+        if (model.matchOver != null && model.matchOver) {
+            String msg = (model.matchWinnerRed != null && model.matchWinnerRed) ? "RED WINS" : "BLUE WINS";
+            g.setColor(Color.BLACK);
+            g.setFont(new Font("Arial", Font.BOLD, 48));
+            FontMetrics fm = g.getFontMetrics();
+            int w = fm.stringWidth(msg);
+            int x = GameConfig.SCREEN_WIDTH / 2 - w / 2;
+            int y = GameConfig.SCREEN_HEIGHT / 2;
+            // 背景半透明方塊增強可讀性
+            Composite orig = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
+            g.setColor(Color.WHITE);
+            g.fillRect(x - 16, y - fm.getAscent(), w + 32, fm.getAscent() + 12);
+            g.setComposite(orig);
+
+            g.setColor(Color.BLACK);
+            g.drawString(msg, x, y + fm.getAscent() / 2);
+            return;
+        }
+
         g.setColor(Color.BLACK);
         g.setFont(new Font("Arial", Font.BOLD, 24));
         g.drawString(model.redScore + " : " + model.blueScore, GameConfig.SCREEN_WIDTH / 2 - 28, 44);
