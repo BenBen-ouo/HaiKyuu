@@ -106,14 +106,8 @@ public class RallyContactHandler {
         pushBallOutsidePlayer(player);
         reflectBallFromBlock(player);
 
-        if (model.spikeEffect.isSpikeTrailActive()) {
-            if (model.ball.vy > 0) {
-                // 情況 1：被攔網罩死 -> 繼續顯示軌跡與落地煙霧
-            } else {
-                // 情況 2：Touch 到 -> 軌跡結束，且不增加煙霧
-                model.spikeEffect.stopSpikeTrail();
-            }
-        }
+        // 攔網後：保持軌跡持續顯示，直到球落地或被其他球員接到
+        //（移除之前依 vy 判斷立即停止軌跡的行為）
 
         model.recordHit(player.redSide, player);
 

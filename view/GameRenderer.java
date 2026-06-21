@@ -85,8 +85,8 @@ public class GameRenderer {
                 double lifeRatio = (double) p.remainingFrames / p.maxFrames;
                 if (lifeRatio <= 0) continue;
 
-                // 更深的基礎 alpha，並利用多個重疊 blob 形成不規則形狀
-                float baseAlpha = (float) (0.6 * lifeRatio);
+                // 更淡的基礎 alpha，讓煙霧更透明（進一步調淡）
+                float baseAlpha = (float) (0.20 * lifeRatio);
 
                 float radius = (float) p.currentRadius;
                 float cx = (float) p.x;
@@ -150,8 +150,8 @@ public class GameRenderer {
             ConvolveOp cop = new ConvolveOp(new Kernel(5, 5, kernel), ConvolveOp.EDGE_NO_OP, null);
             BufferedImage blurred = cop.filter(smokeLayer, null);
 
-            // 把模糊後的煙霧疊回主畫面
-            g.setComposite(AlphaComposite.SrcOver);
+            // 把模糊後的煙霧以較低 alpha 疊回主畫面（讓煙霧更淡）
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
             g.drawImage(blurred, 0, 0, null);
 
             g.setPaint(origPaint);
