@@ -1,26 +1,36 @@
 /*
-區域網路模式的序列化封包與遊戲狀態快照。
-Client 只傳 Input；主機送回完整可繪製的 State，避免兩端各自模擬物理而失去同步。
-*/
+ * 區域網路協定資料。
+ * TCP 只使用可序列化的控制封包；即時輸入、事件與 compact correction 由 UdpCodec 以二進位 UDP 傳送。
+ */
 package network;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import model.AttackHitBox;
 import model.Ball;
-import model.EffectManager;
 import model.GameModel;
 import model.Player;
 import model.PlayerAction;
+import model.ServeState;
 import model.ServeType;
-import model.SpikeEffect;
 import model.Team;
 import model.TeamInput;
-import model.VisualEffect;
 
 public final class Packet {
-    public static final int PROTOCOL_VERSION = 1;
+    public static final int PROTOCOL_VERSION = 2;
+
+    public static final int INPUT_BACK_LEFT = 1 << 0;
+    public static final int INPUT_BACK_RIGHT = 1 << 1;
+    public static final int INPUT_BACK_JUMP = 1 << 2;
+    public static final int INPUT_BACK_DIVE = 1 << 3;
+    public static final int INPUT_SETTER_JUMP = 1 << 4;
+    public static final int INPUT_QUICK_ATTACK = 1 << 5;
+    public static final int INPUT_QUICK_BLOCK = 1 << 6;
+    public static final int INPUT_WING_ATTACK = 1 << 7;
+    public static final int INPUT_SPIKE_FLAT = 1 << 8;
+    public static final int INPUT_SPIKE_SHORT = 1 << 9;
+    public static final int INPUT_SPIKE_LOB = 1 << 10;
+    public static final int INPUT_SERVE = 1 << 11;
+    private static final int INPUT_SERVE_TYPE_SHIFT = 12;
+    private static final int INPUT_SERVE_TYPE_MASK = 0x3 << INPUT_SERVE_TYPE_SHIFT;
 
     private Packet() {
     }
@@ -41,10 +51,14 @@ public final class Packet {
         private static final long serialVersionUID = 1L;
         public final boolean assignedBluePlayer;
         public final String message;
+        public final long sessionToken;
+        public final int udpPort;
 
-        public Welcome(boolean assignedBluePlayer, String message) {
+        public Welcome(boolean assignedBluePlayer, String message, long sessionToken, int udpPort) {
             this.assignedBluePlayer = assignedBluePlayer;
             this.message = message;
+            this.sessionToken = sessionToken;
+            this.udpPort = udpPort;
         }
     }
 
@@ -57,109 +71,102 @@ public final class Packet {
         }
     }
 
-    public static final class Input implements Message {
+    public static final class ResetRequest implements Message {
         private static final long serialVersionUID = 1L;
-        public final TeamInputState teamInput;
-        public final boolean restartDown;
-        public final boolean cancelResetDown;
-
-        public Input(TeamInputState teamInput, boolean restartDown, boolean cancelResetDown) {
-            this.teamInput = teamInput;
-            this.restartDown = restartDown;
-            this.cancelResetDown = cancelResetDown;
-        }
     }
 
-    public static final class State implements Message {
+    public static final class CancelReset implements Message {
         private static final long serialVersionUID = 1L;
-        public final GameState gameState;
-        public final boolean redResetConfirmed;
-        public final boolean blueResetConfirmed;
-
-        public State(GameState gameState, boolean redResetConfirmed, boolean blueResetConfirmed) {
-            this.gameState = gameState;
-            this.redResetConfirmed = redResetConfirmed;
-            this.blueResetConfirmed = blueResetConfirmed;
-        }
     }
 
-    public static final class TeamInputState implements Serializable {
+    public static final class Disconnect implements Message {
         private static final long serialVersionUID = 1L;
-
-        public boolean backLeft;
-        public boolean backRight;
-        public boolean backJump;
-        public boolean backDive;
-        public boolean setterJump;
-        public boolean quickAttack;
-        public boolean quickBlock;
-        public boolean wingAttack;
-        public boolean spikeFlat;
-        public boolean spikeShort;
-        public boolean spikeLob;
-        public boolean servePressed;
-        public ServeType serveType;
-
-        public static TeamInputState from(TeamInput input) {
-            TeamInputState state = new TeamInputState();
-            state.backLeft = input.backLeft;
-            state.backRight = input.backRight;
-            state.backJump = input.backJump;
-            state.backDive = input.backDive;
-            state.setterJump = input.setterJump;
-            state.quickAttack = input.quickAttack;
-            state.quickBlock = input.quickBlock;
-            state.wingAttack = input.wingAttack;
-            state.spikeFlat = input.spikeFlat;
-            state.spikeShort = input.spikeShort;
-            state.spikeLob = input.spikeLob;
-            state.servePressed = input.servePressed;
-            state.serveType = input.serveType;
-            return state;
-        }
-
-        public static TeamInputState empty() {
-            return from(new TeamInput());
-        }
-
-        public TeamInput toTeamInput() {
-            TeamInput input = new TeamInput();
-            input.backLeft = backLeft;
-            input.backRight = backRight;
-            input.backJump = backJump;
-            input.backDive = backDive;
-            input.setterJump = setterJump;
-            input.quickAttack = quickAttack;
-            input.quickBlock = quickBlock;
-            input.wingAttack = wingAttack;
-            input.spikeFlat = spikeFlat;
-            input.spikeShort = spikeShort;
-            input.spikeLob = spikeLob;
-            input.servePressed = servePressed;
-            input.serveType = serveType == null ? ServeType.NORMAL : serveType;
-            return input;
-        }
     }
 
-    public static final class GameState implements Serializable {
-        private static final long serialVersionUID = 1L;
+    public enum EventType {
+        SERVE,
+        BALL_IMPACT,
+        LANDING,
+        SCORE,
+        RULE,
+        RESET
+    }
 
+    public static int encodeInput(TeamInput input) {
+        int mask = 0;
+        if (input.backLeft) mask |= INPUT_BACK_LEFT;
+        if (input.backRight) mask |= INPUT_BACK_RIGHT;
+        if (input.backJump) mask |= INPUT_BACK_JUMP;
+        if (input.backDive) mask |= INPUT_BACK_DIVE;
+        if (input.setterJump) mask |= INPUT_SETTER_JUMP;
+        if (input.quickAttack) mask |= INPUT_QUICK_ATTACK;
+        if (input.quickBlock) mask |= INPUT_QUICK_BLOCK;
+        if (input.wingAttack) mask |= INPUT_WING_ATTACK;
+        if (input.spikeFlat) mask |= INPUT_SPIKE_FLAT;
+        if (input.spikeShort) mask |= INPUT_SPIKE_SHORT;
+        if (input.spikeLob) mask |= INPUT_SPIKE_LOB;
+        if (input.servePressed) mask |= INPUT_SERVE;
+
+        int serveType = input.serveType == null ? ServeType.NORMAL.ordinal() : input.serveType.ordinal();
+        mask |= (serveType & 0x3) << INPUT_SERVE_TYPE_SHIFT;
+        return mask;
+    }
+
+    public static TeamInput decodeInput(int mask) {
+        TeamInput input = new TeamInput();
+        input.backLeft = (mask & INPUT_BACK_LEFT) != 0;
+        input.backRight = (mask & INPUT_BACK_RIGHT) != 0;
+        input.backJump = (mask & INPUT_BACK_JUMP) != 0;
+        input.backDive = (mask & INPUT_BACK_DIVE) != 0;
+        input.setterJump = (mask & INPUT_SETTER_JUMP) != 0;
+        input.quickAttack = (mask & INPUT_QUICK_ATTACK) != 0;
+        input.quickBlock = (mask & INPUT_QUICK_BLOCK) != 0;
+        input.wingAttack = (mask & INPUT_WING_ATTACK) != 0;
+        input.spikeFlat = (mask & INPUT_SPIKE_FLAT) != 0;
+        input.spikeShort = (mask & INPUT_SPIKE_SHORT) != 0;
+        input.spikeLob = (mask & INPUT_SPIKE_LOB) != 0;
+        input.servePressed = (mask & INPUT_SERVE) != 0;
+
+        int typeOrdinal = (mask & INPUT_SERVE_TYPE_MASK) >>> INPUT_SERVE_TYPE_SHIFT;
+        ServeType[] types = ServeType.values();
+        input.serveType = typeOrdinal >= 0 && typeOrdinal < types.length
+                ? types[typeOrdinal]
+                : ServeType.NORMAL;
+        return input;
+    }
+
+    public static final class CompactState {
         public final BallState ball;
         public final TeamState redTeam;
         public final TeamState blueTeam;
+
         public final int redScore;
         public final int blueScore;
         public final int redHitCount;
         public final int blueHitCount;
+        public final int redLastHitterIndex;
+        public final int blueLastHitterIndex;
+        public final int lastHitTeamCode;
+        public final boolean lastTouchWasBlock;
+
+        public final int serveStateOrdinal;
+        public final boolean redServing;
+        public final boolean rallyOver;
+        public final int deadBallTimer;
+
         public final boolean matchOver;
-        public final Boolean matchWinnerRed;
+        public final int matchWinnerCode;
         public final String transientMessage;
         public final int transientMessageTimer;
-        public final Boolean transientMessageIsRed;
-        public final List<VisualEffectState> effects;
-        public final SpikeEffectState spikeEffect;
+        public final int transientMessageColorCode;
+        public final boolean pendingTouchOut;
+        public final int pendingTouchOutWinnerCode;
+        public final int matchOverCountdownFrames;
 
-        private GameState(
+        public final boolean spikeTrailActive;
+        public final boolean spikeTrailRed;
+
+        public CompactState(
                 BallState ball,
                 TeamState redTeam,
                 TeamState blueTeam,
@@ -167,13 +174,24 @@ public final class Packet {
                 int blueScore,
                 int redHitCount,
                 int blueHitCount,
+                int redLastHitterIndex,
+                int blueLastHitterIndex,
+                int lastHitTeamCode,
+                boolean lastTouchWasBlock,
+                int serveStateOrdinal,
+                boolean redServing,
+                boolean rallyOver,
+                int deadBallTimer,
                 boolean matchOver,
-                Boolean matchWinnerRed,
+                int matchWinnerCode,
                 String transientMessage,
                 int transientMessageTimer,
-                Boolean transientMessageIsRed,
-                List<VisualEffectState> effects,
-                SpikeEffectState spikeEffect
+                int transientMessageColorCode,
+                boolean pendingTouchOut,
+                int pendingTouchOutWinnerCode,
+                int matchOverCountdownFrames,
+                boolean spikeTrailActive,
+                boolean spikeTrailRed
         ) {
             this.ball = ball;
             this.redTeam = redTeam;
@@ -182,22 +200,28 @@ public final class Packet {
             this.blueScore = blueScore;
             this.redHitCount = redHitCount;
             this.blueHitCount = blueHitCount;
+            this.redLastHitterIndex = redLastHitterIndex;
+            this.blueLastHitterIndex = blueLastHitterIndex;
+            this.lastHitTeamCode = lastHitTeamCode;
+            this.lastTouchWasBlock = lastTouchWasBlock;
+            this.serveStateOrdinal = serveStateOrdinal;
+            this.redServing = redServing;
+            this.rallyOver = rallyOver;
+            this.deadBallTimer = deadBallTimer;
             this.matchOver = matchOver;
-            this.matchWinnerRed = matchWinnerRed;
+            this.matchWinnerCode = matchWinnerCode;
             this.transientMessage = transientMessage;
             this.transientMessageTimer = transientMessageTimer;
-            this.transientMessageIsRed = transientMessageIsRed;
-            this.effects = effects;
-            this.spikeEffect = spikeEffect;
+            this.transientMessageColorCode = transientMessageColorCode;
+            this.pendingTouchOut = pendingTouchOut;
+            this.pendingTouchOutWinnerCode = pendingTouchOutWinnerCode;
+            this.matchOverCountdownFrames = matchOverCountdownFrames;
+            this.spikeTrailActive = spikeTrailActive;
+            this.spikeTrailRed = spikeTrailRed;
         }
 
-        public static GameState from(GameModel model) {
-            List<VisualEffectState> effectStates = new ArrayList<>();
-            for (VisualEffect effect : model.effects.getEffects()) {
-                effectStates.add(VisualEffectState.from(effect));
-            }
-
-            return new GameState(
+        public static CompactState from(GameModel model) {
+            return new CompactState(
                     BallState.from(model.ball),
                     TeamState.from(model.redTeam),
                     TeamState.from(model.blueTeam),
@@ -205,13 +229,24 @@ public final class Packet {
                     model.blueScore,
                     model.redHitCount,
                     model.blueHitCount,
+                    model.getLastHitterIndexForNetwork(true),
+                    model.getLastHitterIndexForNetwork(false),
+                    encodeNullableBoolean(model.getLastHitTeam()),
+                    model.wasLastTouchBlockForNetwork(),
+                    model.getServeHandler().getState().ordinal(),
+                    model.getServeHandler().isRedServing(),
+                    model.isRallyOverForNetwork(),
+                    model.getDeadBallTimerForNetwork(),
                     model.matchOver,
-                    model.matchWinnerRed,
+                    encodeNullableBoolean(model.matchWinnerRed),
                     model.transientMessage,
                     model.transientMessageTimer,
-                    model.transientMessageIsRed,
-                    effectStates,
-                    SpikeEffectState.from(model.spikeEffect)
+                    encodeNullableBoolean(model.transientMessageIsRed),
+                    model.pendingTouchOut,
+                    encodeNullableBoolean(model.pendingTouchOutWinner),
+                    model.matchOverCountdownFrames,
+                    model.spikeEffect.isSpikeTrailActive(),
+                    model.spikeEffect.getCurrentSpikeIsRed()
             );
         }
 
@@ -219,32 +254,82 @@ public final class Packet {
             ball.applyTo(model.ball);
             redTeam.applyTo(model.redTeam);
             blueTeam.applyTo(model.blueTeam);
-
-            model.redScore = redScore;
-            model.blueScore = blueScore;
-            model.redHitCount = redHitCount;
-            model.blueHitCount = blueHitCount;
-            model.matchOver = matchOver;
-            model.matchWinnerRed = matchWinnerRed;
-            model.transientMessage = transientMessage;
-            model.transientMessageTimer = transientMessageTimer;
-            model.transientMessageIsRed = transientMessageIsRed;
-
-            restoreEffects(model.effects, effects);
-            spikeEffect.applyTo(model.spikeEffect);
+            applyMetadataTo(model);
         }
 
-        private static void restoreEffects(EffectManager target, List<VisualEffectState> states) {
-            target.clear();
-            for (VisualEffectState state : states) {
-                target.getEffects().add(state.toVisualEffect());
+        /*
+         * 小誤差校正時，先同步比分、發球與回合規則，
+         * 座標則交由 GameClient 在數個畫面幀內平滑拉回。
+         */
+        public void applyMetadataTo(GameModel model) {
+            model.redScore = redScore;
+            model.blueScore = blueScore;
+            model.matchOver = matchOver;
+            model.matchWinnerRed = decodeNullableBoolean(matchWinnerCode);
+            model.transientMessage = transientMessage;
+            model.transientMessageTimer = transientMessageTimer;
+            model.transientMessageIsRed = decodeNullableBoolean(transientMessageColorCode);
+            model.pendingTouchOut = pendingTouchOut;
+            model.pendingTouchOutWinner = decodeNullableBoolean(pendingTouchOutWinnerCode);
+            model.matchOverCountdownFrames = matchOverCountdownFrames;
+
+            ServeState[] states = ServeState.values();
+            ServeState serveState = serveStateOrdinal >= 0 && serveStateOrdinal < states.length
+                    ? states[serveStateOrdinal]
+                    : ServeState.READY;
+            model.getServeHandler().applyNetworkState(serveState, redServing);
+            model.applyNetworkRallyState(
+                    redHitCount,
+                    blueHitCount,
+                    decodeNullableBoolean(lastHitTeamCode),
+                    lastTouchWasBlock,
+                    redLastHitterIndex,
+                    blueLastHitterIndex,
+                    rallyOver,
+                    deadBallTimer
+            );
+
+            if (spikeTrailActive) {
+                if (!model.spikeEffect.isSpikeTrailActive()
+                        || model.spikeEffect.getCurrentSpikeIsRed() != spikeTrailRed) {
+                    model.spikeEffect.startSpikeTrail(spikeTrailRed);
+                }
+            } else {
+                model.spikeEffect.stopSpikeTrail();
             }
+        }
+
+        public void blendPositionsInto(GameModel model, double amount) {
+            blendBall(model.ball, amount);
+            redTeam.blendPositionsInto(model.redTeam, amount);
+            blueTeam.blendPositionsInto(model.blueTeam, amount);
+        }
+
+        private void blendBall(Ball target, double amount) {
+            target.x += (ball.x - target.x) * amount;
+            target.y += (ball.y - target.y) * amount;
+            target.vx += (ball.vx - target.vx) * amount;
+            target.vy += (ball.vy - target.vy) * amount;
+            target.rotationDegrees += (ball.rotationDegrees - target.rotationDegrees) * amount;
+            target.rotationSpeed += (ball.rotationSpeed - target.rotationSpeed) * amount;
+            target.setFastFloorBounceSpin(ball.fastFloorBounceSpin);
+            target.syncPreviousPosition();
+        }
+
+        public double maxPositionDifference(GameModel model) {
+            double max = distance(ball.x, ball.y, model.ball.x, model.ball.y);
+            max = Math.max(max, redTeam.maxPositionDifference(model.redTeam));
+            return Math.max(max, blueTeam.maxPositionDifference(model.blueTeam));
+        }
+
+        private static double distance(double x1, double y1, double x2, double y2) {
+            double dx = x1 - x2;
+            double dy = y1 - y2;
+            return Math.sqrt(dx * dx + dy * dy);
         }
     }
 
-    public static final class BallState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
+    public static final class BallState {
         public final double x;
         public final double y;
         public final double vx;
@@ -252,15 +337,17 @@ public final class Packet {
         public final double radius;
         public final double rotationDegrees;
         public final double rotationSpeed;
+        public final boolean fastFloorBounceSpin;
 
-        private BallState(
+        public BallState(
                 double x,
                 double y,
                 double vx,
                 double vy,
                 double radius,
                 double rotationDegrees,
-                double rotationSpeed
+                double rotationSpeed,
+                boolean fastFloorBounceSpin
         ) {
             this.x = x;
             this.y = y;
@@ -269,6 +356,7 @@ public final class Packet {
             this.radius = radius;
             this.rotationDegrees = rotationDegrees;
             this.rotationSpeed = rotationSpeed;
+            this.fastFloorBounceSpin = fastFloorBounceSpin;
         }
 
         public static BallState from(Ball ball) {
@@ -279,7 +367,8 @@ public final class Packet {
                     ball.vy,
                     ball.radius,
                     ball.rotationDegrees,
-                    ball.rotationSpeed
+                    ball.rotationSpeed,
+                    ball.usesFastFloorBounceSpin()
             );
         }
 
@@ -291,49 +380,52 @@ public final class Packet {
             ball.radius = radius;
             ball.rotationDegrees = rotationDegrees;
             ball.rotationSpeed = rotationSpeed;
+            ball.setFastFloorBounceSpin(fastFloorBounceSpin);
+            ball.syncPreviousPosition();
         }
     }
 
-    public static final class TeamState implements Serializable {
-        private static final long serialVersionUID = 1L;
+    public static final class TeamState {
+        public final PlayerState[] players;
 
-        public final PlayerState backPlayer;
-        public final PlayerState setter;
-        public final PlayerState quickAttacker;
-        public final PlayerState wingSpiker;
-
-        private TeamState(
-                PlayerState backPlayer,
-                PlayerState setter,
-                PlayerState quickAttacker,
-                PlayerState wingSpiker
-        ) {
-            this.backPlayer = backPlayer;
-            this.setter = setter;
-            this.quickAttacker = quickAttacker;
-            this.wingSpiker = wingSpiker;
+        public TeamState(PlayerState[] players) {
+            this.players = players;
         }
 
         public static TeamState from(Team team) {
-            return new TeamState(
-                    PlayerState.from(team.backPlayer),
-                    PlayerState.from(team.setter),
-                    PlayerState.from(team.quickAttacker),
-                    PlayerState.from(team.wingSpiker)
-            );
+            Player[] players = team.getPlayers();
+            PlayerState[] states = new PlayerState[players.length];
+            for (int i = 0; i < players.length; i++) {
+                states[i] = PlayerState.from(players[i]);
+            }
+            return new TeamState(states);
         }
 
         public void applyTo(Team team) {
-            backPlayer.applyTo(team.backPlayer);
-            setter.applyTo(team.setter);
-            quickAttacker.applyTo(team.quickAttacker);
-            wingSpiker.applyTo(team.wingSpiker);
+            Player[] targets = team.getPlayers();
+            for (int i = 0; i < targets.length && i < players.length; i++) {
+                players[i].applyTo(targets[i]);
+            }
+        }
+
+        public double maxPositionDifference(Team team) {
+            double max = 0;
+            Player[] targets = team.getPlayers();
+            for (int i = 0; i < targets.length && i < players.length; i++) {
+                max = Math.max(max, players[i].positionDifference(targets[i]));
+            }
+            return max;
+        }
+
+        public void blendPositionsInto(Team team, double amount) {
+            Player[] targets = team.getPlayers();
+            for (int i = 0; i < targets.length && i < players.length; i++) {
+                players[i].blendPositionInto(targets[i], amount);
+            }
         }
     }
 
-    public static final class PlayerState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
+    public static final class PlayerState {
         public final String assetName;
         public final double x;
         public final double y;
@@ -345,11 +437,10 @@ public final class Packet {
         public final boolean diving;
         public final boolean mirrorImage;
         public final double jumpStartX;
-        public final PlayerAction action;
-        public final HitBoxState hitBox;
-        public final AttackHitBoxState attackHitBox;
+        public final int actionOrdinal;
+        public final boolean attackHitBoxEnabled;
 
-        private PlayerState(
+        public PlayerState(
                 String assetName,
                 double x,
                 double y,
@@ -361,9 +452,8 @@ public final class Packet {
                 boolean diving,
                 boolean mirrorImage,
                 double jumpStartX,
-                PlayerAction action,
-                HitBoxState hitBox,
-                AttackHitBoxState attackHitBox
+                int actionOrdinal,
+                boolean attackHitBoxEnabled
         ) {
             this.assetName = assetName;
             this.x = x;
@@ -376,9 +466,8 @@ public final class Packet {
             this.diving = diving;
             this.mirrorImage = mirrorImage;
             this.jumpStartX = jumpStartX;
-            this.action = action;
-            this.hitBox = hitBox;
-            this.attackHitBox = attackHitBox;
+            this.actionOrdinal = actionOrdinal;
+            this.attackHitBoxEnabled = attackHitBoxEnabled;
         }
 
         public static PlayerState from(Player player) {
@@ -394,9 +483,8 @@ public final class Packet {
                     player.diving,
                     player.mirrorImage,
                     player.jumpStartX,
-                    player.getAction(),
-                    HitBoxState.from(player),
-                    AttackHitBoxState.from(player.attackHitBox)
+                    player.getAction().ordinal(),
+                    player.attackHitBox.enabled
             );
         }
 
@@ -412,279 +500,49 @@ public final class Packet {
             player.diving = diving;
             player.mirrorImage = mirrorImage;
             player.jumpStartX = jumpStartX;
-            player.setActionForNetwork(action);
-            hitBox.applyTo(player);
-            attackHitBox.applyTo(player.attackHitBox);
-        }
-    }
 
-    public static final class HitBoxState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final double offsetX;
-        public final double offsetY;
-        public final double width;
-        public final double height;
-        public final int arcWidth;
-        public final int arcHeight;
-        public final double rotationDegrees;
-
-        private HitBoxState(
-                double offsetX,
-                double offsetY,
-                double width,
-                double height,
-                int arcWidth,
-                int arcHeight,
-                double rotationDegrees
-        ) {
-            this.offsetX = offsetX;
-            this.offsetY = offsetY;
-            this.width = width;
-            this.height = height;
-            this.arcWidth = arcWidth;
-            this.arcHeight = arcHeight;
-            this.rotationDegrees = rotationDegrees;
-        }
-
-        public static HitBoxState from(Player player) {
-            return new HitBoxState(
-                    player.hitBox.offsetX,
-                    player.hitBox.offsetY,
-                    player.hitBox.width,
-                    player.hitBox.height,
-                    player.hitBox.arcWidth,
-                    player.hitBox.arcHeight,
-                    player.hitBox.rotationDegrees
+            PlayerAction[] actions = PlayerAction.values();
+            player.setActionForNetwork(
+                    actionOrdinal >= 0 && actionOrdinal < actions.length
+                            ? actions[actionOrdinal]
+                            : PlayerAction.IDLE
             );
-        }
 
-        public void applyTo(Player player) {
-            player.hitBox.set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees);
-        }
-    }
-
-    public static final class AttackHitBoxState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final boolean enabled;
-        public final double offsetX;
-        public final double offsetY;
-        public final double width;
-        public final double height;
-
-        private AttackHitBoxState(boolean enabled, double offsetX, double offsetY, double width, double height) {
-            this.enabled = enabled;
-            this.offsetX = offsetX;
-            this.offsetY = offsetY;
-            this.width = width;
-            this.height = height;
-        }
-
-        public static AttackHitBoxState from(AttackHitBox attackHitBox) {
-            return new AttackHitBoxState(
-                    attackHitBox.enabled,
-                    attackHitBox.offsetX,
-                    attackHitBox.offsetY,
-                    attackHitBox.width,
-                    attackHitBox.height
-            );
-        }
-
-        public void applyTo(AttackHitBox attackHitBox) {
-            attackHitBox.set(offsetX, offsetY, width, height);
-            if (enabled) {
-                attackHitBox.enable();
+            if (attackHitBoxEnabled) {
+                player.attackHitBox.enable();
             } else {
-                attackHitBox.disable();
+                player.attackHitBox.disable();
             }
+        }
+
+        public double positionDifference(Player player) {
+            double dx = x - player.x;
+            double dy = y - player.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        public void blendPositionInto(Player player, double amount) {
+            player.x += (x - player.x) * amount;
+            player.y += (y - player.y) * amount;
+            player.vx += (vx - player.vx) * amount;
+            player.vy += (vy - player.vy) * amount;
         }
     }
 
-    public static final class VisualEffectState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final String assetName;
-        public final double x;
-        public final double y;
-        public final int remainingFrames;
-
-        private VisualEffectState(String assetName, double x, double y, int remainingFrames) {
-            this.assetName = assetName;
-            this.x = x;
-            this.y = y;
-            this.remainingFrames = remainingFrames;
+    public static int encodeNullableBoolean(Boolean value) {
+        if (value == null) {
+            return 0;
         }
-
-        public static VisualEffectState from(VisualEffect effect) {
-            return new VisualEffectState(effect.assetName, effect.x, effect.y, effect.remainingFrames);
-        }
-
-        public VisualEffect toVisualEffect() {
-            return new VisualEffect(assetName, x, y, remainingFrames);
-        }
+        return value ? 1 : 2;
     }
 
-    public static final class SpikeEffectState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final boolean trailActive;
-        public final boolean currentSpikeRed;
-        public final List<TrailPointState> trailPoints;
-        public final List<SmokeParticleState> smokeParticles;
-
-        private SpikeEffectState(
-                boolean trailActive,
-                boolean currentSpikeRed,
-                List<TrailPointState> trailPoints,
-                List<SmokeParticleState> smokeParticles
-        ) {
-            this.trailActive = trailActive;
-            this.currentSpikeRed = currentSpikeRed;
-            this.trailPoints = trailPoints;
-            this.smokeParticles = smokeParticles;
+    public static Boolean decodeNullableBoolean(int code) {
+        if (code == 1) {
+            return Boolean.TRUE;
         }
-
-        public static SpikeEffectState from(SpikeEffect spikeEffect) {
-            List<TrailPointState> trails = new ArrayList<>();
-            for (SpikeEffect.TrailPoint point : spikeEffect.getTrailPoints()) {
-                trails.add(TrailPointState.from(point));
-            }
-
-            List<SmokeParticleState> smoke = new ArrayList<>();
-            for (SpikeEffect.SmokeParticle particle : spikeEffect.getSmokeParticles()) {
-                smoke.add(SmokeParticleState.from(particle));
-            }
-
-            return new SpikeEffectState(
-                    spikeEffect.isSpikeTrailActive(),
-                    spikeEffect.getCurrentSpikeIsRed(),
-                    trails,
-                    smoke
-            );
+        if (code == 2) {
+            return Boolean.FALSE;
         }
-
-        public void applyTo(SpikeEffect spikeEffect) {
-            spikeEffect.clear();
-            if (trailActive) {
-                spikeEffect.startSpikeTrail(currentSpikeRed);
-            }
-
-            for (TrailPointState point : trailPoints) {
-                spikeEffect.getTrailPoints().add(point.toTrailPoint());
-            }
-
-            for (SmokeParticleState particle : smokeParticles) {
-                spikeEffect.getSmokeParticles().add(particle.toSmokeParticle());
-            }
-        }
-    }
-
-    public static final class TrailPointState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final double x;
-        public final double y;
-        public final int remainingFrames;
-        public final int maxFrames;
-        public final boolean redTeam;
-
-        private TrailPointState(double x, double y, int remainingFrames, int maxFrames, boolean redTeam) {
-            this.x = x;
-            this.y = y;
-            this.remainingFrames = remainingFrames;
-            this.maxFrames = maxFrames;
-            this.redTeam = redTeam;
-        }
-
-        public static TrailPointState from(SpikeEffect.TrailPoint point) {
-            return new TrailPointState(
-                    point.x,
-                    point.y,
-                    point.remainingFrames,
-                    point.maxFrames,
-                    point.isRedTeam
-            );
-        }
-
-        public SpikeEffect.TrailPoint toTrailPoint() {
-            SpikeEffect.TrailPoint point = new SpikeEffect.TrailPoint(x, y, maxFrames, redTeam);
-            point.remainingFrames = remainingFrames;
-            return point;
-        }
-    }
-
-    public static final class SmokeParticleState implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        public final double x;
-        public final double y;
-        public final double vx;
-        public final double vy;
-        public final double startRadius;
-        public final double currentRadius;
-        public final double maxRadius;
-        public final int remainingFrames;
-        public final int maxFrames;
-        public final int blobCount;
-        public final float[] ox;
-        public final float[] oy;
-        public final float[] br;
-        public final float[] ba;
-        public final float[] rot;
-        public final float[][] shapeOffset;
-
-        private SmokeParticleState(SpikeEffect.SmokeParticle particle) {
-            this.x = particle.x;
-            this.y = particle.y;
-            this.vx = particle.vx;
-            this.vy = particle.vy;
-            this.startRadius = particle.startRadius;
-            this.currentRadius = particle.currentRadius;
-            this.maxRadius = particle.maxRadius;
-            this.remainingFrames = particle.remainingFrames;
-            this.maxFrames = particle.maxFrames;
-            this.blobCount = particle.blobCount;
-            this.ox = particle.ox.clone();
-            this.oy = particle.oy.clone();
-            this.br = particle.br.clone();
-            this.ba = particle.ba.clone();
-            this.rot = particle.rot.clone();
-            this.shapeOffset = cloneShapeOffset(particle.shapeOffset);
-        }
-
-        public static SmokeParticleState from(SpikeEffect.SmokeParticle particle) {
-            return new SmokeParticleState(particle);
-        }
-
-        public SpikeEffect.SmokeParticle toSmokeParticle() {
-            SpikeEffect.SmokeParticle particle = new SpikeEffect.SmokeParticle(
-                    x,
-                    y,
-                    vx,
-                    vy,
-                    startRadius,
-                    maxRadius,
-                    maxFrames
-            );
-            particle.currentRadius = currentRadius;
-            particle.remainingFrames = remainingFrames;
-            particle.blobCount = blobCount;
-            particle.ox = ox.clone();
-            particle.oy = oy.clone();
-            particle.br = br.clone();
-            particle.ba = ba.clone();
-            particle.rot = rot.clone();
-            particle.shapeOffset = cloneShapeOffset(shapeOffset);
-            return particle;
-        }
-
-        private static float[][] cloneShapeOffset(float[][] source) {
-            float[][] copy = new float[source.length][];
-            for (int i = 0; i < source.length; i++) {
-                copy[i] = source[i].clone();
-            }
-            return copy;
-        }
+        return null;
     }
 }

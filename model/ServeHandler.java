@@ -67,6 +67,17 @@ public class ServeHandler {
         resetFrameFlags();
     }
 
+    /* 主機 compact correction 還原發球流程；僅同步規則狀態，不覆蓋球的位置。 */
+    public ServeState getState() {
+        return state;
+    }
+
+    public void applyNetworkState(ServeState state, boolean redServing) {
+        this.state = state == null ? ServeState.READY : state;
+        this.redServing = redServing;
+        resetFrameFlags();
+    }
+
     public void updateBeforeTeams(TeamInput redInput, TeamInput blueInput) {
         serveLaunchedThisFrame = false;
 

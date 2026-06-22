@@ -43,6 +43,16 @@ public class GamePanel extends JPanel {
                 controller.update();
                 repaint();
 
+                if (networkView != null && networkView.isSessionEnded()) {
+                    javax.swing.SwingUtilities.invokeLater(() -> {
+                        java.awt.Window window = javax.swing.SwingUtilities.getWindowAncestor(this);
+                        if (window != null) {
+                            window.dispose();
+                        }
+                    });
+                    return;
+                }
+
                 long used = System.currentTimeMillis() - start;
                 long sleep = Math.max(2L, frameTime - used);
 

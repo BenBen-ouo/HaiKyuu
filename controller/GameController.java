@@ -1,6 +1,6 @@
 /*
 控制層入口，將鍵盤輸入送往單機模型或區域網路主機／Client。
-主機模式只有 GameServer 更新真正 GameModel；Client 模式只傳送藍隊輸入並接收主機快照。
+主機模式更新權威 GameModel；Client 模式以本地預測更新並接收主機 UDP 校正。
 */
 package controller;
 

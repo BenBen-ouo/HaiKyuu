@@ -201,6 +201,50 @@ public class GameModel {
         blueHitCount = rallyState.getHitCount(false);
     }
 
+    /*
+     * 以下為網路 correction 使用的最小狀態入口。
+     * 規則仍由主機判定；client 只用它們讓本地預測從主機相近狀態繼續。
+     */
+    public boolean isRallyOverForNetwork() {
+        return scorer.isRallyOver();
+    }
+
+    public int getDeadBallTimerForNetwork() {
+        return scorer.getDeadBallTimer();
+    }
+
+    public int getLastHitterIndexForNetwork(boolean redSide) {
+        return rallyState.getLastHitterIndex(redSide, redSide ? redTeam : blueTeam);
+    }
+
+    public boolean wasLastTouchBlockForNetwork() {
+        return rallyState.wasLastTouchBlock();
+    }
+
+    public void applyNetworkRallyState(
+            int redHitCount,
+            int blueHitCount,
+            Boolean lastHitTeam,
+            boolean lastTouchWasBlock,
+            int redLastHitterIndex,
+            int blueLastHitterIndex,
+            boolean rallyOver,
+            int deadBallTimer
+    ) {
+        rallyState.applyNetworkState(
+                redHitCount,
+                blueHitCount,
+                lastHitTeam,
+                lastTouchWasBlock,
+                redLastHitterIndex,
+                blueLastHitterIndex,
+                redTeam,
+                blueTeam
+        );
+        syncPublicHitCounters();
+        scorer.applyNetworkState(rallyOver, deadBallTimer);
+    }
+
     // 外部呼叫：直接給點（例如四連擊、後排三米線違規）
     public void awardPoint(boolean redWins) {
         scorer.awardPoint(redWins);

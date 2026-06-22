@@ -68,7 +68,7 @@ public class Main {
             GameController controller = new GameController(model, keyboard, server);
             showWindow(model, keyboard, controller, server, "HaiKyuu!! - 主機 / Player 1 / 紅隊");
         } catch (IOException exception) {
-            showError("無法建立主機（port 5000 可能已被使用）：\n" + exception.getMessage());
+            showError("無法建立主機（TCP 5000 或 UDP 5001 可能已被使用）：\n" + exception.getMessage());
         }
     }
 

@@ -1,7 +1,7 @@
 /*
-提供給畫面層讀取的網路連線狀態。
-主機與 Client 都實作此介面，GamePanel 只負責依狀態顯示文字與決定是否鏡像世界畫面。
-*/
+ * 提供畫面層讀取的網路狀態。
+ * 遊戲畫面依此決定鏡像、連線文字、重設提示，以及斷線後是否結束本局。
+ */
 package network;
 
 public interface NetworkView extends AutoCloseable {
@@ -14,6 +14,8 @@ public interface NetworkView extends AutoCloseable {
     String getResetMessage();
 
     boolean isConnected();
+
+    boolean isSessionEnded();
 
     @Override
     void close();

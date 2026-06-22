@@ -63,6 +63,27 @@ public class Ball {
         highSpeedFloorBounceSpin = false;
     }
 
+    /*
+     * 網路校正用：同步最近一次觸球決定的地板旋轉強度，
+     * 不必傳送完整 Ball 物件也能維持後續彈地結果接近主機。
+     */
+    public boolean usesFastFloorBounceSpin() {
+        return highSpeedFloorBounceSpin;
+    }
+
+    public void setFastFloorBounceSpin(boolean fast) {
+        highSpeedFloorBounceSpin = fast;
+    }
+
+    /*
+     * 網路快照直接覆蓋座標後，重設上一幀座標，
+     * 避免下一幀撞網時把舊位置誤判為高速穿越網子。
+     */
+    public void syncPreviousPosition() {
+        previousX = x;
+        previousY = y;
+    }
+
     private void updateRotation() {
         rotationDegrees = (rotationDegrees + rotationSpeed) % 360.0;
     }
