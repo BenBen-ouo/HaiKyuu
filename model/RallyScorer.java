@@ -24,6 +24,15 @@ public class RallyScorer {
         deadBallTimer = 0;
     }
 
+    public int getDeadBallTimer() {
+        return deadBallTimer;
+    }
+
+    public void applyNetworkState(boolean rallyOver, int deadBallTimer) {
+        this.rallyOver = rallyOver;
+        this.deadBallTimer = Math.max(0, deadBallTimer);
+    }
+
     public void updateDeadBall(TeamInput redInput, TeamInput blueInput) {
         deadBallTimer--;
         model.ball.update();

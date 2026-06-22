@@ -31,6 +31,7 @@ public class GameModel {
     private final RallyContactHandler contactHandler = new RallyContactHandler(this);
 
     private double lastBallX;
+    private boolean ballHitNetThisFrame;
 
     // 短暫訊息（例如違規提示），每幀遞減
     public String transientMessage = null;
@@ -71,6 +72,7 @@ public class GameModel {
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
+        ballHitNetThisFrame = false;
         // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
         if (matchOver && matchOverCountdownFrames <= 0) return;
 
@@ -163,7 +165,7 @@ public class GameModel {
 
         ball.update();
         spikeEffect.addTrailPoint(ball.x, ball.y);
-        ball.collideWithNet(netHitBox);
+        ballHitNetThisFrame = ball.collideWithNet(netHitBox);
 
         serveHandler.updateAfterBall();
         scorer.checkBallLanding();
@@ -199,6 +201,51 @@ public class GameModel {
     private void syncPublicHitCounters() {
         redHitCount = rallyState.getHitCount(true);
         blueHitCount = rallyState.getHitCount(false);
+    }
+
+    /* 以下入口只供網路快照與事件判定使用。 */
+    public boolean didBallHitNetThisFrame() {
+        return ballHitNetThisFrame;
+    }
+
+    public boolean isRallyOverForNetwork() {
+        return scorer.isRallyOver();
+    }
+
+    public int getDeadBallTimerForNetwork() {
+        return scorer.getDeadBallTimer();
+    }
+
+    public int getLastHitterIndexForNetwork(boolean redSide) {
+        return rallyState.getLastHitterIndex(redSide, redSide ? redTeam : blueTeam);
+    }
+
+    public boolean wasLastTouchBlockForNetwork() {
+        return rallyState.wasLastTouchBlock();
+    }
+
+    public void applyNetworkRallyState(
+            int redHitCount,
+            int blueHitCount,
+            Boolean lastHitTeam,
+            boolean lastTouchWasBlock,
+            int redLastHitterIndex,
+            int blueLastHitterIndex,
+            boolean rallyOver,
+            int deadBallTimer
+    ) {
+        rallyState.applyNetworkState(
+                redHitCount,
+                blueHitCount,
+                lastHitTeam,
+                lastTouchWasBlock,
+                redLastHitterIndex,
+                blueLastHitterIndex,
+                redTeam,
+                blueTeam
+        );
+        syncPublicHitCounters();
+        scorer.applyNetworkState(rallyOver, deadBallTimer);
     }
 
     // 外部呼叫：直接給點（例如四連擊、後排三米線違規）

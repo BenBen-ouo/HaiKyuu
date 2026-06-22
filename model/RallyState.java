@@ -49,6 +49,41 @@ public class RallyState {
         return lastTouchWasBlock;
     }
 
+    /* 0=back、1=setter、2=MB、3=WS，-1 表示沒有最後觸球者。 */
+    public int getLastHitterIndex(boolean redSide, Team team) {
+        Player hitter = redSide ? redLastHitter : blueLastHitter;
+        Player[] players = team.getPlayers();
+        for (int i = 0; i < players.length; i++) {
+            if (players[i] == hitter) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void applyNetworkState(
+            int redHitCount,
+            int blueHitCount,
+            Boolean lastHitTeam,
+            boolean lastTouchWasBlock,
+            int redLastHitterIndex,
+            int blueLastHitterIndex,
+            Team redTeam,
+            Team blueTeam
+    ) {
+        this.redHitCount = Math.max(0, redHitCount);
+        this.blueHitCount = Math.max(0, blueHitCount);
+        this.lastHitTeam = lastHitTeam;
+        this.lastTouchWasBlock = lastTouchWasBlock;
+        this.redLastHitter = playerAt(redTeam, redLastHitterIndex);
+        this.blueLastHitter = playerAt(blueTeam, blueLastHitterIndex);
+    }
+
+    private Player playerAt(Team team, int index) {
+        Player[] players = team.getPlayers();
+        return index >= 0 && index < players.length ? players[index] : null;
+    }
+
     public void recordHit(boolean redSide, Player hitter) {
         lastHitTeam = redSide;
         lastTouchWasBlock = hitter.blocking;

@@ -63,6 +63,21 @@ public class Ball {
         highSpeedFloorBounceSpin = false;
     }
 
+    /* 網路快照需同步最近一次觸球決定的地板旋轉強度。 */
+    public boolean usesFastFloorBounceSpin() {
+        return highSpeedFloorBounceSpin;
+    }
+
+    public void setFastFloorBounceSpin(boolean fast) {
+        highSpeedFloorBounceSpin = fast;
+    }
+
+    /* 套用網路座標後重設前一幀座標，避免下一幀誤判高速穿越網子。 */
+    public void syncPreviousPosition() {
+        previousX = x;
+        previousY = y;
+    }
+
     private void updateRotation() {
         rotationDegrees = (rotationDegrees + rotationSpeed) % 360.0;
     }
@@ -106,9 +121,9 @@ public class Ball {
         setRotationSpeed(horizontalDirection * spinSpeed);
     }
 
-    public void collideWithNet(NetHitBox netHitBox) {
+    public boolean collideWithNet(NetHitBox netHitBox) {
         if (!netHitBox.intersectsBall(this)) {
-            return;
+            return false;
         }
 
         switch (findNetCollisionSide(netHitBox)) {
@@ -116,6 +131,7 @@ public class Ball {
             case RIGHT -> bounceFromNetRight(netHitBox);
             case TOP -> bounceFromNetTop(netHitBox);
         }
+        return true;
     }
 
     private NetCollisionSide findNetCollisionSide(NetHitBox netHitBox) {

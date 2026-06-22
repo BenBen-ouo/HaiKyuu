@@ -115,6 +115,10 @@ public class SpikeEffect {
         return spikeTrailActive;
     }
 
+    public boolean getCurrentSpikeIsRed() {
+        return currentSpikeIsRed;
+    }
+
     public List<TrailPoint> getTrailPoints() {
         return trailPoints;
     }

@@ -154,4 +154,13 @@ public abstract class Player {
     protected double directionTowardNet() {
         return SideRules.directionTowardOpponent(redSide);
     }
+
+    /* 供網路快照還原角色動作與對應 hitBox 顯示。 */
+    public PlayerAction getAction() {
+        return action;
+    }
+
+    public void setActionForNetwork(PlayerAction action) {
+        this.action = action == null ? PlayerAction.IDLE : action;
+    }
 }

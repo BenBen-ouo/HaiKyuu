@@ -67,6 +67,16 @@ public class ServeHandler {
         resetFrameFlags();
     }
 
+    public ServeState getState() {
+        return state;
+    }
+
+    public void applyNetworkState(ServeState state, boolean redServing) {
+        this.state = state == null ? ServeState.READY : state;
+        this.redServing = redServing;
+        resetFrameFlags();
+    }
+
     public void updateBeforeTeams(TeamInput redInput, TeamInput blueInput) {
         serveLaunchedThisFrame = false;
 
