@@ -87,6 +87,15 @@ public class RallyScorer {
         handlePoint(redWins);
     }
 
+    // 公開 API：給點並顯示中央暫時訊息（例如 IN/OUT/四連擊）
+    public void awardPointWithMessage(boolean redWins, String message) {
+        // 設置顯示文字與顏色（由 model 存放，由 MatchDisplay 繪製）
+        model.transientMessage = message;
+        model.transientMessageTimer = 42; // 0.7s
+        model.transientMessageIsRed = redWins;
+        handlePoint(redWins);
+    }
+
     private void handlePoint(boolean redWins) {
         if (rallyOver) return; // already ended
         rallyOver = true;
