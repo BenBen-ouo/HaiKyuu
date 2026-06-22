@@ -5,7 +5,7 @@
 package model;
 
 public class RallyContactHandler {
-    private static final double SETTER_PASS_POWER = 13.5;
+    private static final double SETTER_PASS_POWER = 11.5;
     private static final double ATTACK_PASS_POWER = 15.5;
     private static final double BALL_UNSTUCK_DISTANCE = 6.0;
 
