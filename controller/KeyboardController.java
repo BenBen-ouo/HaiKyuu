@@ -1,6 +1,6 @@
 /*
-負責監聽鍵盤按下與放開，並轉換成紅隊與藍隊的 TeamInput。
-所有角色操作鍵、發球鍵與發球類型都從這裡整理成模型可讀的資料。
+負責監聽鍵盤按下與放開，並轉換成單機或區域網路模式可用的 TeamInput。
+區域網路 Player 2 也使用 WASD、JKL、Space；其畫面鏡像後會轉換成藍隊的世界座標方向。
 */
 package controller;
 
@@ -14,7 +14,7 @@ import model.TeamInput;
 public class KeyboardController implements KeyListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
 
-    public TeamInput getRedInput() {
+    public synchronized TeamInput getRedInput() {
         TeamInput input = new TeamInput();
 
         input.backLeft = isPressed(KeyEvent.VK_A);
@@ -29,12 +29,16 @@ public class KeyboardController implements KeyListener {
         input.spikeShort = isPressed(KeyEvent.VK_S);
         input.spikeLob = isPressed(KeyEvent.VK_W);
         input.servePressed = isPressed(KeyEvent.VK_SPACE);
-        input.serveType = getRedServeType();
+        input.serveType = getServeType();
 
         return input;
     }
 
-    public TeamInput getBlueInput() {
+    /*
+     * 單機測試保留的藍隊方向鍵／數字鍵控制。
+     * 區域網路模式不使用此方法，Player 2 改用 getMirroredBlueInput()。
+     */
+    public synchronized TeamInput getBlueInput() {
         TeamInput input = new TeamInput();
 
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
@@ -49,26 +53,46 @@ public class KeyboardController implements KeyListener {
         input.spikeShort = isPressed(KeyEvent.VK_DOWN);
         input.spikeLob = isPressed(KeyEvent.VK_UP);
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
-
-        // 沒有獨立數字鍵測試用 之後會刪除
-        // input.backJump = isPressed(KeyEvent.VK_0);
-        // input.backDive = isPressed(KeyEvent.VK_0);
-        // input.setterJump = isPressed(KeyEvent.VK_8);
-        // input.quickAttack = isPressed(KeyEvent.VK_9);
-        // input.quickBlock = isPressed(KeyEvent.VK_9);
-        // input.wingAttack = isPressed(KeyEvent.VK_7);
-        // input.servePressed = isPressed(KeyEvent.VK_0);
-        
         input.serveType = getBlueServeType();
 
         return input;
     }
 
-    public boolean isRestartPressed() {
+    /*
+     * Player 2 的本機畫面已水平鏡像：
+     * A = 畫面左方 = 真實世界右方（遠離網子）
+     * D = 畫面右方 = 真實世界左方（朝向網子）
+     * 其餘功能鍵與 Player 1 相同，皆為 WASD、JKL、Space。
+     */
+    public synchronized TeamInput getMirroredBlueInput() {
+        TeamInput input = new TeamInput();
+
+        input.backLeft = isPressed(KeyEvent.VK_D);
+        input.backRight = isPressed(KeyEvent.VK_A);
+        input.backJump = isPressed(KeyEvent.VK_SPACE);
+        input.backDive = isPressed(KeyEvent.VK_SPACE);
+        input.setterJump = isPressed(KeyEvent.VK_K);
+        input.quickAttack = isPressed(KeyEvent.VK_L);
+        input.quickBlock = isPressed(KeyEvent.VK_L);
+        input.wingAttack = isPressed(KeyEvent.VK_J);
+        input.spikeFlat = isPressed(KeyEvent.VK_D);
+        input.spikeShort = isPressed(KeyEvent.VK_S);
+        input.spikeLob = isPressed(KeyEvent.VK_W);
+        input.servePressed = isPressed(KeyEvent.VK_SPACE);
+        input.serveType = getServeType();
+
+        return input;
+    }
+
+    public synchronized boolean isRestartPressed() {
         return isPressed(KeyEvent.VK_R);
     }
 
-    private ServeType getRedServeType() {
+    public synchronized boolean isCancelResetPressed() {
+        return isPressed(KeyEvent.VK_N);
+    }
+
+    private ServeType getServeType() {
         if (isPressed(KeyEvent.VK_W)) {
             return ServeType.CEILING;
         }
@@ -92,7 +116,7 @@ public class KeyboardController implements KeyListener {
         if (isPressed(KeyEvent.VK_RIGHT)) {
             return ServeType.SHORT;
         }
-        
+
         return ServeType.NORMAL;
     }
 
@@ -101,15 +125,16 @@ public class KeyboardController implements KeyListener {
     }
 
     @Override
-    public void keyPressed(KeyEvent e) {
-        pressedKeys.add(e.getKeyCode());
+    public synchronized void keyPressed(KeyEvent event) {
+        pressedKeys.add(event.getKeyCode());
     }
 
     @Override
-    public void keyReleased(KeyEvent e) {
-        pressedKeys.remove(e.getKeyCode());
+    public synchronized void keyReleased(KeyEvent event) {
+        pressedKeys.remove(event.getKeyCode());
     }
 
     @Override
-    public void keyTyped(KeyEvent e) {}
+    public void keyTyped(KeyEvent event) {
+    }
 }

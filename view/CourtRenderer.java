@@ -16,20 +16,12 @@ public class CourtRenderer {
 
     public void draw(Graphics2D g) {
         drawBackground(g);
-        drawWorldBoundaryGuide(g);
         drawCourt(g);
     }
 
     private void drawBackground(Graphics2D g) {
         g.setColor(BACKGROUND_COLOR);
         g.fillRect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
-    }
-
-    private void drawWorldBoundaryGuide(Graphics2D g) {
-        g.setColor(GUIDE_COLOR);
-        g.drawString("World boundary: left=" + (int) GameConfig.WORLD_LEFT
-                + ", right=" + (int) GameConfig.WORLD_RIGHT
-                + ", top=" + (int) GameConfig.WORLD_TOP, 16, 22);
     }
 
     private void drawCourt(Graphics2D g) {

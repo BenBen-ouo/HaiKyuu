@@ -35,7 +35,6 @@ public class PlayerRenderer {
 
         drawHitBox(g, player, redTeam);
         drawAttackHitBox(g, player);
-        drawStateText(g, player, imageX, imageY);
     }
 
     private void drawPlayerImage(Graphics2D g, Image image, Player player, int x, int y) {

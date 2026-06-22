@@ -154,4 +154,16 @@ public abstract class Player {
     protected double directionTowardNet() {
         return SideRules.directionTowardOpponent(redSide);
     }
+
+    /*
+     * Client 僅用主機快照繪製畫面，不會在本地更新 Player。
+     * 因此提供受限入口讓網路快照能還原動畫狀態，供 hitBox 與角色圖片正確顯示。
+     */
+    public PlayerAction getAction() {
+        return action;
+    }
+
+    public void setActionForNetwork(PlayerAction action) {
+        this.action = action == null ? PlayerAction.IDLE : action;
+    }
 }

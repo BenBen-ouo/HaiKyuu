@@ -18,28 +18,42 @@ public class GameRenderer {
     private final MatchDisplay matchDisplay = new MatchDisplay();
 
     public void render(Graphics2D g, GameModel model) {
-        // 啟用文字抗鋸齒，提升中文顯示品質。
+        render(g, model, false);
+    }
+
+    /*
+     * Player 2 以水平鏡像的世界座標繪製球場、角色、球與特效。
+     * 分數與其他文字會在還原座標後繪製，避免文字倒置。
+     */
+    public void render(Graphics2D g, GameModel model, boolean mirrorWorld) {
         g.setRenderingHint(
                 RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON
         );
 
-        courtRenderer.draw(g);
+        Graphics2D worldGraphics = (Graphics2D) g.create();
+        if (mirrorWorld) {
+            worldGraphics.translate(GameConfig.SCREEN_WIDTH, 0);
+            worldGraphics.scale(-1, 1);
+        }
+
+        courtRenderer.draw(worldGraphics);
 
         // 畫在角色前方、球的下方，方便觀察網子實際碰撞範圍。
-        drawNetHitBox(g);
+        drawNetHitBox(worldGraphics);
 
-        playerRenderer.drawTeam(g, model.redTeam, true);
-        playerRenderer.drawTeam(g, model.blueTeam, false);
+        playerRenderer.drawTeam(worldGraphics, model.redTeam, true);
+        playerRenderer.drawTeam(worldGraphics, model.blueTeam, false);
 
-        ballRenderer.draw(g, model.ball);
-        effectRenderer.draw(g, model.effects);
+        ballRenderer.draw(worldGraphics, model.ball);
+        effectRenderer.draw(worldGraphics, model.effects);
+        drawSpikeEffects(worldGraphics, model.spikeEffect);
 
-        // 扣球軌跡與落地煙霧。
-        drawSpikeEffects(g, model.spikeEffect);
+        worldGraphics.dispose();
 
-        // 統一處理比分、規則提示與比賽結束畫面。
-        matchDisplay.draw(g, model);
+        // MatchDisplay 統一處理比分、規則提示與比賽結束畫面。
+        // Player 2 的比分維持自己的藍隊在左側，文字不會被世界鏡像翻轉。
+        matchDisplay.draw(g, model, mirrorWorld);
     }
 
     private void drawSpikeEffects(Graphics2D g, SpikeEffect spikeEffect) {
