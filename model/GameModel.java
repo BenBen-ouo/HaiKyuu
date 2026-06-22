@@ -71,6 +71,17 @@ public class GameModel {
         spikeEffect.clear();
     }
 
+    // 查詢本回合是否該隊已由舉球員接觸過
+    public boolean hasSetterTouched(boolean redSide) {
+        return rallyState.hasSetterTouched(redSide);
+    }
+
+    // 由外部呼叫：給分並顯示訊息（轉送至 RallyScorer）
+    public void awardPointWithMessage(boolean redWins, String message) {
+        // Delegate to RallyScorer via scorer (private) -- add public wrapper
+        scorer.awardPointWithMessage(redWins, message);
+    }
+
     public void update(TeamInput redInput, TeamInput blueInput) {
         ballHitNetThisFrame = false;
         // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
@@ -113,8 +124,8 @@ public class GameModel {
 
         // 四連擊判定：若本隊擊球數超過 3，則對方得分
         if (rallyState.getHitCount(redSide) > 3) {
-            // 對方得分
-            scorer.awardPoint(!redSide);
+            // 使用 RallyScorer 的 API 顯示訊息並給分（保持 IN/OUT 顯示邏輯在同一檔案）
+            scorer.awardPointWithMessage(!redSide, "四觸違規");
         }
     }
 

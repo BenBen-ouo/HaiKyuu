@@ -12,12 +12,18 @@ public class RallyState {
     private Boolean lastHitTeam = null;
     private boolean lastTouchWasBlock = false;
 
+    // 記錄本回合是否有舉球接觸（用於限制舉球只能碰一次）
+    private boolean redSetterTouched = false;
+    private boolean blueSetterTouched = false;
+
     public void resetCounters() {
         redHitCount = 0;
         blueHitCount = 0;
         redLastHitter = null;
         blueLastHitter = null;
         lastTouchWasBlock = false;
+        redSetterTouched = false;
+        blueSetterTouched = false;
     }
 
     public void resetAll() {
@@ -91,9 +97,19 @@ public class RallyState {
         if (redSide) {
             redLastHitter = hitter;
             redHitCount += hitter.blocking ? 0 : 1;
+            if (hitter instanceof Setter) {
+                redSetterTouched = true;
+            }
         } else {
             blueLastHitter = hitter;
             blueHitCount += hitter.blocking ? 0 : 1;
+            if (hitter instanceof Setter) {
+                blueSetterTouched = true;
+            }
         }
+    }
+
+    public boolean hasSetterTouched(boolean redSide) {
+        return redSide ? redSetterTouched : blueSetterTouched;
     }
 }

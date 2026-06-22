@@ -40,6 +40,11 @@ public class RallyContactHandler {
                 break;
             }
 
+            // 如果是舉球員且本回合已經碰過一次舉球，第二次不應干預球（passed through）
+            if (player instanceof Setter && model.hasSetterTouched(redSide)) {
+                continue;
+            }
+
             if (collidePlayer(player, target, redSide)) {
                 // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
