@@ -1,6 +1,6 @@
 /*
 控制層入口，將鍵盤輸入送往單機 GameModel 或 UDP Client。
-連線模式下 Client 選取自己的隊伍輸入並執行本地預測，Server 不再由畫面程序持有。
+連線模式下兩位 Client 都讀取 WASD 操作；Player 2 的世界方向由 GameClient 轉換。
 */
 package controller;
 
@@ -26,7 +26,6 @@ public class GameController {
         if (client != null) {
             client.update(
                     keyboard.getRedInput(),
-                    keyboard.getBlueInput(),
                     keyboard.isRestartPressed(),
                     keyboard.isCancelResetPressed()
             );

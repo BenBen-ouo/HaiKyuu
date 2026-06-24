@@ -16,13 +16,24 @@ public class PlayerRenderer {
     }
 
     public void drawTeam(Graphics2D g, Team team, boolean redTeam) {
-        drawPlayer(g, team.wingSpiker, redTeam);
-        drawPlayer(g, team.backPlayer, redTeam);
-        drawPlayer(g, team.setter, redTeam);
-        drawPlayer(g, team.quickAttacker, redTeam);
+        drawTeam(g, team, redTeam, true);
     }
 
-    private void drawPlayer(Graphics2D g, Player player, boolean redTeam) {
+    public void drawTeam(Graphics2D g, Team team, boolean redTeam, boolean drawStateLabels) {
+        drawPlayer(g, team.wingSpiker, redTeam, drawStateLabels);
+        drawPlayer(g, team.backPlayer, redTeam, drawStateLabels);
+        drawPlayer(g, team.setter, redTeam, drawStateLabels);
+        drawPlayer(g, team.quickAttacker, redTeam, drawStateLabels);
+    }
+
+    public void drawMirroredStateLabels(Graphics2D g, Team team) {
+        drawMirroredStateText(g, team.wingSpiker);
+        drawMirroredStateText(g, team.backPlayer);
+        drawMirroredStateText(g, team.setter);
+        drawMirroredStateText(g, team.quickAttacker);
+    }
+
+    private void drawPlayer(Graphics2D g, Player player, boolean redTeam, boolean drawStateLabels) {
         int imageX = (int) player.x;
         int imageY = (int) player.y;
         Image image = assets.get(player.assetName);
@@ -35,7 +46,9 @@ public class PlayerRenderer {
 
         drawHitBox(g, player, redTeam);
         drawAttackHitBox(g, player);
-        drawStateText(g, player, imageX, imageY);
+        if (drawStateLabels) {
+            drawStateText(g, player, imageX, imageY);
+        }
     }
 
     private void drawPlayerImage(Graphics2D g, Image image, Player player, int x, int y) {
@@ -48,8 +61,6 @@ public class PlayerRenderer {
     }
 
     private void drawFallbackBody(Graphics2D g, Player player, boolean redTeam, int x, int y) {
-        g.setColor(redTeam ? new Color(0, 0, 0) : new Color(0, 0, 0)); 
-        //測試用看有顏色的攻擊 hitBox，最後後刪除
         g.setColor(redTeam ? new Color(220, 90, 90) : new Color(80, 125, 220));
         g.fillRoundRect(x, y, player.imageWidth, player.imageHeight, 14, 14);
     }
@@ -70,17 +81,13 @@ public class PlayerRenderer {
     }
 
     private void fillHitBox(Graphics2D g, HitBox box, boolean redTeam) {
-        g.setColor(redTeam ? new Color(0, 0, 0, 0) : new Color(0, 0, 0, 0)); 
-        //測試用看有顏色的攻擊 hitBox，最後後刪除
-        g.setColor(redTeam ? new Color(255, 40, 40, 70) : new Color(0, 90, 255, 70));      
+        g.setColor(redTeam ? new Color(255, 40, 40, 70) : new Color(0, 90, 255, 70));
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
         g.fillRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
     }
 
     private void strokeHitBox(Graphics2D g, HitBox box, boolean redTeam) {
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
-        g.setColor(redTeam ? new Color(0, 0, 0, 0) : new Color(0, 0, 0, 0)); 
-        //測試用看有顏色的攻擊 hitBox，最後後刪除
         g.setColor(redTeam ? new Color(220, 0, 0) : new Color(0, 60, 220));
         g.setStroke(new BasicStroke(2));
         g.drawRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
@@ -93,14 +100,10 @@ public class PlayerRenderer {
         }
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-        g.setColor(new Color(0, 0, 0, 0));
-        //測試用看有顏色的攻擊 hitBox
         g.setColor(new Color(255, 190, 0, 80));
         g.fillRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
 
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
-        g.setColor(new Color(0, 0, 0, 0));
-        //測試用看有顏色的攻擊 hitBox
         g.setColor(new Color(255, 140, 0));
         g.setStroke(new BasicStroke(2));
         g.drawRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
@@ -112,46 +115,45 @@ public class PlayerRenderer {
         drawStateLabel(g, player.diving, "DIVE", Color.MAGENTA, x + 4, y - 8);
     }
 
+    private void drawMirroredStateText(Graphics2D g, Player player) {
+        drawMirroredStateLabel(g, player.attacking, "ATK", Color.RED, player.x + 8, player.y - 8);
+        drawMirroredStateLabel(g, player.blocking, "BLK", Color.BLUE, player.x + 8, player.y - 22);
+        drawMirroredStateLabel(g, player.diving, "DIVE", Color.MAGENTA, player.x + 4, player.y - 8);
+    }
+
     private void drawStateLabel(Graphics2D g, boolean visible, String text, Color color, int x, int y) {
         if (!visible) {
             return;
         }
-
         g.setColor(color);
         g.drawString(text, x, y);
     }
 
-    private int hitX(HitBox box) {
-        return (int) Math.round(box.getX());
+    private void drawMirroredStateLabel(
+            Graphics2D g,
+            boolean visible,
+            String text,
+            Color color,
+            double worldX,
+            double worldY
+    ) {
+        if (!visible) {
+            return;
+        }
+        int textWidth = g.getFontMetrics().stringWidth(text);
+        int screenX = (int) Math.round(GameConfig.SCREEN_WIDTH - worldX - textWidth);
+        g.setColor(color);
+        g.drawString(text, screenX, (int) Math.round(worldY));
     }
 
-    private int hitY(HitBox box) {
-        return (int) Math.round(box.getY());
-    }
-
-    private int hitWidth(HitBox box) {
-        return (int) Math.round(box.width);
-    }
-
-    private int hitHeight(HitBox box) {
-        return (int) Math.round(box.height);
-    }
-
-    private int attackX(AttackHitBox box) {
-        return (int) Math.round(box.getX());
-    }
-
-    private int attackY(AttackHitBox box) {
-        return (int) Math.round(box.getY());
-    }
-
-    private int attackWidth(AttackHitBox box) {
-        return (int) Math.round(box.width);
-    }
-
-    private int attackHeight(AttackHitBox box) {
-        return (int) Math.round(box.height);
-    }
+    private int hitX(HitBox box) { return (int) Math.round(box.getX()); }
+    private int hitY(HitBox box) { return (int) Math.round(box.getY()); }
+    private int hitWidth(HitBox box) { return (int) Math.round(box.width); }
+    private int hitHeight(HitBox box) { return (int) Math.round(box.height); }
+    private int attackX(AttackHitBox box) { return (int) Math.round(box.getX()); }
+    private int attackY(AttackHitBox box) { return (int) Math.round(box.getY()); }
+    private int attackWidth(AttackHitBox box) { return (int) Math.round(box.width); }
+    private int attackHeight(AttackHitBox box) { return (int) Math.round(box.height); }
 
     private static class GraphicsState {
         private final AffineTransform transform;
@@ -159,9 +161,9 @@ public class PlayerRenderer {
         private final Stroke stroke;
 
         private GraphicsState(Graphics2D g) {
-            this.transform = g.getTransform();
-            this.composite = g.getComposite();
-            this.stroke = g.getStroke();
+            transform = g.getTransform();
+            composite = g.getComposite();
+            stroke = g.getStroke();
         }
 
         static GraphicsState capture(Graphics2D g) {

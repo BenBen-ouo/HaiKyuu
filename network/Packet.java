@@ -1,7 +1,7 @@
 /*
- * UDP 遊戲資料定義。
- * TeamInput 會壓成 bitmask；CompactState 僅在過網或強制事件時以 UdpCodec 二進位傳送。
- */
+UDP 遊戲資料定義。
+TeamInput 會壓成 bitmask；完整狀態只在指定同步事件以 UdpCodec 二進位傳送。
+*/
 package network;
 
 import model.Ball;
@@ -14,8 +14,6 @@ import model.Team;
 import model.TeamInput;
 
 public final class Packet {
-    public static final int PROTOCOL_VERSION = 3;
-
     public static final int INPUT_BACK_LEFT = 1 << 0;
     public static final int INPUT_BACK_RIGHT = 1 << 1;
     public static final int INPUT_BACK_JUMP = 1 << 2;
@@ -35,13 +33,10 @@ public final class Packet {
     }
 
     public enum EventType {
-        NET_CROSS,
         SERVE,
-        NET_BOUNCE,
-        LANDING,
         SCORE,
-        RULE,
-        RESET
+        RESET,
+        HIGH_NET_SYNC
     }
 
     public static int encodeInput(TeamInput input) {
@@ -60,8 +55,7 @@ public final class Packet {
         if (input.servePressed) mask |= INPUT_SERVE;
 
         int serveType = input.serveType == null ? ServeType.NORMAL.ordinal() : input.serveType.ordinal();
-        mask |= (serveType & 0x3) << INPUT_SERVE_TYPE_SHIFT;
-        return mask;
+        return mask | ((serveType & 0x3) << INPUT_SERVE_TYPE_SHIFT);
     }
 
     public static TeamInput decodeInput(int mask) {
@@ -81,9 +75,7 @@ public final class Packet {
 
         int typeOrdinal = (mask & INPUT_SERVE_TYPE_MASK) >>> INPUT_SERVE_TYPE_SHIFT;
         ServeType[] types = ServeType.values();
-        input.serveType = typeOrdinal >= 0 && typeOrdinal < types.length
-                ? types[typeOrdinal]
-                : ServeType.NORMAL;
+        input.serveType = typeOrdinal < types.length ? types[typeOrdinal] : ServeType.NORMAL;
         return input;
     }
 
@@ -115,9 +107,6 @@ public final class Packet {
         public final int pendingTouchOutWinnerCode;
         public final int matchOverCountdownFrames;
 
-        public final boolean spikeTrailActive;
-        public final boolean spikeTrailRed;
-
         public CompactState(
                 BallState ball,
                 TeamState redTeam,
@@ -141,9 +130,7 @@ public final class Packet {
                 int transientMessageColorCode,
                 boolean pendingTouchOut,
                 int pendingTouchOutWinnerCode,
-                int matchOverCountdownFrames,
-                boolean spikeTrailActive,
-                boolean spikeTrailRed
+                int matchOverCountdownFrames
         ) {
             this.ball = ball;
             this.redTeam = redTeam;
@@ -168,8 +155,6 @@ public final class Packet {
             this.pendingTouchOut = pendingTouchOut;
             this.pendingTouchOutWinnerCode = pendingTouchOutWinnerCode;
             this.matchOverCountdownFrames = matchOverCountdownFrames;
-            this.spikeTrailActive = spikeTrailActive;
-            this.spikeTrailRed = spikeTrailRed;
         }
 
         public static CompactState from(GameModel model) {
@@ -196,9 +181,7 @@ public final class Packet {
                     encodeNullableBoolean(model.transientMessageIsRed),
                     model.pendingTouchOut,
                     encodeNullableBoolean(model.pendingTouchOutWinner),
-                    model.matchOverCountdownFrames,
-                    model.spikeEffect.isSpikeTrailActive(),
-                    model.spikeEffect.getCurrentSpikeIsRed()
+                    model.matchOverCountdownFrames
             );
         }
 
@@ -206,14 +189,7 @@ public final class Packet {
             ball.applyTo(model.ball);
             redTeam.applyTo(model.redTeam);
             blueTeam.applyTo(model.blueTeam);
-            applyMetadataTo(model);
-        }
 
-        /*
-         * 小誤差校正時，先同步比分、發球與回合規則，
-         * 座標則交由 GameClient 在數個畫面幀內平滑拉回。
-         */
-        public void applyMetadataTo(GameModel model) {
             model.redScore = redScore;
             model.blueScore = blueScore;
             model.matchOver = matchOver;
@@ -240,44 +216,6 @@ public final class Packet {
                     rallyOver,
                     deadBallTimer
             );
-
-            if (spikeTrailActive) {
-                if (!model.spikeEffect.isSpikeTrailActive()
-                        || model.spikeEffect.getCurrentSpikeIsRed() != spikeTrailRed) {
-                    model.spikeEffect.startSpikeTrail(spikeTrailRed);
-                }
-            } else {
-                model.spikeEffect.stopSpikeTrail();
-            }
-        }
-
-        public void blendPositionsInto(GameModel model, double amount) {
-            blendBall(model.ball, amount);
-            redTeam.blendPositionsInto(model.redTeam, amount);
-            blueTeam.blendPositionsInto(model.blueTeam, amount);
-        }
-
-        private void blendBall(Ball target, double amount) {
-            target.x += (ball.x - target.x) * amount;
-            target.y += (ball.y - target.y) * amount;
-            target.vx += (ball.vx - target.vx) * amount;
-            target.vy += (ball.vy - target.vy) * amount;
-            target.rotationDegrees += (ball.rotationDegrees - target.rotationDegrees) * amount;
-            target.rotationSpeed += (ball.rotationSpeed - target.rotationSpeed) * amount;
-            target.setFastFloorBounceSpin(ball.fastFloorBounceSpin);
-            target.syncPreviousPosition();
-        }
-
-        public double maxPositionDifference(GameModel model) {
-            double max = distance(ball.x, ball.y, model.ball.x, model.ball.y);
-            max = Math.max(max, redTeam.maxPositionDifference(model.redTeam));
-            return Math.max(max, blueTeam.maxPositionDifference(model.blueTeam));
-        }
-
-        private static double distance(double x1, double y1, double x2, double y2) {
-            double dx = x1 - x2;
-            double dy = y1 - y2;
-            return Math.sqrt(dx * dx + dy * dy);
         }
     }
 
@@ -357,22 +295,6 @@ public final class Packet {
             Player[] targets = team.getPlayers();
             for (int i = 0; i < targets.length && i < players.length; i++) {
                 players[i].applyTo(targets[i]);
-            }
-        }
-
-        public double maxPositionDifference(Team team) {
-            double max = 0;
-            Player[] targets = team.getPlayers();
-            for (int i = 0; i < targets.length && i < players.length; i++) {
-                max = Math.max(max, players[i].positionDifference(targets[i]));
-            }
-            return max;
-        }
-
-        public void blendPositionsInto(Team team, double amount) {
-            Player[] targets = team.getPlayers();
-            for (int i = 0; i < targets.length && i < players.length; i++) {
-                players[i].blendPositionInto(targets[i], amount);
             }
         }
     }
@@ -466,35 +388,16 @@ public final class Packet {
                 player.attackHitBox.disable();
             }
         }
-
-        public double positionDifference(Player player) {
-            double dx = x - player.x;
-            double dy = y - player.y;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        public void blendPositionInto(Player player, double amount) {
-            player.x += (x - player.x) * amount;
-            player.y += (y - player.y) * amount;
-            player.vx += (vx - player.vx) * amount;
-            player.vy += (vy - player.vy) * amount;
-        }
     }
 
     public static int encodeNullableBoolean(Boolean value) {
-        if (value == null) {
-            return 0;
-        }
+        if (value == null) return 0;
         return value ? 1 : 2;
     }
 
     public static Boolean decodeNullableBoolean(int code) {
-        if (code == 1) {
-            return Boolean.TRUE;
-        }
-        if (code == 2) {
-            return Boolean.FALSE;
-        }
+        if (code == 1) return Boolean.TRUE;
+        if (code == 2) return Boolean.FALSE;
         return null;
     }
 }

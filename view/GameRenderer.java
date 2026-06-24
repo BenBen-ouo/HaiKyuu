@@ -18,28 +18,48 @@ public class GameRenderer {
     private final MatchDisplay matchDisplay = new MatchDisplay();
 
     public void render(Graphics2D g, GameModel model) {
-        // 啟用文字抗鋸齒，提升中文顯示品質。
+        render(g, model, false);
+    }
+
+    public void render(Graphics2D g, GameModel model, boolean mirrorWorld) {
         g.setRenderingHint(
                 RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON
         );
 
-        courtRenderer.draw(g);
+        if (mirrorWorld) {
+            drawMirroredWorld(g, model);
+        } else {
+            drawWorld(g, model, true);
+        }
 
-        // 畫在角色前方、球的下方，方便觀察網子實際碰撞範圍。
+        // 比分、規則提示與比賽結束畫面永遠保持正常方向。
+        matchDisplay.draw(g, model);
+    }
+
+    private void drawMirroredWorld(Graphics2D g, GameModel model) {
+        Graphics2D worldGraphics = (Graphics2D) g.create();
+        worldGraphics.translate(GameConfig.SCREEN_WIDTH, 0);
+        worldGraphics.scale(-1, 1);
+        drawWorld(worldGraphics, model, false);
+        worldGraphics.dispose();
+
+        // 世界座標已鏡像，但除錯文字維持可讀。
+        courtRenderer.drawWorldBoundaryGuide(g);
+        playerRenderer.drawMirroredStateLabels(g, model.redTeam);
+        playerRenderer.drawMirroredStateLabels(g, model.blueTeam);
+    }
+
+    private void drawWorld(Graphics2D g, GameModel model, boolean drawStateLabels) {
+        courtRenderer.draw(g, drawStateLabels);
         drawNetHitBox(g);
 
-        playerRenderer.drawTeam(g, model.redTeam, true);
-        playerRenderer.drawTeam(g, model.blueTeam, false);
+        playerRenderer.drawTeam(g, model.redTeam, true, drawStateLabels);
+        playerRenderer.drawTeam(g, model.blueTeam, false, drawStateLabels);
 
         ballRenderer.draw(g, model.ball);
         effectRenderer.draw(g, model.effects);
-
-        // 扣球軌跡與落地煙霧。
         drawSpikeEffects(g, model.spikeEffect);
-
-        // 統一處理比分、規則提示與比賽結束畫面。
-        matchDisplay.draw(g, model);
     }
 
     private void drawSpikeEffects(Graphics2D g, SpikeEffect spikeEffect) {

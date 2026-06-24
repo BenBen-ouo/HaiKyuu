@@ -1,6 +1,6 @@
 /*
 純 UDP Client。
-本機以 60 FPS 預測雙方輸入；Server 僅轉傳輸入，並在過網或強制事件時回傳權威快照。
+Client 以 60 tick/s 預測雙方輸入；Server 只轉傳輸入，並在指定事件送回權威快照。
 */
 package network;
 
@@ -18,10 +18,9 @@ import model.TeamInput;
 public final class GameClient implements NetworkView {
     private static final long HELLO_INTERVAL_NANOS = 250_000_000L;
     private static final long CONTROL_RESEND_INTERVAL_NANOS = 250_000_000L;
+    private static final long INPUT_HEARTBEAT_NANOS = 500_000_000L;
     private static final long SERVER_TIMEOUT_NANOS = 3_000_000_000L;
-    private static final int INPUT_HEARTBEAT_TICKS = 5;
-    private static final double HARD_SNAP_DISTANCE = 75.0;
-    private static final int NET_CROSS_BLEND_FRAMES = 8;
+    private static final long TERMINATION_ACK_GRACE_NANOS = 2_000_000_000L;
 
     private final GameModel renderModel;
     private final String hostIp;
@@ -44,15 +43,16 @@ public final class GameClient implements NetworkView {
     private int lastInputMask = Integer.MIN_VALUE;
     private int remoteInputMask;
     private boolean receivedRemoteInput;
-    private int lastReceivedEventId;
+    private int lastAppliedEventId;
     private boolean redResetConfirmed;
     private boolean blueResetConfirmed;
     private boolean previousRestartDown;
     private boolean previousCancelDown;
     private long lastHelloNanos;
     private long lastControlSendNanos;
+    private long lastInputSendNanos;
+    private long terminationAckUntilNanos;
     private PendingControl pendingControl;
-    private Reconciliation reconciliation;
 
     public GameClient(GameModel renderModel, String hostIp) throws IOException {
         this.renderModel = renderModel;
@@ -66,22 +66,18 @@ public final class GameClient implements NetworkView {
         sendHello();
     }
 
-    public void update(
-            TeamInput redKeyboardInput,
-            TeamInput blueKeyboardInput,
-            boolean restartDown,
-            boolean cancelResetDown
-    ) {
-        if (sessionEnded) {
-            return;
-        }
-
+    public void update(TeamInput keyboardInput, boolean restartDown, boolean cancelResetDown) {
         clientTick++;
         drainIncoming();
 
+        if (sessionEnded) {
+            closeAfterTerminationAckGrace();
+            return;
+        }
+
         String failure = receiveFailure.getAndSet(null);
         if (failure != null) {
-            endSession(failure);
+            endLocally();
             return;
         }
 
@@ -93,7 +89,7 @@ public final class GameClient implements NetworkView {
         processControls(restartDown, cancelResetDown);
         resendPendingControlIfNeeded();
 
-        TeamInput localInput = redSide ? redKeyboardInput : blueKeyboardInput;
+        TeamInput localInput = toWorldInput(keyboardInput);
         sendInputIfNeeded(localInput);
 
         if (receivedRemoteInput) {
@@ -103,23 +99,23 @@ public final class GameClient implements NetworkView {
             } else {
                 renderModel.update(remoteInput, localInput);
             }
-            applyReconciliationStep();
         }
 
         if (receivedRemoteInput && System.nanoTime() - lastServerPacketNanos > SERVER_TIMEOUT_NANOS) {
-            endSession("Server UDP 中斷，本局結束");
+            endLocally();
         }
     }
 
     private void receiveLoop() {
         byte[] buffer = new byte[4096];
-        while (!socket.isClosed() && !sessionEnded) {
+        while (!socket.isClosed()) {
             DatagramPacket datagram = new DatagramPacket(buffer, buffer.length);
             try {
                 socket.receive(datagram);
                 if (!datagram.getAddress().equals(hostAddress) || datagram.getPort() != GameServer.UDP_PORT) {
                     continue;
                 }
+
                 UdpCodec.Decoded decoded = UdpCodec.decode(datagram.getData(), datagram.getLength());
                 if (decoded != null) {
                     incoming.offer(decoded);
@@ -128,7 +124,7 @@ public final class GameClient implements NetworkView {
                 return;
             } catch (IOException exception) {
                 if (!sessionEnded) {
-                    receiveFailure.compareAndSet(null, "UDP 接收失敗，本局結束");
+                    receiveFailure.compareAndSet(null, exception.getMessage());
                 }
                 return;
             }
@@ -139,24 +135,22 @@ public final class GameClient implements NetworkView {
         UdpCodec.Decoded decoded;
         while ((decoded = incoming.poll()) != null) {
             if (decoded instanceof UdpCodec.Welcome welcome) {
-                handleWelcome(welcome);
-            } else if (decoded instanceof UdpCodec.Reject reject) {
-                if (reject.clientNonce == clientNonce) {
-                    endSession(reject.message == null ? "Server 拒絕連線" : reject.message);
+                if (!sessionEnded) {
+                    handleWelcome(welcome);
                 }
             } else if (decoded instanceof UdpCodec.RemoteInputFrame remote) {
-                if (isOwnToken(remote.token)) {
+                if (!sessionEnded && isOwnToken(remote.token)) {
                     remoteInputMask = remote.inputMask;
                     receivedRemoteInput = true;
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.Event event) {
-                if (isOwnToken(event.token)) {
+                if (!sessionEnded && isOwnToken(event.token)) {
                     handleEvent(event);
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.ControlStatus status) {
-                if (isOwnToken(status.token)) {
+                if (!sessionEnded && isOwnToken(status.token)) {
                     redResetConfirmed = status.redResetConfirmed;
                     blueResetConfirmed = status.blueResetConfirmed;
                     if (pendingControl != null && status.acknowledgedSequence >= pendingControl.sequence) {
@@ -164,9 +158,9 @@ public final class GameClient implements NetworkView {
                     }
                     markServerPacketReceived();
                 }
-            } else if (decoded instanceof UdpCodec.SessionEnd end) {
-                if (isOwnToken(end.token)) {
-                    endSession(end.message == null ? "本局結束" : end.message);
+            } else if (decoded instanceof UdpCodec.MatchAborted aborted) {
+                if (isOwnToken(aborted.token)) {
+                    handleMatchAborted(aborted);
                 }
             }
         }
@@ -184,33 +178,24 @@ public final class GameClient implements NetworkView {
         redSide = welcome.redSide;
         assigned = true;
         welcome.state.applyTo(renderModel);
-        reconciliation = null;
         markServerPacketReceived();
     }
 
     private void handleEvent(UdpCodec.Event event) {
-        if (event.eventId <= lastReceivedEventId) {
+        sendEventAck(event.eventId);
+        if (event.eventId <= lastAppliedEventId) {
             return;
         }
 
-        lastReceivedEventId = event.eventId;
-        if (event.type == Packet.EventType.NET_CROSS) {
-            event.state.applyMetadataTo(renderModel);
-            double difference = event.state.maxPositionDifference(renderModel);
-            if (difference >= HARD_SNAP_DISTANCE) {
-                event.state.applyTo(renderModel);
-                reconciliation = null;
-            } else if (difference > 0.25) {
-                reconciliation = new Reconciliation(event.state, NET_CROSS_BLEND_FRAMES);
-            }
-            return;
-        }
-
+        lastAppliedEventId = event.eventId;
         event.state.applyTo(renderModel);
-        reconciliation = null;
-        if (event.type == Packet.EventType.LANDING || event.type == Packet.EventType.SCORE) {
-            renderModel.spikeEffect.spawnSmoke(event.state.ball.x, event.state.ball.y);
-        }
+    }
+
+    private void handleMatchAborted(UdpCodec.MatchAborted aborted) {
+        sendEventAck(aborted.eventId);
+        sessionEnded = true;
+        endMessage = GameServer.MATCH_ABORTED_MESSAGE;
+        terminationAckUntilNanos = System.nanoTime() + TERMINATION_ACK_GRACE_NANOS;
     }
 
     private void processControls(boolean restartDown, boolean cancelResetDown) {
@@ -232,10 +217,7 @@ public final class GameClient implements NetworkView {
     }
 
     private void resendPendingControlIfNeeded() {
-        if (pendingControl == null) {
-            return;
-        }
-        if (System.nanoTime() - lastControlSendNanos >= CONTROL_RESEND_INTERVAL_NANOS) {
+        if (pendingControl != null && System.nanoTime() - lastControlSendNanos >= CONTROL_RESEND_INTERVAL_NANOS) {
             sendPendingControl();
         }
     }
@@ -249,30 +231,38 @@ public final class GameClient implements NetworkView {
             socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
             lastControlSendNanos = System.nanoTime();
         } catch (IOException exception) {
-            endSession("UDP 傳送失敗，本局結束");
+            endLocally();
         }
     }
 
     private void sendInputIfNeeded(TeamInput input) {
         int mask = Packet.encodeInput(input);
+        long now = System.nanoTime();
         boolean changed = mask != lastInputMask;
-        boolean heartbeat = clientTick % INPUT_HEARTBEAT_TICKS == 0;
+        boolean heartbeat = now - lastInputSendNanos >= INPUT_HEARTBEAT_NANOS;
         if (!changed && !heartbeat) {
             return;
         }
 
         try {
-            byte[] data = UdpCodec.input(
-                    sessionToken,
-                    ++inputSequence,
-                    clientTick,
-                    mask,
-                    lastReceivedEventId
-            );
+            byte[] data = UdpCodec.input(sessionToken, ++inputSequence, clientTick, mask);
             socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
             lastInputMask = mask;
+            lastInputSendNanos = now;
         } catch (IOException exception) {
-            endSession("UDP 傳送失敗，本局結束");
+            endLocally();
+        }
+    }
+
+    private void sendEventAck(int eventId) {
+        if (!assigned || socket.isClosed()) {
+            return;
+        }
+        try {
+            byte[] data = UdpCodec.eventAck(sessionToken, eventId);
+            socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
+        } catch (IOException exception) {
+            endLocally();
         }
     }
 
@@ -288,22 +278,36 @@ public final class GameClient implements NetworkView {
             socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
             lastHelloNanos = System.nanoTime();
         } catch (IOException exception) {
-            endSession("無法連線到 UDP Server，本局結束");
+            endLocally();
         }
     }
 
-    private void applyReconciliationStep() {
-        if (reconciliation == null) {
-            return;
+    private TeamInput toWorldInput(TeamInput keyboardInput) {
+        TeamInput input = copyInput(keyboardInput);
+        if (!redSide) {
+            boolean left = input.backLeft;
+            input.backLeft = input.backRight;
+            input.backRight = left;
         }
+        return input;
+    }
 
-        double amount = 1.0 / reconciliation.framesRemaining;
-        reconciliation.target.blendPositionsInto(renderModel, amount);
-        reconciliation.framesRemaining--;
-        if (reconciliation.framesRemaining <= 0) {
-            reconciliation.target.applyTo(renderModel);
-            reconciliation = null;
-        }
+    private TeamInput copyInput(TeamInput source) {
+        TeamInput input = new TeamInput();
+        input.backLeft = source.backLeft;
+        input.backRight = source.backRight;
+        input.backJump = source.backJump;
+        input.backDive = source.backDive;
+        input.setterJump = source.setterJump;
+        input.quickAttack = source.quickAttack;
+        input.quickBlock = source.quickBlock;
+        input.wingAttack = source.wingAttack;
+        input.spikeFlat = source.spikeFlat;
+        input.spikeShort = source.spikeShort;
+        input.spikeLob = source.spikeLob;
+        input.servePressed = source.servePressed;
+        input.serveType = source.serveType;
+        return input;
     }
 
     private boolean isOwnToken(long token) {
@@ -314,12 +318,19 @@ public final class GameClient implements NetworkView {
         lastServerPacketNanos = System.nanoTime();
     }
 
-    private void endSession(String message) {
+    private void closeAfterTerminationAckGrace() {
+        if (terminationAckUntilNanos > 0 && System.nanoTime() >= terminationAckUntilNanos) {
+            socket.close();
+            terminationAckUntilNanos = 0;
+        }
+    }
+
+    private void endLocally() {
         if (sessionEnded) {
             return;
         }
         sessionEnded = true;
-        endMessage = message;
+        endMessage = GameServer.MATCH_ABORTED_MESSAGE;
         socket.close();
     }
 
@@ -349,7 +360,7 @@ public final class GameClient implements NetworkView {
         if (!receivedRemoteInput) {
             return redSide ? "已加入為 Player 1，等待 Player 2" : "已加入為 Player 2，等待 Player 1";
         }
-        return "已連線（本地預測，過網／事件校正）";
+        return "已連線（本地預測，事件／高球校正）";
     }
 
     @Override
@@ -376,17 +387,21 @@ public final class GameClient implements NetworkView {
     @Override
     public void close() {
         if (!sessionEnded && assigned) {
-            PendingControl disconnect = new PendingControl(++inputSequence, UdpCodec.ControlAction.DISCONNECT);
-            for (int i = 0; i < 3; i++) {
-                try {
-                    byte[] data = UdpCodec.control(sessionToken, disconnect.sequence, disconnect.action);
-                    socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
-                } catch (IOException ignored) {
-                    break;
-                }
+            sendDisconnectControl();
+        }
+        endLocally();
+    }
+
+    private void sendDisconnectControl() {
+        PendingControl disconnect = new PendingControl(++inputSequence, UdpCodec.ControlAction.DISCONNECT);
+        for (int i = 0; i < 3; i++) {
+            try {
+                byte[] data = UdpCodec.control(sessionToken, disconnect.sequence, disconnect.action);
+                socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
+            } catch (IOException ignored) {
+                return;
             }
         }
-        endSession("本局已關閉");
     }
 
     private static final class PendingControl {
@@ -396,16 +411,6 @@ public final class GameClient implements NetworkView {
         PendingControl(int sequence, UdpCodec.ControlAction action) {
             this.sequence = sequence;
             this.action = action;
-        }
-    }
-
-    private static final class Reconciliation {
-        final Packet.CompactState target;
-        int framesRemaining;
-
-        Reconciliation(Packet.CompactState target, int framesRemaining) {
-            this.target = target;
-            this.framesRemaining = framesRemaining;
         }
     }
 }

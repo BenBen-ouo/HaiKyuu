@@ -1,6 +1,6 @@
 /*
-Swing 遊戲畫面面板，負責啟動 60 FPS 更新與重繪。
-連線模式每幀交由 GameClient 執行本地預測與 UDP 封包處理，並顯示網路狀態。
+Swing 遊戲畫面面板，負責固定 60 tick/s 更新與重繪。
+連線模式每個 tick 交由 GameClient 執行本地預測與 UDP 封包處理，並顯示網路狀態。
 */
 package view;
 
@@ -35,23 +35,31 @@ public class GamePanel extends JPanel {
 
     public void startGameLoop() {
         Thread loop = new Thread(() -> {
-            final long frameTime = 1000L / 60L;
+            long tickNanos = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
+            long nextTickNanos = System.nanoTime();
+
             while (!Thread.currentThread().isInterrupted()) {
-                long start = System.currentTimeMillis();
                 controller.update();
                 repaint();
-                long used = System.currentTimeMillis() - start;
-                long sleep = Math.max(2L, frameTime - used);
-                try {
-                    Thread.sleep(sleep);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
+
+                nextTickNanos += tickNanos;
+                sleepUntil(nextTickNanos);
             }
         }, "haikyuu-game-loop");
         loop.setDaemon(true);
         loop.start();
+    }
+
+    private void sleepUntil(long deadlineNanos) {
+        long remaining = deadlineNanos - System.nanoTime();
+        if (remaining <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(remaining / 1_000_000L, (int) (remaining % 1_000_000L));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
@@ -59,7 +67,8 @@ public class GamePanel extends JPanel {
         super.paintComponent(graphics);
         Graphics2D g = (Graphics2D) graphics.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        renderer.render(g, model);
+        boolean mirrorWorld = networkView != null && networkView.isBluePerspective();
+        renderer.render(g, model, mirrorWorld);
         networkStatusRenderer.draw(g, networkView);
         g.dispose();
     }

@@ -1,6 +1,6 @@
 /*
 純 UDP 二進位協定。
-握手、輸入、遠端輸入、可靠事件與重設控制都走 UDP 5001；重要事件以 eventId / ACK 重送。
+握手、輸入、遠端輸入、可靠事件、EVENT_ACK、重設控制與對局中止都走 UDP 5001。
 */
 package network;
 
@@ -12,17 +12,17 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 2;
+    private static final short VERSION = 3;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
-    private static final byte TYPE_REJECT = 3;
-    private static final byte TYPE_INPUT = 4;
-    private static final byte TYPE_REMOTE_INPUT = 5;
-    private static final byte TYPE_EVENT = 6;
-    private static final byte TYPE_CONTROL = 7;
-    private static final byte TYPE_CONTROL_STATUS = 8;
-    private static final byte TYPE_SESSION_END = 9;
+    private static final byte TYPE_INPUT = 3;
+    private static final byte TYPE_REMOTE_INPUT = 4;
+    private static final byte TYPE_EVENT = 5;
+    private static final byte TYPE_CONTROL = 6;
+    private static final byte TYPE_CONTROL_STATUS = 7;
+    private static final byte TYPE_EVENT_ACK = 8;
+    private static final byte TYPE_MATCH_ABORTED = 9;
 
     public enum ControlAction {
         RESET_REQUEST,
@@ -38,11 +38,9 @@ public final class UdpCodec {
 
     public static final class Hello implements Decoded {
         public final long clientNonce;
-        public final int protocolVersion;
 
-        private Hello(long clientNonce, int protocolVersion) {
+        private Hello(long clientNonce) {
             this.clientNonce = clientNonce;
-            this.protocolVersion = protocolVersion;
         }
     }
 
@@ -62,29 +60,17 @@ public final class UdpCodec {
         }
     }
 
-    public static final class Reject implements Decoded {
-        public final long clientNonce;
-        public final String message;
-
-        private Reject(long clientNonce, String message) {
-            this.clientNonce = clientNonce;
-            this.message = message;
-        }
-    }
-
     public static final class InputFrame implements Decoded {
         public final long token;
         public final int sequence;
         public final int clientTick;
         public final int inputMask;
-        public final int lastReceivedEventId;
 
-        private InputFrame(long token, int sequence, int clientTick, int inputMask, int lastReceivedEventId) {
+        private InputFrame(long token, int sequence, int clientTick, int inputMask) {
             this.token = token;
             this.sequence = sequence;
             this.clientTick = clientTick;
             this.inputMask = inputMask;
-            this.lastReceivedEventId = lastReceivedEventId;
         }
     }
 
@@ -116,6 +102,26 @@ public final class UdpCodec {
         }
     }
 
+    public static final class EventAck implements Decoded {
+        public final long token;
+        public final int eventId;
+
+        private EventAck(long token, int eventId) {
+            this.token = token;
+            this.eventId = eventId;
+        }
+    }
+
+    public static final class MatchAborted implements Decoded {
+        public final long token;
+        public final int eventId;
+
+        private MatchAborted(long token, int eventId) {
+            this.token = token;
+            this.eventId = eventId;
+        }
+    }
+
     public static final class ControlFrame implements Decoded {
         public final long token;
         public final int sequence;
@@ -142,21 +148,8 @@ public final class UdpCodec {
         }
     }
 
-    public static final class SessionEnd implements Decoded {
-        public final long token;
-        public final String message;
-
-        private SessionEnd(long token, String message) {
-            this.token = token;
-            this.message = message;
-        }
-    }
-
     public static byte[] hello(long clientNonce) throws IOException {
-        return write(TYPE_HELLO, out -> {
-            out.writeLong(clientNonce);
-            out.writeInt(Packet.PROTOCOL_VERSION);
-        });
+        return write(TYPE_HELLO, out -> out.writeLong(clientNonce));
     }
 
     public static byte[] welcome(
@@ -175,26 +168,12 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] reject(long clientNonce, String message) throws IOException {
-        return write(TYPE_REJECT, out -> {
-            out.writeLong(clientNonce);
-            writeNullableString(out, message);
-        });
-    }
-
-    public static byte[] input(
-            long token,
-            int sequence,
-            int clientTick,
-            int inputMask,
-            int lastReceivedEventId
-    ) throws IOException {
+    public static byte[] input(long token, int sequence, int clientTick, int inputMask) throws IOException {
         return write(TYPE_INPUT, out -> {
             out.writeLong(token);
             out.writeInt(sequence);
             out.writeInt(clientTick);
             out.writeInt(inputMask);
-            out.writeInt(lastReceivedEventId);
         });
     }
 
@@ -222,6 +201,20 @@ public final class UdpCodec {
         });
     }
 
+    public static byte[] eventAck(long token, int eventId) throws IOException {
+        return write(TYPE_EVENT_ACK, out -> {
+            out.writeLong(token);
+            out.writeInt(eventId);
+        });
+    }
+
+    public static byte[] matchAborted(long token, int eventId) throws IOException {
+        return write(TYPE_MATCH_ABORTED, out -> {
+            out.writeLong(token);
+            out.writeInt(eventId);
+        });
+    }
+
     public static byte[] control(long token, int sequence, ControlAction action) throws IOException {
         return write(TYPE_CONTROL, out -> {
             out.writeLong(token);
@@ -244,13 +237,6 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] sessionEnd(long token, String message) throws IOException {
-        return write(TYPE_SESSION_END, out -> {
-            out.writeLong(token);
-            writeNullableString(out, message);
-        });
-    }
-
     public static Decoded decode(byte[] data, int length) {
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, 0, length))) {
             if (in.readInt() != MAGIC || in.readShort() != VERSION) {
@@ -258,7 +244,7 @@ public final class UdpCodec {
             }
 
             return switch (in.readByte()) {
-                case TYPE_HELLO -> new Hello(in.readLong(), in.readInt());
+                case TYPE_HELLO -> new Hello(in.readLong());
                 case TYPE_WELCOME -> new Welcome(
                         in.readLong(),
                         in.readLong(),
@@ -266,10 +252,7 @@ public final class UdpCodec {
                         in.readInt(),
                         readState(in)
                 );
-                case TYPE_REJECT -> new Reject(in.readLong(), readNullableString(in));
-                case TYPE_INPUT -> new InputFrame(
-                        in.readLong(), in.readInt(), in.readInt(), in.readInt(), in.readInt()
-                );
+                case TYPE_INPUT -> new InputFrame(in.readLong(), in.readInt(), in.readInt(), in.readInt());
                 case TYPE_REMOTE_INPUT -> new RemoteInputFrame(in.readLong(), in.readInt(), in.readInt());
                 case TYPE_EVENT -> new Event(
                         in.readLong(),
@@ -278,11 +261,12 @@ public final class UdpCodec {
                         readEventType(in.readByte()),
                         readState(in)
                 );
+                case TYPE_EVENT_ACK -> new EventAck(in.readLong(), in.readInt());
+                case TYPE_MATCH_ABORTED -> new MatchAborted(in.readLong(), in.readInt());
                 case TYPE_CONTROL -> new ControlFrame(in.readLong(), in.readInt(), readControlAction(in.readByte()));
                 case TYPE_CONTROL_STATUS -> new ControlStatus(
                         in.readLong(), in.readInt(), in.readBoolean(), in.readBoolean()
                 );
-                case TYPE_SESSION_END -> new SessionEnd(in.readLong(), readNullableString(in));
                 default -> null;
             };
         } catch (IOException | RuntimeException ignored) {
@@ -292,7 +276,7 @@ public final class UdpCodec {
 
     private static Packet.EventType readEventType(int ordinal) {
         Packet.EventType[] values = Packet.EventType.values();
-        return ordinal >= 0 && ordinal < values.length ? values[ordinal] : Packet.EventType.RULE;
+        return ordinal >= 0 && ordinal < values.length ? values[ordinal] : Packet.EventType.SCORE;
     }
 
     private static ControlAction readControlAction(int ordinal) {
@@ -339,9 +323,6 @@ public final class UdpCodec {
         out.writeBoolean(state.pendingTouchOut);
         out.writeByte(state.pendingTouchOutWinnerCode);
         out.writeInt(state.matchOverCountdownFrames);
-
-        out.writeBoolean(state.spikeTrailActive);
-        out.writeBoolean(state.spikeTrailRed);
     }
 
     private static Packet.CompactState readState(DataInputStream in) throws IOException {
@@ -372,9 +353,6 @@ public final class UdpCodec {
         int pendingTouchOutWinnerCode = in.readByte();
         int matchOverCountdownFrames = in.readInt();
 
-        boolean spikeTrailActive = in.readBoolean();
-        boolean spikeTrailRed = in.readBoolean();
-
         return new Packet.CompactState(
                 ball, redTeam, blueTeam,
                 redScore, blueScore,
@@ -384,8 +362,7 @@ public final class UdpCodec {
                 serveStateOrdinal, redServing, rallyOver, deadBallTimer,
                 matchOver, matchWinnerCode,
                 transientMessage, transientMessageTimer, transientMessageColorCode,
-                pendingTouchOut, pendingTouchOutWinnerCode, matchOverCountdownFrames,
-                spikeTrailActive, spikeTrailRed
+                pendingTouchOut, pendingTouchOutWinnerCode, matchOverCountdownFrames
         );
     }
 
