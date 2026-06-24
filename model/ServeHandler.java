@@ -15,10 +15,14 @@ public class ServeHandler {
     private boolean lastServePressed = false;
     private boolean waitForPostServeSpaceRelease = false;
     private boolean serveLaunchedThisFrame = false;
+    // 當發球發出後，直到接方完成第一次有效觸球（接一傳 or setter touch）前，
+    // 此旗標為 false；完成後設為 true，用以停止妨礙發球判斷。
+    private boolean receptionCompleted = true; // default true when not in serve
 
     public ServeHandler(GameModel model) {
         this.model = model;
         this.ballController = new ServeBallController(model);
+        this.receptionCompleted = true;
     }
 
     public boolean isWaitingForServe() {
@@ -31,6 +35,14 @@ public class ServeHandler {
 
     public boolean shouldUpdateBall() {
         return state == ServeState.SERVE_LAUNCHED || state == ServeState.IN_PLAY;
+    }
+
+    public boolean isReceptionCompleted() {
+        return receptionCompleted;
+    }
+
+    public void setReceptionCompleted(boolean v) {
+        this.receptionCompleted = v;
     }
 
     public boolean shouldUseGameBackPlayerAction(boolean redSide) {
@@ -51,6 +63,8 @@ public class ServeHandler {
 
         if (waiting) {
             resetReceivingBackPlayer();
+            // 進入等待發球時，將 receptionCompleted 設為 true（不在保護期）
+            receptionCompleted = true;
         }
 
         resetFrameFlags();
@@ -74,6 +88,8 @@ public class ServeHandler {
     public void applyNetworkState(ServeState state, boolean redServing) {
         this.state = state == null ? ServeState.READY : state;
         this.redServing = redServing;
+        // network state 不包含 receptionCompleted；保守處理為 true
+        this.receptionCompleted = true;
         resetFrameFlags();
     }
 
@@ -123,6 +139,8 @@ public class ServeHandler {
         state = ServeState.SERVE_LAUNCHED;
         waitForPostServeSpaceRelease = true;
         serveLaunchedThisFrame = true;
+        // 發球開始，重置 receptionCompleted 為 false（等待接一傳）
+        receptionCompleted = false;
 
         model.resetCounters();
     }

@@ -46,6 +46,8 @@ public class GameModel {
     // matchOver 決定後，延遲幾幀才停止遊戲更新（用於顯示勝利動畫/效果）
     public int matchOverCountdownFrames = 0;
 
+    public boolean immediateBlockHandledThisFrame = false;
+
     public GameModel() {
         serveHandler.setWaitingForServe(true);
     }
@@ -122,6 +124,9 @@ public class GameModel {
         rallyState.recordHit(redSide, hitter);
         syncPublicHitCounters();
 
+        // 通知 ServeHandler 有人觸球，讓其判斷是否結束接發保護期
+        onPlayerTouched(hitter);
+
         // 四連擊判定：若本隊擊球數超過 3，則對方得分
         if (rallyState.getHitCount(redSide) > 3) {
             // 使用 RallyScorer 的 API 顯示訊息並給分（保持 IN/OUT 顯示邏輯在同一檔案）
@@ -129,7 +134,27 @@ public class GameModel {
         }
     }
 
+    /**
+     * 當玩家在本回合觸球時呼叫。若目前處於發球保護期，且觸球方為接球方的 BackPlayer、
+     * WingSpiker 或 Setter（視為完成接一傳），則標記 receptionCompleted=true。
+     */
+    public void onPlayerTouched(Player hitter) {
+        ServeHandler sh = getServeHandler();
+        if (sh.getState() == ServeState.READY) return;
+        if (sh.isReceptionCompleted()) return;
+
+        boolean receivingRed = !sh.isRedServing();
+        if (hitter.redSide == receivingRed) {
+            if (hitter instanceof BackPlayer || hitter instanceof WingSpiker || hitter instanceof Setter) {
+                sh.setReceptionCompleted(true);
+            }
+        }
+    }
+
     private void updateActiveFrame(TeamInput redInput, TeamInput blueInput) {
+        // reset per-frame flags
+        immediateBlockHandledThisFrame = false;
+
         lastBallX = ball.x;
 
         serveHandler.updateBeforeTeams(redInput, blueInput);

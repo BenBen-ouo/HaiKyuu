@@ -35,11 +35,27 @@ public class RallyScorer {
 
     public void updateDeadBall(TeamInput redInput, TeamInput blueInput) {
         deadBallTimer--;
+        // 更新球與特效：在 dead-ball 階段也要更新球的位置與扣球軌跡，
+        // 以便像是後排違規直接給點時仍能顯示完整軌跡直到落地。
         model.ball.update();
         model.effects.update();
+
+        // 若扣球軌跡仍在，額外在 dead-ball 階段加入軌跡點
+        if (model.spikeEffect.isSpikeTrailActive()) {
+            model.spikeEffect.addTrailPoint(model.ball.x, model.ball.y);
+        }
+
         model.spikeEffect.update();
         model.redTeam.update(redInput);
         model.blueTeam.update(blueInput);
+
+        // 若球在 dead-ball 階段落地，產生落地煙霧並停止軌跡（不再次改變得分流程）
+        if (model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y) {
+            if (model.spikeEffect.isSpikeTrailActive()) {
+                model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+                model.spikeEffect.stopSpikeTrail();
+            }
+        }
 
         if (deadBallTimer <= 0) {
             prepareNextServe();

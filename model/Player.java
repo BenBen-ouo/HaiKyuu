@@ -21,6 +21,8 @@ public abstract class Player {
 
     // 預留給之後扣球判斷使用；目前不參與球的碰撞。
     public AttackHitBox attackHitBox;
+    // 攔網專用碰撞箱（獨立於攻擊 hitbox，以避免攔網時顯示攻擊的 hitbox）
+    public BlockHitBox blockHitBox;
 
     public boolean jumping;
     public boolean attacking;
@@ -47,6 +49,7 @@ public abstract class Player {
         this.redSide = redSide;
         this.hitBox = new HitBox(this);
         this.attackHitBox = new AttackHitBox(this);
+        this.blockHitBox = new BlockHitBox(this);
         this.animation = new PlayerAnimation(this, assetName);
         this.actionAnimator = new PlayerActionAnimator(this, animation);
     }
@@ -57,6 +60,7 @@ public abstract class Player {
         PlayerPhysics.resetToInitial(this);
         finishAction();
         attackHitBox.disable();
+        blockHitBox.disable();
     }
 
     public void applyGravity() {
@@ -72,7 +76,8 @@ public abstract class Player {
     }
 
     public boolean isBlockHitBoxActive() {
-        return action == PlayerAction.BLOCK && isShowingActionFrame("block2");
+        // 攔網碰撞使用 blockHitBox 的啟用狀態決定，避免依賴精確動畫張數判定
+        return action == PlayerAction.BLOCK && blockHitBox != null && blockHitBox.enabled;
     }
 
     protected boolean isShowingActionFrame(String actionName) {

@@ -34,6 +34,7 @@ public class Team {
             setTeamBoundaries(redMinX, redMaxX);
             setupRedHitBoxes();
             setupRedAttackHitBoxes();
+            setupRedBlockHitBoxes();
         } else {
             backPlayer = new BackPlayer("player 2 back.png", baseX + GameConfig.BLUE_BACK_OFFSET_X, baseY, false);
             setter = new Setter("player 2 S.png", baseX + GameConfig.BLUE_SETTER_OFFSET_X, baseY, false);
@@ -46,6 +47,7 @@ public class Team {
             setTeamBoundaries(blueMinX, blueMaxX);
             setupBlueHitBoxes();
             setupBlueAttackHitBoxes();
+            setupBlueBlockHitBoxes();
         }
     }
 
@@ -60,7 +62,7 @@ public class Team {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(45, 60, 20, 10, 10, 10, 20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(50, 30, 10, 30, 10, 10, 40);
+        quickAttacker.hitBox.set(50, 25, 15, 40, 10, 10, 40);
         wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
 
@@ -68,7 +70,7 @@ public class Team {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(35, 60, 20, 10, 10, 10, -20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(40, 30, 10, 30, 10, 10, -40);
+        quickAttacker.hitBox.set(35, 25, 15, 40, 10, 10, -40);
         wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
     }
 
@@ -115,6 +117,49 @@ public class Team {
                 GameConfig.BLUE_ATTACK_HITBOX_OFFSET_Y,
                 GameConfig.ATTACK_HITBOX_WIDTH,
                 GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+    }
+
+    private void setupRedBlockHitBoxes() {
+        // Reuse attack offsets for block hitbox positioning by default.
+        backPlayer.blockHitBox.set(
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
+        );
+        quickAttacker.blockHitBox.set(
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
+        );
+        wingSpiker.blockHitBox.set(
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.RED_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
+        );
+    }
+
+    private void setupBlueBlockHitBoxes() {
+        backPlayer.blockHitBox.set(
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
+        );
+        quickAttacker.blockHitBox.set(
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
+        );
+        wingSpiker.blockHitBox.set(
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_BLOCK_HITBOX_OFFSET_Y,
+                GameConfig.BLOCK_HITBOX_WIDTH,
+                GameConfig.BLOCK_HITBOX_HEIGHT
         );
     }
 
