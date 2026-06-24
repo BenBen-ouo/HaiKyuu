@@ -51,6 +51,7 @@ public class ServeHandler {
 
         if (waiting) {
             resetReceivingBackPlayer();
+            ballController.prepareServe(redServing);
         }
 
         resetFrameFlags();
@@ -64,7 +65,21 @@ public class ServeHandler {
     public void reset() {
         state = ServeState.READY;
         redServing = true;
+        ballController.prepareServe(true);
         resetFrameFlags();
+    }
+
+    public ServeState getState() {
+        return state;
+    }
+
+    public void applyNetworkState(ServeState state, boolean redServing) {
+        this.state = state == null ? ServeState.READY : state;
+        this.redServing = redServing;
+        lastServePressed = false;
+        // 收到 SERVE 快照後，發球方仍需等 Space 放開，不能立刻撲球或跳躍。
+        waitForPostServeSpaceRelease = this.state == ServeState.SERVE_LAUNCHED;
+        serveLaunchedThisFrame = false;
     }
 
     public void updateBeforeTeams(TeamInput redInput, TeamInput blueInput) {
@@ -99,7 +114,7 @@ public class ServeHandler {
     }
 
     private void updateReadyState(TeamInput servingInput, boolean justPressedServe) {
-        ballController.prepareServe(redServing);
+        // 發球位置與球的位置只在 Server 進入 READY 時決定；Client 不在此自行重設。
         ServeInputLocker.lockBackPlayer(servingInput);
 
         if (justPressedServe) {

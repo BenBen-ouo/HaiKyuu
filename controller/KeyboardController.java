@@ -14,7 +14,7 @@ import model.TeamInput;
 public class KeyboardController implements KeyListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
 
-    public TeamInput getRedInput() {
+    public synchronized TeamInput getRedInput() {
         TeamInput input = new TeamInput();
 
         input.backLeft = isPressed(KeyEvent.VK_A);
@@ -34,7 +34,7 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
-    public TeamInput getBlueInput() {
+    public synchronized TeamInput getBlueInput() {
         TeamInput input = new TeamInput();
 
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
@@ -64,11 +64,15 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
-    public boolean isRestartPressed() {
+    public synchronized boolean isRestartPressed() {
         return isPressed(KeyEvent.VK_R);
     }
 
-    private ServeType getRedServeType() {
+    public synchronized boolean isCancelResetPressed() {
+        return isPressed(KeyEvent.VK_N);
+    }
+
+    private synchronized ServeType getRedServeType() {
         if (isPressed(KeyEvent.VK_W)) {
             return ServeType.CEILING;
         }
@@ -82,7 +86,7 @@ public class KeyboardController implements KeyListener {
         return ServeType.NORMAL;
     }
 
-    private ServeType getBlueServeType() {
+    private synchronized ServeType getBlueServeType() {
         if (isPressed(KeyEvent.VK_UP)) {
             return ServeType.CEILING;
         }
@@ -96,17 +100,17 @@ public class KeyboardController implements KeyListener {
         return ServeType.NORMAL;
     }
 
-    private boolean isPressed(int keyCode) {
+    private synchronized boolean isPressed(int keyCode) {
         return pressedKeys.contains(keyCode);
     }
 
     @Override
-    public void keyPressed(KeyEvent e) {
+    public synchronized void keyPressed(KeyEvent e) {
         pressedKeys.add(e.getKeyCode());
     }
 
     @Override
-    public void keyReleased(KeyEvent e) {
+    public synchronized void keyReleased(KeyEvent e) {
         pressedKeys.remove(e.getKeyCode());
     }
 

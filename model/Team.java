@@ -47,6 +47,8 @@ public class Team {
             setupBlueHitBoxes();
             setupBlueAttackHitBoxes();
         }
+
+        backPlayer.captureDefaultHitBox();
     }
 
     private void setTeamBoundaries(double min, double max) {
@@ -60,7 +62,7 @@ public class Team {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(45, 60, 20, 10, 10, 10, 20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(50, 30, 10, 30, 10, 10, 40);
+        quickAttacker.hitBox.set(50, 25, 15, 40, 10, 10, 40);
         wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
 
@@ -68,7 +70,7 @@ public class Team {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(35, 60, 20, 10, 10, 10, -20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(40, 30, 10, 30, 10, 10, -40);
+        quickAttacker.hitBox.set(35, 25, 15, 40, 10, 10, -40);
         wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
     }
 
@@ -131,6 +133,13 @@ public class Team {
     public void update(TeamInput input) {
         for (Player player : getPlayers()) {
             player.update(input);
+        }
+    }
+
+    /** 等待 Server 回合結果時，只延續角色既有動作與落地，不讀取新輸入。 */
+    public void updateWhileAwaitingAuthority() {
+        for (Player player : getPlayers()) {
+            player.updateWhileAwaitingAuthority();
         }
     }
 }

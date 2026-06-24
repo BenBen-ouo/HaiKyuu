@@ -64,6 +64,8 @@ public class WingSpiker extends Player {
 
         if (!animation.isPlaying()) {
             startAttackReady(0);
+            // 減少非後排（WingSpiker）起跳高度
+            vy *= GameConfig.NON_BACK_AI_JUMP_MULTIPLIER;
         }
     }
 

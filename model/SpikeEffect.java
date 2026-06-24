@@ -111,8 +111,18 @@ public class SpikeEffect {
         this.spikeTrailActive = false;
     }
 
+    /** 只清除扣球軌跡，不影響已產生的落地煙霧。 */
+    public void clearSpikeTrail() {
+        trailPoints.clear();
+        spikeTrailActive = false;
+    }
+
     public boolean isSpikeTrailActive() {
         return spikeTrailActive;
+    }
+
+    public boolean getCurrentSpikeIsRed() {
+        return currentSpikeIsRed;
     }
 
     public List<TrailPoint> getTrailPoints() {
@@ -124,9 +134,17 @@ public class SpikeEffect {
     }
 
     public void addTrailPoint(double x, double y) {
-        if (spikeTrailActive) {
-            trailPoints.add(new TrailPoint(x, y, 15, currentSpikeIsRed));
+        if (!spikeTrailActive) return;
+
+        // 限制軌跡點數量以避免大量分配與繪製開銷
+        final int MAX_TRAIL_POINTS = 40;
+        if (trailPoints.size() >= MAX_TRAIL_POINTS) {
+            // 移除最舊的點以保持長度恆定
+            trailPoints.remove(0);
         }
+
+        // 減少每個點的生命長度以降低持續繪製成本
+        trailPoints.add(new TrailPoint(x, y, 10, currentSpikeIsRed));
     }
 
     public void spawnSmoke(double x, double y) {

@@ -10,6 +10,13 @@ public final class GameConfig {
     public static final int SCREEN_WIDTH = 1200;
     public static final int SCREEN_HEIGHT = 675;
 
+    // 所有本機與網路模式共用的遊戲更新頻率。
+    public static final int TICKS_PER_SECOND = 60;
+
+    // 球由低處向上第一次進入此高度時，Server 送一次 HIGH_NET_SYNC。
+    // 座標 y 越小代表球越高
+    public static final double HIGH_NET_SYNC_MAX_BALL_Y = 450.0;
+
     // 視窗外可活動區域：球與玩家可以超出畫面，但不可超出這些世界邊界。
     public static final double WORLD_LEFT = -240;
     public static final double WORLD_RIGHT = SCREEN_WIDTH + 240;
@@ -18,7 +25,7 @@ public final class GameConfig {
     public static final int FLOOR_Y = SCREEN_HEIGHT - 50;
     public static final double GRAVITY = 0.25;
     public static final double PLAYER_SPEED = 4.3;
-    public static final double PLAYER_JUMP_SPEED = -8;
+    public static final double PLAYER_JUMP_SPEED = -9;
     public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
@@ -69,8 +76,8 @@ public final class GameConfig {
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
     // 調整這些數值即可自訂扣球判定區域。
-    public static final double ATTACK_HITBOX_WIDTH = 10;
-    public static final double ATTACK_HITBOX_HEIGHT = 25;
+    public static final double ATTACK_HITBOX_WIDTH = 20;
+    public static final double ATTACK_HITBOX_HEIGHT = 30;
 
     // 攻擊 hitBox，左隊放在角色右上角，右隊放在角色左上角。
     public static final double RED_ATTACK_HITBOX_OFFSET_X = 55;
@@ -143,6 +150,12 @@ public final class GameConfig {
 
     // 比賽結束後延遲停止遊戲的幀數（60FPS），1.5秒 = 90 幀
     public static final int MATCH_OVER_DELAY_FRAMES = 90;
+
+    // AI 後排的跳躍高度乘數（小於 1 可降低跳高）
+    public static final double BACK_ROW_AI_JUMP_MULTIPLIER = 0.90;
+
+    // 非後排（例如 Setter / QuickAttacker / WingSpiker）跳躍高度乘數（用於讓 AI 跳得矮一些）
+    public static final double NON_BACK_AI_JUMP_MULTIPLIER = 0.92;
 
     // 跳發第一段拋球的預計落地點。
     // 之後你要調整跳發拋球位置，主要改這三個數值。
