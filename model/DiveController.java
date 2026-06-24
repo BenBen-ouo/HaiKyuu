@@ -11,14 +11,14 @@ public class DiveController {
     private static final double HITBOX_OFFSET_Y = GameConfig.PLAYER_IMAGE_HEIGHT - HITBOX_HEIGHT - 2;
     private static final double HITBOX_FORWARD_OFFSET_X = 30;
 
-    private final Player player;
+    private final BackPlayer player;
 
     private int elapsedFrames = 0;
     private int diveDirection = 1;
     private boolean previousDiveInput = false;
     private HitBoxSnapshot standingHitBox;
 
-    public DiveController(Player player) {
+    public DiveController(BackPlayer player) {
         this.player = player;
     }
 
@@ -105,6 +105,8 @@ public class DiveController {
         if (standingHitBox != null) {
             standingHitBox.restoreTo(player.hitBox);
             standingHitBox = null;
+        } else {
+            player.restoreDefaultHitBox();
         }
     }
 

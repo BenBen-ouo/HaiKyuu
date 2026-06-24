@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 3;
+    private static final short VERSION = 4;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -418,6 +418,13 @@ public final class UdpCodec {
         out.writeDouble(player.jumpStartX);
         out.writeByte(player.actionOrdinal);
         out.writeBoolean(player.attackHitBoxEnabled);
+        out.writeDouble(player.hitBoxOffsetX);
+        out.writeDouble(player.hitBoxOffsetY);
+        out.writeDouble(player.hitBoxWidth);
+        out.writeDouble(player.hitBoxHeight);
+        out.writeInt(player.hitBoxArcWidth);
+        out.writeInt(player.hitBoxArcHeight);
+        out.writeDouble(player.hitBoxRotationDegrees);
     }
 
     private static Packet.PlayerState readPlayer(DataInputStream in) throws IOException {
@@ -425,7 +432,9 @@ public final class UdpCodec {
                 readNullableString(in),
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
                 in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(),
-                in.readDouble(), in.readByte(), in.readBoolean()
+                in.readDouble(), in.readByte(), in.readBoolean(),
+                in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
+                in.readInt(), in.readInt(), in.readDouble()
         );
     }
 

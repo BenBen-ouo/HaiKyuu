@@ -8,6 +8,7 @@ public class BackPlayer extends Player {
     private static final double BACK_ATTACK_AIR_SPEED = 3.0;
 
     private final DiveController diveController;
+    private HitBoxSnapshot defaultHitBox;
     private boolean previousBackAction = false;
 
     public BackPlayer(String assetName, double x, double y, boolean redSide) {
@@ -72,6 +73,29 @@ public class BackPlayer extends Player {
         applyGravity();
         updateActionAnimation();
         previousBackAction = actionPressed;
+    }
+
+    @Override
+    public void updateWhileAwaitingAuthority() {
+        if (diveController.isActive()) {
+            diveController.update(false);
+            updateActionAnimation();
+            return;
+        }
+
+        super.updateWhileAwaitingAuthority();
+    }
+
+    /** Team 設定一般 hitBox 後呼叫，保存此角色的固定站立碰撞框。 */
+    public void captureDefaultHitBox() {
+        defaultHitBox = HitBoxSnapshot.capture(hitBox);
+    }
+
+    /** 撲球被取消、結束或進入發球準備時，強制恢復一般站立碰撞框。 */
+    public void restoreDefaultHitBox() {
+        if (defaultHitBox != null) {
+            defaultHitBox.restoreTo(hitBox);
+        }
     }
 
     private boolean tryStartPriorityAction(TeamInput input, boolean justPressedAction) {
@@ -144,10 +168,19 @@ public class BackPlayer extends Player {
      */
     public void prepareForServe() {
         diveController.cancel();
+        restoreDefaultHitBox();
         previousBackAction = false;
         PlayerPhysics.clearMotionAndActions(this);
         finishAction();
         attackHitBox.disable();
+    }
+
+    @Override
+    public void resetToInitial() {
+        diveController.cancel();
+        super.resetToInitial();
+        restoreDefaultHitBox();
+        previousBackAction = false;
     }
 
     @Override

@@ -117,8 +117,10 @@ public class GameModel {
                 return;
             }
 
-            // Client 已預測到回合結束時，等待 Server 的 SCORE 快照，不自行加分或準備下一次發球。
+            // Client 已預測到回合結束或收到 Server dead-ball 狀態時，
+            // 不自行裁決下一球，但角色與特效仍需持續更新。
             if (!resolveRallyOutcomes && (predictionAwaitingAuthority || scorer.isRallyOver())) {
+                updateNetworkWaitingFrame();
                 return;
             }
 
@@ -185,13 +187,35 @@ public class GameModel {
         effects.update();
         spikeEffect.update();
 
-        // 遞減暫時訊息計時器
-        if (transientMessageTimer > 0) {
-            transientMessageTimer--;
-            if (transientMessageTimer == 0) {
-                transientMessage = null;
-                transientMessageIsRed = null;
-            }
+        updateTransientMessage();
+    }
+
+    /**
+     * Client 等待 Server 的 SCORE 快照或下一次發球準備快照時使用。
+     * 不更新球、不做碰撞與得分判定，也不讓 Client 自行進入下一球；
+     * 但保留角色既有動畫、重力、撲球滑行與特效的視覺更新。
+     */
+    private void updateNetworkWaitingFrame() {
+        redTeam.updateWhileAwaitingAuthority();
+        blueTeam.updateWhileAwaitingAuthority();
+        effects.update();
+        spikeEffect.update();
+        updateTransientMessage();
+
+        if (matchOver && matchOverCountdownFrames > 0) {
+            matchOverCountdownFrames--;
+        }
+    }
+
+    private void updateTransientMessage() {
+        if (transientMessageTimer <= 0) {
+            return;
+        }
+
+        transientMessageTimer--;
+        if (transientMessageTimer == 0) {
+            transientMessage = null;
+            transientMessageIsRed = null;
         }
     }
 

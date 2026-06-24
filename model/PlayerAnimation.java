@@ -53,6 +53,13 @@ public class PlayerAnimation {
         owner.assetName = assetName;
     }
 
+    /**
+     * 網路快照指定的圖片必須立即取代本地舊動畫，避免下一幀被舊序列覆蓋。
+     */
+    public void applyNetworkAsset(String assetName) {
+        show(assetName);
+    }
+
     public void update() {
         if (!playing) {
             return;

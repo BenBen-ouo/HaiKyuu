@@ -316,6 +316,15 @@ public final class Packet {
         public final int actionOrdinal;
         public final boolean attackHitBoxEnabled;
 
+        // 一般觸球 hitBox 必須與角色動作一併由 Server 快照還原。
+        public final double hitBoxOffsetX;
+        public final double hitBoxOffsetY;
+        public final double hitBoxWidth;
+        public final double hitBoxHeight;
+        public final int hitBoxArcWidth;
+        public final int hitBoxArcHeight;
+        public final double hitBoxRotationDegrees;
+
         public PlayerState(
                 String assetName,
                 double x,
@@ -329,7 +338,14 @@ public final class Packet {
                 boolean mirrorImage,
                 double jumpStartX,
                 int actionOrdinal,
-                boolean attackHitBoxEnabled
+                boolean attackHitBoxEnabled,
+                double hitBoxOffsetX,
+                double hitBoxOffsetY,
+                double hitBoxWidth,
+                double hitBoxHeight,
+                int hitBoxArcWidth,
+                int hitBoxArcHeight,
+                double hitBoxRotationDegrees
         ) {
             this.assetName = assetName;
             this.x = x;
@@ -344,6 +360,13 @@ public final class Packet {
             this.jumpStartX = jumpStartX;
             this.actionOrdinal = actionOrdinal;
             this.attackHitBoxEnabled = attackHitBoxEnabled;
+            this.hitBoxOffsetX = hitBoxOffsetX;
+            this.hitBoxOffsetY = hitBoxOffsetY;
+            this.hitBoxWidth = hitBoxWidth;
+            this.hitBoxHeight = hitBoxHeight;
+            this.hitBoxArcWidth = hitBoxArcWidth;
+            this.hitBoxArcHeight = hitBoxArcHeight;
+            this.hitBoxRotationDegrees = hitBoxRotationDegrees;
         }
 
         public static PlayerState from(Player player) {
@@ -360,12 +383,18 @@ public final class Packet {
                     player.mirrorImage,
                     player.jumpStartX,
                     player.getAction().ordinal(),
-                    player.attackHitBox.enabled
+                    player.attackHitBox.enabled,
+                    player.hitBox.offsetX,
+                    player.hitBox.offsetY,
+                    player.hitBox.width,
+                    player.hitBox.height,
+                    player.hitBox.arcWidth,
+                    player.hitBox.arcHeight,
+                    player.hitBox.rotationDegrees
             );
         }
 
         public void applyTo(Player player) {
-            player.assetName = assetName;
             player.x = x;
             player.y = y;
             player.vx = vx;
@@ -376,12 +405,22 @@ public final class Packet {
             player.diving = diving;
             player.mirrorImage = mirrorImage;
             player.jumpStartX = jumpStartX;
+            player.hitBox.set(
+                    hitBoxOffsetX,
+                    hitBoxOffsetY,
+                    hitBoxWidth,
+                    hitBoxHeight,
+                    hitBoxArcWidth,
+                    hitBoxArcHeight,
+                    hitBoxRotationDegrees
+            );
 
             PlayerAction[] actions = PlayerAction.values();
-            player.setActionForNetwork(
+            player.applyNetworkAction(
                     actionOrdinal >= 0 && actionOrdinal < actions.length
                             ? actions[actionOrdinal]
-                            : PlayerAction.IDLE
+                            : PlayerAction.IDLE,
+                    assetName
             );
 
             if (attackHitBoxEnabled) {
