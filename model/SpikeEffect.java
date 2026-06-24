@@ -128,9 +128,17 @@ public class SpikeEffect {
     }
 
     public void addTrailPoint(double x, double y) {
-        if (spikeTrailActive) {
-            trailPoints.add(new TrailPoint(x, y, 15, currentSpikeIsRed));
+        if (!spikeTrailActive) return;
+
+        // 限制軌跡點數量以避免大量分配與繪製開銷
+        final int MAX_TRAIL_POINTS = 40;
+        if (trailPoints.size() >= MAX_TRAIL_POINTS) {
+            // 移除最舊的點以保持長度恆定
+            trailPoints.remove(0);
         }
+
+        // 減少每個點的生命長度以降低持續繪製成本
+        trailPoints.add(new TrailPoint(x, y, 10, currentSpikeIsRed));
     }
 
     public void spawnSmoke(double x, double y) {

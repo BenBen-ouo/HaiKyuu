@@ -81,6 +81,11 @@ public class GameModel {
         return rallyState.hasSetterTouched(redSide);
     }
 
+    public void resetTeamContacts(boolean redSide) {
+        rallyState.resetHitCount(redSide);
+        syncPublicHitCounters();
+    }
+
     // 由外部呼叫：給分並顯示訊息（轉送至 RallyScorer）
     public void awardPointWithMessage(boolean redWins, String message) {
         if (resolvingRallyOutcomes) {

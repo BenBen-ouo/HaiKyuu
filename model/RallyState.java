@@ -112,4 +112,14 @@ public class RallyState {
     public boolean hasSetterTouched(boolean redSide) {
         return redSide ? redSetterTouched : blueSetterTouched;
     }
+
+    public void resetHitCount(boolean redSide) {
+        if (redSide) {
+            redHitCount = 0;
+            redSetterTouched = false;
+        } else {
+            blueHitCount = 0;
+            blueSetterTouched = false;
+        }
+    }
 }

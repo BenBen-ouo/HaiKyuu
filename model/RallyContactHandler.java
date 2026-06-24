@@ -201,11 +201,24 @@ public class RallyContactHandler {
             return false;
         }
 
-            pushBallOutsidePlayer(player);
-            reflectBallFromBlock(player);
+        Boolean attackingTeam = model.getLastHitTeam();
 
-            // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
-            model.ball.useFastFloorBounceSpin();
+        pushBallOutsidePlayer(player);
+        reflectBallFromBlock(player);
+
+        // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
+        model.ball.useFastFloorBounceSpin();
+
+        /*
+        * 若攔網成功，且攔網方不是最後攻擊方，
+        * 表示球被攔回攻擊方場內。
+        *
+        * 依照排球規則：
+        * 攻擊方三次觸球重新計算。
+        */
+        if (attackingTeam != null && attackingTeam != player.redSide) {
+            model.resetTeamContacts(attackingTeam);
+        }
 
         /*
          * 攔網後不停止扣球軌跡。
@@ -219,8 +232,8 @@ public class RallyContactHandler {
          */
         // 記錄攔網為本回合的一次觸球（雖然 blocking 不會增加 hitCount）
         model.recordHit(player.redSide, player);
-        Boolean lastHitTeam = model.getLastHitTeam();
-        if (lastHitTeam != null && lastHitTeam != player.redSide) {
+        
+        if (attackingTeam != null && attackingTeam != player.redSide) {
             double ballX = model.ball.x;
             double ballY = model.ball.y;
             double velocityX = model.ball.vx;
@@ -245,7 +258,7 @@ public class RallyContactHandler {
 
                     if (!inCourt) {
                         model.pendingTouchOut = true;
-                        model.pendingTouchOutWinner = lastHitTeam;
+                        model.pendingTouchOutWinner = attackingTeam;
                     }
                 }
             }
