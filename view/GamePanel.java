@@ -68,7 +68,7 @@ public class GamePanel extends JPanel {
         Graphics2D g = (Graphics2D) graphics.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         boolean mirrorWorld = networkView != null && networkView.isBluePerspective();
-        renderer.render(g, model, mirrorWorld);
+        renderer.render(g, model, mirrorWorld, networkView);
         networkStatusRenderer.draw(g, networkView);
         g.dispose();
     }

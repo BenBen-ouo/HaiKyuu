@@ -111,6 +111,12 @@ public class SpikeEffect {
         this.spikeTrailActive = false;
     }
 
+    /** 只清除扣球軌跡，不影響已產生的落地煙霧。 */
+    public void clearSpikeTrail() {
+        trailPoints.clear();
+        spikeTrailActive = false;
+    }
+
     public boolean isSpikeTrailActive() {
         return spikeTrailActive;
     }

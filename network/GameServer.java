@@ -1,6 +1,7 @@
 /*
 獨立、無畫面的 UDP 權威 Server。
-固定以 60 tick/s 執行 GameModel；完整狀態只在 SERVE、SCORE、RESET、HIGH_NET_SYNC 與第一球接起後送出。
+固定以 60 tick/s 執行 GameModel。
+INPUT 與 BALL_SNAPSHOT 不可靠傳送；指定 COLLISION_EVENT 以 ACK 重送完整權威狀態。
 */
 package network;
 
@@ -10,8 +11,10 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -27,7 +30,8 @@ public final class GameServer implements AutoCloseable {
 
     private static final long TICK_NANOS = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
     private static final long CLIENT_TIMEOUT_NANOS = 3_000_000_000L;
-    private static final long INPUT_RELAY_INTERVAL_NANOS = 500_000_000L;
+    private static final long INPUT_RELAY_INTERVAL_NANOS = 40_000_000L; // 25 Hz
+    private static final long BALL_SNAPSHOT_INTERVAL_NANOS = 50_000_000L; // 20 Hz
     private static final long EVENT_RESEND_INTERVAL_NANOS = 200_000_000L;
     private static final long TERMINATION_ACK_TIMEOUT_NANOS = 2_000_000_000L;
     private static final int MAX_PENDING_EVENTS = 8;
@@ -50,7 +54,10 @@ public final class GameServer implements AutoCloseable {
     private int lastBlueInputMask = Integer.MIN_VALUE;
     private long lastRedInputRelayNanos;
     private long lastBlueInputRelayNanos;
+    private long lastBallSnapshotNanos;
     private long terminationDeadlineNanos;
+    private int nextBallSnapshotSequence;
+    private int collisionRevision;
     private boolean redResetConfirmed;
     private boolean blueResetConfirmed;
 
@@ -124,10 +131,10 @@ public final class GameServer implements AutoCloseable {
 
         relayRemoteInputs(red, blue, redMask, blueMask);
 
-        Packet.EventType eventType = detectSyncEvent(before);
-        if (eventType != null) {
+        for (Packet.EventType eventType : detectSyncEvents(before)) {
             sendReliableEvent(eventType, Packet.CompactState.from(model));
         }
+        sendBallSnapshotIfNeeded();
     }
 
     private ControlResult processControls(PlayerSlot red, PlayerSlot blue) {
@@ -169,31 +176,40 @@ public final class GameServer implements AutoCloseable {
         return new ControlResult(statusChanged, false);
     }
 
-    private Packet.EventType detectSyncEvent(FrameState before) {
-        boolean scoreChanged = before.redScore != model.redScore || before.blueScore != model.blueScore;
-        boolean finishedScorePreparation = before.rallyOver && !model.isRallyOverForNetwork();
-        if (scoreChanged || finishedScorePreparation) {
-            // SCORE 事件同時負責回合結束與 Server 完成下一次發球準備後的位置同步。
-            return Packet.EventType.SCORE;
-        }
+    private List<Packet.EventType> detectSyncEvents(FrameState before) {
+        List<Packet.EventType> events = new ArrayList<>(3);
 
         ServeState currentServeState = model.getServeHandler().getState();
         if (before.serveState == ServeState.READY
                 && currentServeState != ServeState.READY
                 && Math.abs(model.ball.vx) + Math.abs(model.ball.vy) > 0.01) {
-            return Packet.EventType.SERVE;
+            events.add(Packet.EventType.SERVE);
         }
 
-        boolean firstRedContact = before.redHitCount == 0 && model.redHitCount == 1;
-        boolean firstBlueContact = before.blueHitCount == 0 && model.blueHitCount == 1;
-        if (firstRedContact || firstBlueContact) {
-            return Packet.EventType.FIRST_CONTACT_SYNC;
+        if (model.didSetterContactThisFrame()) {
+            events.add(Packet.EventType.SETTER_CONTACT);
         }
 
-        boolean enteredHighSyncHeight = before.ballY > GameConfig.HIGH_NET_SYNC_MAX_BALL_Y
-                && model.ball.y <= GameConfig.HIGH_NET_SYNC_MAX_BALL_Y
-                && model.ball.vy < 0;
-        return enteredHighSyncHeight ? Packet.EventType.HIGH_NET_SYNC : null;
+        if (model.didBallLandThisFrame()) {
+            events.add(Packet.EventType.LANDING);
+        }
+
+        boolean scoreChanged = before.redScore != model.redScore || before.blueScore != model.blueScore;
+        if (scoreChanged && isRuleMessage(model.transientMessage)) {
+            events.add(Packet.EventType.RULE);
+        }
+        if (scoreChanged || (before.rallyOver && !model.isRallyOverForNetwork())) {
+            // SCORE 也負責 Server 完成下一次發球準備後的位置同步。
+            events.add(Packet.EventType.SCORE);
+        }
+
+        return events;
+    }
+
+    private boolean isRuleMessage(String message) {
+        return "四觸違規".equals(message)
+                || "後排三米線".equals(message)
+                || "TOUCH OUT".equals(message);
     }
 
     private void relayRemoteInputs(PlayerSlot red, PlayerSlot blue, int redMask, int blueMask) {
@@ -219,7 +235,13 @@ public final class GameServer implements AutoCloseable {
     }
 
     private void sendReliableEvent(Packet.EventType type, Packet.CompactState state) {
-        ReliableEvent event = new ReliableEvent(++nextEventId, serverTick, type, state);
+        ReliableEvent event = new ReliableEvent(
+                ++nextEventId,
+                serverTick,
+                type,
+                ++collisionRevision,
+                state
+        );
         queueReliableEvent(redPlayer, event);
         queueReliableEvent(bluePlayer, event);
     }
@@ -248,11 +270,51 @@ public final class GameServer implements AutoCloseable {
         try {
             ReliableEvent event = pending.event;
             sendUdp(
-                    UdpCodec.event(target.sessionToken, event.id, event.serverTick, event.type, event.state),
+                    UdpCodec.event(
+                            target.sessionToken,
+                            event.id,
+                            event.serverTick,
+                            event.type,
+                            event.collisionRevision,
+                            event.state
+                    ),
                     target.address,
                     target.port
             );
             pending.markSent();
+        } catch (IOException exception) {
+            beginTermination();
+        }
+    }
+
+    /** 回合中每秒 20 次送出球專用快照；不含完整 GameModel。 */
+    private void sendBallSnapshotIfNeeded() {
+        if (!model.getServeHandler().shouldUpdateBall()) {
+            return;
+        }
+
+        long now = System.nanoTime();
+        if (now - lastBallSnapshotNanos < BALL_SNAPSHOT_INTERVAL_NANOS) {
+            return;
+        }
+
+        lastBallSnapshotNanos = now;
+        Packet.BallSnapshot snapshot = Packet.BallSnapshot.from(model, collisionRevision);
+        int sequence = ++nextBallSnapshotSequence;
+        sendBallSnapshot(redPlayer, sequence, snapshot);
+        sendBallSnapshot(bluePlayer, sequence, snapshot);
+    }
+
+    private void sendBallSnapshot(PlayerSlot target, int sequence, Packet.BallSnapshot snapshot) {
+        if (target == null || !target.isGameplayReady()) {
+            return;
+        }
+        try {
+            sendUdp(
+                    UdpCodec.ballSnapshot(target.sessionToken, serverTick, sequence, snapshot),
+                    target.address,
+                    target.port
+            );
         } catch (IOException exception) {
             beginTermination();
         }
@@ -494,39 +556,22 @@ public final class GameServer implements AutoCloseable {
     }
 
     private static final class FrameState {
-        final double ballY;
         final int redScore;
         final int blueScore;
-        final int redHitCount;
-        final int blueHitCount;
         final boolean rallyOver;
         final ServeState serveState;
 
-        FrameState(
-                double ballY,
-                int redScore,
-                int blueScore,
-                int redHitCount,
-                int blueHitCount,
-                boolean rallyOver,
-                ServeState serveState
-        ) {
-            this.ballY = ballY;
+        FrameState(int redScore, int blueScore, boolean rallyOver, ServeState serveState) {
             this.redScore = redScore;
             this.blueScore = blueScore;
-            this.redHitCount = redHitCount;
-            this.blueHitCount = blueHitCount;
             this.rallyOver = rallyOver;
             this.serveState = serveState;
         }
 
         static FrameState capture(GameModel model) {
             return new FrameState(
-                    model.ball.y,
                     model.redScore,
                     model.blueScore,
-                    model.redHitCount,
-                    model.blueHitCount,
                     model.isRallyOverForNetwork(),
                     model.getServeHandler().getState()
             );
@@ -557,12 +602,20 @@ public final class GameServer implements AutoCloseable {
         final int id;
         final int serverTick;
         final Packet.EventType type;
+        final int collisionRevision;
         final Packet.CompactState state;
 
-        ReliableEvent(int id, int serverTick, Packet.EventType type, Packet.CompactState state) {
+        ReliableEvent(
+                int id,
+                int serverTick,
+                Packet.EventType type,
+                int collisionRevision,
+                Packet.CompactState state
+        ) {
             this.id = id;
             this.serverTick = serverTick;
             this.type = type;
+            this.collisionRevision = collisionRevision;
             this.state = state;
         }
     }
@@ -600,6 +653,7 @@ public final class GameServer implements AutoCloseable {
         final AtomicInteger latestInputMask = new AtomicInteger();
         final AtomicInteger pendingPressedMask = new AtomicInteger();
         final AtomicInteger lastInputSequence = new AtomicInteger(-1);
+        final AtomicInteger latestScheduledServerTick = new AtomicInteger();
         final AtomicInteger lastControlSequence = new AtomicInteger(-1);
         final AtomicLong lastHeardNanos = new AtomicLong(System.nanoTime());
         final ConcurrentLinkedQueue<ControlCommand> pendingControls = new ConcurrentLinkedQueue<>();
@@ -639,6 +693,7 @@ public final class GameServer implements AutoCloseable {
                 return;
             }
             lastInputSequence.set(input.sequence);
+            latestScheduledServerTick.set(input.scheduledServerTick);
             int previousMask = latestInputMask.getAndSet(input.inputMask);
             int pressedSinceLastFrame = input.inputMask & ~previousMask;
             pendingPressedMask.getAndAccumulate(pressedSinceLastFrame, (current, pressed) -> current | pressed);

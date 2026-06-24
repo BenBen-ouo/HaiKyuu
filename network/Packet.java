@@ -32,12 +32,17 @@ public final class Packet {
     private Packet() {
     }
 
+    /*
+     * 可靠 COLLISION_EVENT 的事件類型。
+     * 只保留目前指定的事件；攔網、撞網等額外事件暫不加入。
+     */
     public enum EventType {
         SERVE,
+        SETTER_CONTACT,
+        LANDING,
         SCORE,
-        RESET,
-        HIGH_NET_SYNC,
-        FIRST_CONTACT_SYNC
+        RULE,
+        RESET
     }
 
     public static int encodeInput(TeamInput input) {
@@ -78,6 +83,24 @@ public final class Packet {
         ServeType[] types = ServeType.values();
         input.serveType = typeOrdinal < types.length ? types[typeOrdinal] : ServeType.NORMAL;
         return input;
+    }
+
+    /**
+     * 不可靠 BALL_SNAPSHOT 使用的小型球狀態。
+     * 不包含球員、比分或回合資料，避免高頻同步覆寫整個 GameModel。
+     */
+    public static final class BallSnapshot {
+        public final BallState ball;
+        public final int collisionRevision;
+
+        public BallSnapshot(BallState ball, int collisionRevision) {
+            this.ball = ball;
+            this.collisionRevision = collisionRevision;
+        }
+
+        public static BallSnapshot from(GameModel model, int collisionRevision) {
+            return new BallSnapshot(BallState.from(model.ball), collisionRevision);
+        }
     }
 
     public static final class CompactState {

@@ -1,6 +1,6 @@
 /*
 純 UDP Client。
-Client 以 60 tick/s 預測雙方輸入；Server 只轉傳輸入，並在指定事件送回權威快照。
+Client 以 60 tick/s 預測雙方輸入；Server 以 INPUT、BALL_SNAPSHOT、COLLISION_EVENT 三層 UDP 資料校正。
 */
 package network;
 
@@ -18,7 +18,7 @@ import model.TeamInput;
 public final class GameClient implements NetworkView {
     private static final long HELLO_INTERVAL_NANOS = 250_000_000L;
     private static final long CONTROL_RESEND_INTERVAL_NANOS = 250_000_000L;
-    private static final long INPUT_HEARTBEAT_NANOS = 500_000_000L;
+    private static final long INPUT_HEARTBEAT_NANOS = 40_000_000L; // 25 Hz
     private static final long SERVER_TIMEOUT_NANOS = 3_000_000_000L;
     private static final long TERMINATION_ACK_GRACE_NANOS = 2_000_000_000L;
 
@@ -38,12 +38,14 @@ public final class GameClient implements NetworkView {
     private volatile String endMessage = "";
     private volatile long lastServerPacketNanos;
 
-    private int clientTick;
+    private int estimatedServerTick;
     private int inputSequence;
     private int lastInputMask = Integer.MIN_VALUE;
     private int remoteInputMask;
     private boolean receivedRemoteInput;
     private int lastAppliedEventId;
+    private int lastBallSnapshotSequence = -1;
+    private int lastCollisionRevision;
     private boolean redResetConfirmed;
     private boolean blueResetConfirmed;
     private boolean previousRestartDown;
@@ -53,6 +55,13 @@ public final class GameClient implements NetworkView {
     private long lastInputSendNanos;
     private long terminationAckUntilNanos;
     private PendingControl pendingControl;
+
+    // 僅供畫面使用：物理球會立即採用 Server 狀態，畫面球才依誤差短暫追上。
+    private boolean ballRenderInitialized;
+    private double ballRenderOffsetX;
+    private double ballRenderOffsetY;
+    private double ballRenderRotationOffset;
+    private int ballCorrectionFramesRemaining;
 
     public GameClient(GameModel renderModel, String hostIp) throws IOException {
         this.renderModel = renderModel;
@@ -67,7 +76,6 @@ public final class GameClient implements NetworkView {
     }
 
     public void update(TeamInput keyboardInput, boolean restartDown, boolean cancelResetDown) {
-        clientTick++;
         drainIncoming();
 
         if (sessionEnded) {
@@ -86,6 +94,7 @@ public final class GameClient implements NetworkView {
             return;
         }
 
+        estimatedServerTick++;
         processControls(restartDown, cancelResetDown);
         resendPendingControlIfNeeded();
 
@@ -100,6 +109,8 @@ public final class GameClient implements NetworkView {
                 renderModel.updateForNetworkPrediction(remoteInput, localInput);
             }
         }
+
+        advanceBallRenderCorrection();
 
         if (receivedRemoteInput && System.nanoTime() - lastServerPacketNanos > SERVER_TIMEOUT_NANOS) {
             endLocally();
@@ -141,7 +152,13 @@ public final class GameClient implements NetworkView {
             } else if (decoded instanceof UdpCodec.RemoteInputFrame remote) {
                 if (!sessionEnded && isOwnToken(remote.token)) {
                     remoteInputMask = remote.inputMask;
+                    estimatedServerTick = Math.max(estimatedServerTick, remote.serverTick);
                     receivedRemoteInput = true;
+                    markServerPacketReceived();
+                }
+            } else if (decoded instanceof UdpCodec.BallSnapshotFrame snapshot) {
+                if (!sessionEnded && isOwnToken(snapshot.token)) {
+                    handleBallSnapshot(snapshot);
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.Event event) {
@@ -177,7 +194,9 @@ public final class GameClient implements NetworkView {
         sessionToken = welcome.sessionToken;
         redSide = welcome.redSide;
         assigned = true;
+        estimatedServerTick = welcome.serverTick;
         welcome.state.applyTo(renderModel);
+        resetBallRenderCorrection();
         markServerPacketReceived();
     }
 
@@ -187,8 +206,75 @@ public final class GameClient implements NetworkView {
             return;
         }
 
+        double visibleX = getRenderedBallX(renderModel.ball.x);
+        double visibleY = getRenderedBallY(renderModel.ball.y);
+        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
+
         lastAppliedEventId = event.eventId;
+        lastCollisionRevision = Math.max(lastCollisionRevision, event.collisionRevision);
+        estimatedServerTick = Math.max(estimatedServerTick, event.serverTick);
         event.state.applyTo(renderModel);
+        scheduleBallVisualCorrection(visibleX, visibleY, visibleRotation);
+    }
+
+    private void handleBallSnapshot(UdpCodec.BallSnapshotFrame snapshot) {
+        if (snapshot.snapshotSequence <= lastBallSnapshotSequence
+                || snapshot.collisionRevision < lastCollisionRevision) {
+            return;
+        }
+
+        double visibleX = getRenderedBallX(renderModel.ball.x);
+        double visibleY = getRenderedBallY(renderModel.ball.y);
+        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
+
+        lastBallSnapshotSequence = snapshot.snapshotSequence;
+        estimatedServerTick = Math.max(estimatedServerTick, snapshot.serverTick);
+        snapshot.ball.applyTo(renderModel.ball);
+        scheduleBallVisualCorrection(visibleX, visibleY, visibleRotation);
+    }
+
+    private void scheduleBallVisualCorrection(double visibleX, double visibleY, double visibleRotation) {
+        ballRenderInitialized = true;
+        double errorX = renderModel.ball.x - visibleX;
+        double errorY = renderModel.ball.y - visibleY;
+        double distance = Math.hypot(errorX, errorY);
+
+        if (distance > 80.0) {
+            resetBallRenderCorrection();
+            renderModel.spikeEffect.clearSpikeTrail();
+            return;
+        }
+
+        ballRenderOffsetX = visibleX - renderModel.ball.x;
+        ballRenderOffsetY = visibleY - renderModel.ball.y;
+        ballRenderRotationOffset = normalizeDegrees(visibleRotation - renderModel.ball.rotationDegrees);
+        ballCorrectionFramesRemaining = distance < 20.0 ? 3 : 5;
+    }
+
+    private void advanceBallRenderCorrection() {
+        if (!ballRenderInitialized || ballCorrectionFramesRemaining <= 0) {
+            return;
+        }
+
+        ballRenderOffsetX -= ballRenderOffsetX / ballCorrectionFramesRemaining;
+        ballRenderOffsetY -= ballRenderOffsetY / ballCorrectionFramesRemaining;
+        ballRenderRotationOffset -= ballRenderRotationOffset / ballCorrectionFramesRemaining;
+        ballCorrectionFramesRemaining--;
+    }
+
+    private void resetBallRenderCorrection() {
+        ballRenderInitialized = true;
+        ballRenderOffsetX = 0;
+        ballRenderOffsetY = 0;
+        ballRenderRotationOffset = 0;
+        ballCorrectionFramesRemaining = 0;
+    }
+
+    private static double normalizeDegrees(double degrees) {
+        double normalized = degrees % 360.0;
+        if (normalized > 180.0) return normalized - 360.0;
+        if (normalized < -180.0) return normalized + 360.0;
+        return normalized;
     }
 
     private void handleMatchAborted(UdpCodec.MatchAborted aborted) {
@@ -245,7 +331,7 @@ public final class GameClient implements NetworkView {
         }
 
         try {
-            byte[] data = UdpCodec.input(sessionToken, ++inputSequence, clientTick, mask);
+            byte[] data = UdpCodec.input(sessionToken, ++inputSequence, estimatedServerTick + 1, mask);
             socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
             lastInputMask = mask;
             lastInputSendNanos = now;
@@ -360,7 +446,7 @@ public final class GameClient implements NetworkView {
         if (!receivedRemoteInput) {
             return redSide ? "已加入為 Player 1，等待 Player 2" : "已加入為 Player 2，等待 Player 1";
         }
-        return "已連線（本地預測，事件／高球校正）";
+        return "已連線（本地預測，事件／球快照校正）";
     }
 
     @Override
@@ -382,6 +468,23 @@ public final class GameClient implements NetworkView {
     @Override
     public boolean isSessionEnded() {
         return sessionEnded;
+    }
+
+    @Override
+    public double getRenderedBallX(double authoritativeX) {
+        return ballRenderInitialized ? authoritativeX + ballRenderOffsetX : authoritativeX;
+    }
+
+    @Override
+    public double getRenderedBallY(double authoritativeY) {
+        return ballRenderInitialized ? authoritativeY + ballRenderOffsetY : authoritativeY;
+    }
+
+    @Override
+    public double getRenderedBallRotation(double authoritativeRotationDegrees) {
+        return ballRenderInitialized
+                ? authoritativeRotationDegrees + ballRenderRotationOffset
+                : authoritativeRotationDegrees;
     }
 
     @Override

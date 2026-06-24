@@ -32,6 +32,8 @@ public class GameModel {
 
     private double lastBallX;
     private boolean ballHitNetThisFrame;
+    private boolean ballLandedThisFrame;
+    private boolean setterContactThisFrame;
 
     // Client 本地預測時不可自行裁決得分或下一次發球位置。
     private boolean resolvingRallyOutcomes = true;
@@ -109,6 +111,8 @@ public class GameModel {
 
     private void updateFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
         ballHitNetThisFrame = false;
+        ballLandedThisFrame = false;
+        setterContactThisFrame = false;
         resolvingRallyOutcomes = resolveRallyOutcomes;
 
         try {
@@ -160,6 +164,9 @@ public class GameModel {
         if (matchOver) return;
 
         rallyState.recordHit(redSide, hitter);
+        if (hitter instanceof Setter) {
+            setterContactThisFrame = true;
+        }
         syncPublicHitCounters();
 
         // 四連擊只能由 Server 最終裁決；Client 預測到時先停止本地回合演算。
@@ -241,6 +248,7 @@ public class GameModel {
 
         ball.update();
         spikeEffect.addTrailPoint(ball.x, ball.y);
+        ballLandedThisFrame = ball.y + ball.radius >= GameConfig.FLOOR_Y;
         ballHitNetThisFrame = ball.collideWithNet(netHitBox);
 
         serveHandler.updateAfterBall();
@@ -289,6 +297,16 @@ public class GameModel {
     /* 以下入口只供網路快照與事件判定使用。 */
     public boolean didBallHitNetThisFrame() {
         return ballHitNetThisFrame;
+    }
+
+    /** Server 用：本 tick 球是否首次到達地板高度。 */
+    public boolean didBallLandThisFrame() {
+        return ballLandedThisFrame;
+    }
+
+    /** Server 用：本 tick 是否由 Setter 完成一般觸球。 */
+    public boolean didSetterContactThisFrame() {
+        return setterContactThisFrame;
     }
 
     public boolean isRallyOverForNetwork() {

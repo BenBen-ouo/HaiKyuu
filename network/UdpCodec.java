@@ -1,6 +1,6 @@
 /*
 純 UDP 二進位協定。
-握手、輸入、遠端輸入、可靠事件、EVENT_ACK、重設控制與對局中止都走 UDP 5001。
+UDP 5001 分為 INPUT、BALL_SNAPSHOT、COLLISION_EVENT 三層；事件 ACK、重設控制與對局中止仍走同一 port。
 */
 package network;
 
@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 4;
+    private static final short VERSION = 5;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -23,6 +23,7 @@ public final class UdpCodec {
     private static final byte TYPE_CONTROL_STATUS = 7;
     private static final byte TYPE_EVENT_ACK = 8;
     private static final byte TYPE_MATCH_ABORTED = 9;
+    private static final byte TYPE_BALL_SNAPSHOT = 10;
 
     public enum ControlAction {
         RESET_REQUEST,
@@ -63,13 +64,13 @@ public final class UdpCodec {
     public static final class InputFrame implements Decoded {
         public final long token;
         public final int sequence;
-        public final int clientTick;
+        public final int scheduledServerTick;
         public final int inputMask;
 
-        private InputFrame(long token, int sequence, int clientTick, int inputMask) {
+        private InputFrame(long token, int sequence, int scheduledServerTick, int inputMask) {
             this.token = token;
             this.sequence = sequence;
-            this.clientTick = clientTick;
+            this.scheduledServerTick = scheduledServerTick;
             this.inputMask = inputMask;
         }
     }
@@ -91,14 +92,46 @@ public final class UdpCodec {
         public final int eventId;
         public final int serverTick;
         public final Packet.EventType type;
+        public final int collisionRevision;
         public final Packet.CompactState state;
 
-        private Event(long token, int eventId, int serverTick, Packet.EventType type, Packet.CompactState state) {
+        private Event(
+                long token,
+                int eventId,
+                int serverTick,
+                Packet.EventType type,
+                int collisionRevision,
+                Packet.CompactState state
+        ) {
             this.token = token;
             this.eventId = eventId;
             this.serverTick = serverTick;
             this.type = type;
+            this.collisionRevision = collisionRevision;
             this.state = state;
+        }
+    }
+
+    /** 不可靠 BALL_SNAPSHOT，只包含球資料與碰撞版本。 */
+    public static final class BallSnapshotFrame implements Decoded {
+        public final long token;
+        public final int serverTick;
+        public final int snapshotSequence;
+        public final int collisionRevision;
+        public final Packet.BallState ball;
+
+        private BallSnapshotFrame(
+                long token,
+                int serverTick,
+                int snapshotSequence,
+                int collisionRevision,
+                Packet.BallState ball
+        ) {
+            this.token = token;
+            this.serverTick = serverTick;
+            this.snapshotSequence = snapshotSequence;
+            this.collisionRevision = collisionRevision;
+            this.ball = ball;
         }
     }
 
@@ -168,11 +201,11 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] input(long token, int sequence, int clientTick, int inputMask) throws IOException {
+    public static byte[] input(long token, int sequence, int scheduledServerTick, int inputMask) throws IOException {
         return write(TYPE_INPUT, out -> {
             out.writeLong(token);
             out.writeInt(sequence);
-            out.writeInt(clientTick);
+            out.writeInt(scheduledServerTick);
             out.writeInt(inputMask);
         });
     }
@@ -190,6 +223,7 @@ public final class UdpCodec {
             int eventId,
             int serverTick,
             Packet.EventType type,
+            int collisionRevision,
             Packet.CompactState state
     ) throws IOException {
         return write(TYPE_EVENT, out -> {
@@ -197,7 +231,23 @@ public final class UdpCodec {
             out.writeInt(eventId);
             out.writeInt(serverTick);
             out.writeByte(type.ordinal());
+            out.writeInt(collisionRevision);
             writeState(out, state);
+        });
+    }
+
+    public static byte[] ballSnapshot(
+            long token,
+            int serverTick,
+            int snapshotSequence,
+            Packet.BallSnapshot snapshot
+    ) throws IOException {
+        return write(TYPE_BALL_SNAPSHOT, out -> {
+            out.writeLong(token);
+            out.writeInt(serverTick);
+            out.writeInt(snapshotSequence);
+            out.writeInt(snapshot.collisionRevision);
+            writeBall(out, snapshot.ball);
         });
     }
 
@@ -259,6 +309,7 @@ public final class UdpCodec {
                         in.readInt(),
                         in.readInt(),
                         readEventType(in.readByte()),
+                        in.readInt(),
                         readState(in)
                 );
                 case TYPE_EVENT_ACK -> new EventAck(in.readLong(), in.readInt());
@@ -266,6 +317,13 @@ public final class UdpCodec {
                 case TYPE_CONTROL -> new ControlFrame(in.readLong(), in.readInt(), readControlAction(in.readByte()));
                 case TYPE_CONTROL_STATUS -> new ControlStatus(
                         in.readLong(), in.readInt(), in.readBoolean(), in.readBoolean()
+                );
+                case TYPE_BALL_SNAPSHOT -> new BallSnapshotFrame(
+                        in.readLong(),
+                        in.readInt(),
+                        in.readInt(),
+                        in.readInt(),
+                        readBall(in)
                 );
                 default -> null;
             };
