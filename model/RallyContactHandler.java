@@ -72,7 +72,8 @@ public class RallyContactHandler {
 
             // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
             if (isBackRowAttackFault(player, redSide)) {
-                performSpike(createAttackContext(player, redSide), input);
+                AttackContext ctx = createAttackContext(player, redSide);
+                performSpike(ctx, input);
                 model.recordHit(redSide, player);
 
                 boolean awardRed = !redSide;
@@ -80,6 +81,8 @@ public class RallyContactHandler {
                 model.transientMessageTimer = 42;
                 model.transientMessageIsRed = awardRed;
                 model.awardPoint(awardRed);
+                // 確保扣球軌跡顯示（即使已給分，也要保留軌跡直到落地）
+                model.spikeEffect.startSpikeTrail(ctx.redSide);
                 return true;
             }
 
@@ -189,16 +192,16 @@ public class RallyContactHandler {
         if (!(player instanceof QuickAttacker) || !player.isBlockHitBoxActive()) {
             return false;
         }
-
+ 
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
 
-        pushBallOutsidePlayer(player);
-        reflectBallFromBlock(player);
+            pushBallOutsidePlayer(player);
+            reflectBallFromBlock(player);
 
-        // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
-        model.ball.useFastFloorBounceSpin();
+            // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
+            model.ball.useFastFloorBounceSpin();
 
         /*
          * 攔網後不停止扣球軌跡。
@@ -210,6 +213,8 @@ public class RallyContactHandler {
          * 若攻擊方最後觸球，且攔網後球將飛出界，
          * 則記錄 touch out，等球實際落地時由 RallyScorer 判定攻擊方得分。
          */
+        // 記錄攔網為本回合的一次觸球（雖然 blocking 不會增加 hitCount）
+        model.recordHit(player.redSide, player);
         Boolean lastHitTeam = model.getLastHitTeam();
         if (lastHitTeam != null && lastHitTeam != player.redSide) {
             double ballX = model.ball.x;
