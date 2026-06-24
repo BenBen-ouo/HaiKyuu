@@ -1,6 +1,6 @@
 /*
 獨立、無畫面的 UDP 權威 Server。
-固定以 60 tick/s 執行 GameModel；完整狀態只在 SERVE、SCORE、RESET 與 HIGH_NET_SYNC 送出。
+固定以 60 tick/s 執行 GameModel；完整狀態只在 SERVE、SCORE、RESET、HIGH_NET_SYNC 與第一球接起後送出。
 */
 package network;
 
@@ -170,7 +170,10 @@ public final class GameServer implements AutoCloseable {
     }
 
     private Packet.EventType detectSyncEvent(FrameState before) {
-        if (before.redScore != model.redScore || before.blueScore != model.blueScore) {
+        boolean scoreChanged = before.redScore != model.redScore || before.blueScore != model.blueScore;
+        boolean finishedScorePreparation = before.rallyOver && !model.isRallyOverForNetwork();
+        if (scoreChanged || finishedScorePreparation) {
+            // SCORE 事件同時負責回合結束與 Server 完成下一次發球準備後的位置同步。
             return Packet.EventType.SCORE;
         }
 
@@ -179,6 +182,12 @@ public final class GameServer implements AutoCloseable {
                 && currentServeState != ServeState.READY
                 && Math.abs(model.ball.vx) + Math.abs(model.ball.vy) > 0.01) {
             return Packet.EventType.SERVE;
+        }
+
+        boolean firstRedContact = before.redHitCount == 0 && model.redHitCount == 1;
+        boolean firstBlueContact = before.blueHitCount == 0 && model.blueHitCount == 1;
+        if (firstRedContact || firstBlueContact) {
+            return Packet.EventType.FIRST_CONTACT_SYNC;
         }
 
         boolean enteredHighSyncHeight = before.ballY > GameConfig.HIGH_NET_SYNC_MAX_BALL_Y
@@ -488,12 +497,26 @@ public final class GameServer implements AutoCloseable {
         final double ballY;
         final int redScore;
         final int blueScore;
+        final int redHitCount;
+        final int blueHitCount;
+        final boolean rallyOver;
         final ServeState serveState;
 
-        FrameState(double ballY, int redScore, int blueScore, ServeState serveState) {
+        FrameState(
+                double ballY,
+                int redScore,
+                int blueScore,
+                int redHitCount,
+                int blueHitCount,
+                boolean rallyOver,
+                ServeState serveState
+        ) {
             this.ballY = ballY;
             this.redScore = redScore;
             this.blueScore = blueScore;
+            this.redHitCount = redHitCount;
+            this.blueHitCount = blueHitCount;
+            this.rallyOver = rallyOver;
             this.serveState = serveState;
         }
 
@@ -502,6 +525,9 @@ public final class GameServer implements AutoCloseable {
                     model.ball.y,
                     model.redScore,
                     model.blueScore,
+                    model.redHitCount,
+                    model.blueHitCount,
+                    model.isRallyOverForNetwork(),
                     model.getServeHandler().getState()
             );
         }

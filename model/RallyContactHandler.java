@@ -77,12 +77,16 @@ public class RallyContactHandler {
                 model.recordHit(redSide, player);
 
                 boolean awardRed = !redSide;
-                model.transientMessage = "後排三米線";
-                model.transientMessageTimer = 42;
-                model.transientMessageIsRed = awardRed;
-                model.awardPoint(awardRed);
-                // 確保扣球軌跡顯示（即使已給分，也要保留軌跡直到落地）
-                model.spikeEffect.startSpikeTrail(ctx.redSide);
+                if (model.isResolvingRallyOutcomes()) {
+                    model.transientMessage = "後排三米線";
+                    model.transientMessageTimer = 42;
+                    model.transientMessageIsRed = awardRed;
+                    model.awardPoint(awardRed);
+                    // 確保扣球軌跡顯示（即使已給分，也要保留軌跡直到落地）
+                    model.spikeEffect.startSpikeTrail(ctx.redSide);
+                } else {
+                    model.awaitAuthoritativeRallyResult();
+                }
                 return true;
             }
 

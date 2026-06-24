@@ -36,7 +36,8 @@ public final class Packet {
         SERVE,
         SCORE,
         RESET,
-        HIGH_NET_SYNC
+        HIGH_NET_SYNC,
+        FIRST_CONTACT_SYNC
     }
 
     public static int encodeInput(TeamInput input) {
@@ -216,6 +217,7 @@ public final class Packet {
                     rallyOver,
                     deadBallTimer
             );
+            model.resumeNetworkPrediction();
         }
     }
 

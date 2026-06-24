@@ -14,8 +14,8 @@ public final class GameConfig {
     public static final int TICKS_PER_SECOND = 60;
 
     // 球由低處向上第一次進入此高度時，Server 送一次 HIGH_NET_SYNC。
-    // 座標 y 越小代表球越高；設為 200 只同步很高的球。
-    public static final double HIGH_NET_SYNC_MAX_BALL_Y = 200.0;
+    // 座標 y 越小代表球越高
+    public static final double HIGH_NET_SYNC_MAX_BALL_Y = 450.0;
 
     // 視窗外可活動區域：球與玩家可以超出畫面，但不可超出這些世界邊界。
     public static final double WORLD_LEFT = -240;

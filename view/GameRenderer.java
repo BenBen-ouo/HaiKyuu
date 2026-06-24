@@ -34,7 +34,7 @@ public class GameRenderer {
         }
 
         // 比分、規則提示與比賽結束畫面永遠保持正常方向。
-        matchDisplay.draw(g, model);
+        matchDisplay.draw(g, model, mirrorWorld);
     }
 
     private void drawMirroredWorld(Graphics2D g, GameModel model) {

@@ -33,6 +33,10 @@ public class GameModel {
     private double lastBallX;
     private boolean ballHitNetThisFrame;
 
+    // Client 本地預測時不可自行裁決得分或下一次發球位置。
+    private boolean resolvingRallyOutcomes = true;
+    private boolean predictionAwaitingAuthority;
+
     // 短暫訊息（例如違規提示），每幀遞減
     public String transientMessage = null;
     public int transientMessageTimer = 0;
@@ -69,6 +73,7 @@ public class GameModel {
         syncPublicHitCounters();
         effects.clear();
         spikeEffect.clear();
+        predictionAwaitingAuthority = false;
     }
 
     // 查詢本回合是否該隊已由舉球員接觸過
@@ -78,27 +83,55 @@ public class GameModel {
 
     // 由外部呼叫：給分並顯示訊息（轉送至 RallyScorer）
     public void awardPointWithMessage(boolean redWins, String message) {
-        // Delegate to RallyScorer via scorer (private) -- add public wrapper
-        scorer.awardPointWithMessage(redWins, message);
+        if (resolvingRallyOutcomes) {
+            scorer.awardPointWithMessage(redWins, message);
+        } else {
+            awaitAuthoritativeRallyResult();
+        }
     }
 
     public void update(TeamInput redInput, TeamInput blueInput) {
+        updateFrame(redInput, blueInput, true);
+    }
+
+    /**
+     * Client 專用的本地預測更新。
+     * 角色與球仍可預測，但得分、違規結束與下一次發球準備只接受 Server 快照。
+     */
+    public void updateForNetworkPrediction(TeamInput redInput, TeamInput blueInput) {
+        updateFrame(redInput, blueInput, false);
+    }
+
+    private void updateFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
         ballHitNetThisFrame = false;
-        // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
-        if (matchOver && matchOverCountdownFrames <= 0) return;
+        resolvingRallyOutcomes = resolveRallyOutcomes;
 
-        BallSideTracker.updateInputs(ball, redInput, blueInput);
+        try {
+            // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
+            if (matchOver && matchOverCountdownFrames <= 0) {
+                return;
+            }
 
-        if (scorer.isRallyOver()) {
-            scorer.updateDeadBall(redInput, blueInput);
-            return;
-        }
+            // Client 已預測到回合結束時，等待 Server 的 SCORE 快照，不自行加分或準備下一次發球。
+            if (!resolveRallyOutcomes && (predictionAwaitingAuthority || scorer.isRallyOver())) {
+                return;
+            }
 
-        updateActiveFrame(redInput, blueInput);
+            BallSideTracker.updateInputs(ball, redInput, blueInput);
 
-        // 若處於 matchOver 的顯示倒數中，遞減計時器
-        if (matchOver && matchOverCountdownFrames > 0) {
-            matchOverCountdownFrames--;
+            if (scorer.isRallyOver()) {
+                scorer.updateDeadBall(redInput, blueInput);
+                return;
+            }
+
+            updateActiveFrame(redInput, blueInput, resolveRallyOutcomes);
+
+            // 若處於 matchOver 的顯示倒數中，遞減計時器
+            if (matchOver && matchOverCountdownFrames > 0) {
+                matchOverCountdownFrames--;
+            }
+        } finally {
+            resolvingRallyOutcomes = true;
         }
     }
 
@@ -122,14 +155,17 @@ public class GameModel {
         rallyState.recordHit(redSide, hitter);
         syncPublicHitCounters();
 
-        // 四連擊判定：若本隊擊球數超過 3，則對方得分
+        // 四連擊只能由 Server 最終裁決；Client 預測到時先停止本地回合演算。
         if (rallyState.getHitCount(redSide) > 3) {
-            // 使用 RallyScorer 的 API 顯示訊息並給分（保持 IN/OUT 顯示邏輯在同一檔案）
-            scorer.awardPointWithMessage(!redSide, "四觸違規");
+            if (resolvingRallyOutcomes) {
+                scorer.awardPointWithMessage(!redSide, "四觸違規");
+            } else {
+                awaitAuthoritativeRallyResult();
+            }
         }
     }
 
-    private void updateActiveFrame(TeamInput redInput, TeamInput blueInput) {
+    private void updateActiveFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
         lastBallX = ball.x;
 
         serveHandler.updateBeforeTeams(redInput, blueInput);
@@ -137,7 +173,7 @@ public class GameModel {
         updateTeams(redInput, blueInput);
         serveHandler.updateAfterTeams();
 
-        updateBallIfNeeded();
+        updateBallIfNeeded(resolveRallyOutcomes);
         collideTeamsIfAllowed(redInput, blueInput);
 
         serveHandler.finishFrame();
@@ -169,7 +205,7 @@ public class GameModel {
         blueTeam.update(blueInput);
     }
 
-    private void updateBallIfNeeded() {
+    private void updateBallIfNeeded(boolean resolveRallyOutcomes) {
         if (!serveHandler.shouldUpdateBall()) {
             return;
         }
@@ -179,15 +215,22 @@ public class GameModel {
         ballHitNetThisFrame = ball.collideWithNet(netHitBox);
 
         serveHandler.updateAfterBall();
-        scorer.checkBallLanding();
+        if (resolveRallyOutcomes) {
+            scorer.checkBallLanding();
+        } else if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
+            // 不在 Client 顯示本地得分／違規結果；等待 Server 的 SCORE 快照。
+            ball.vx = 0;
+            ball.vy = 0;
+            awaitAuthoritativeRallyResult();
+        }
 
-        if (!scorer.isRallyOver()) {
+        if (!scorer.isRallyOver() && !predictionAwaitingAuthority) {
             resetCountersIfBallCrossesNet();
         }
     }
 
     private void collideTeamsIfAllowed(TeamInput redInput, TeamInput blueInput) {
-        if (scorer.isRallyOver()) {
+        if (scorer.isRallyOver() || predictionAwaitingAuthority) {
             return;
         }
 
@@ -259,8 +302,27 @@ public class GameModel {
         scorer.applyNetworkState(rallyOver, deadBallTimer);
     }
 
+    public boolean isResolvingRallyOutcomes() {
+        return resolvingRallyOutcomes;
+    }
+
+    public void awaitAuthoritativeRallyResult() {
+        if (!resolvingRallyOutcomes) {
+            predictionAwaitingAuthority = true;
+        }
+    }
+
+    /* 每次 Server 完整快照套用後，允許 Client 從最新權威狀態繼續預測。 */
+    public void resumeNetworkPrediction() {
+        predictionAwaitingAuthority = false;
+    }
+
     // 外部呼叫：直接給點（例如四連擊、後排三米線違規）
     public void awardPoint(boolean redWins) {
-        scorer.awardPoint(redWins);
+        if (resolvingRallyOutcomes) {
+            scorer.awardPoint(redWins);
+        } else {
+            awaitAuthoritativeRallyResult();
+        }
     }
 }

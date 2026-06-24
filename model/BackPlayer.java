@@ -139,6 +139,17 @@ public class BackPlayer extends Player {
             vx += GameConfig.PLAYER_SPEED;
         }
     }
+    /**
+     * 發球準備時清除舊的撲球／攻擊動作，避免發球鍵沿用上一個 Space 狀態。
+     */
+    public void prepareForServe() {
+        diveController.cancel();
+        previousBackAction = false;
+        PlayerPhysics.clearMotionAndActions(this);
+        finishAction();
+        attackHitBox.disable();
+    }
+
     @Override
     public boolean isDefaultHitBoxActive() {
         if (diving || action == PlayerAction.DIVE) {

@@ -51,6 +51,15 @@ public class DiveController {
         previousDiveInput = currentDiveInput;
     }
 
+    /** 發球準備時取消尚未結束的撲球，並還原站立 hitBox。 */
+    public void cancel() {
+        player.diving = false;
+        player.vx = 0;
+        elapsedFrames = 0;
+        previousDiveInput = false;
+        restoreStandingHitBox();
+    }
+
     private boolean isDiveJustPressed(TeamInput input) {
         return input.backDive && !previousDiveInput;
     }
@@ -89,9 +98,13 @@ public class DiveController {
         player.diving = false;
         player.vx = 0;
         elapsedFrames = 0;
+        restoreStandingHitBox();
+    }
 
+    private void restoreStandingHitBox() {
         if (standingHitBox != null) {
             standingHitBox.restoreTo(player.hitBox);
+            standingHitBox = null;
         }
     }
 

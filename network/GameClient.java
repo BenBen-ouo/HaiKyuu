@@ -95,9 +95,9 @@ public final class GameClient implements NetworkView {
         if (receivedRemoteInput) {
             TeamInput remoteInput = Packet.decodeInput(remoteInputMask);
             if (redSide) {
-                renderModel.update(localInput, remoteInput);
+                renderModel.updateForNetworkPrediction(localInput, remoteInput);
             } else {
-                renderModel.update(remoteInput, localInput);
+                renderModel.updateForNetworkPrediction(remoteInput, localInput);
             }
         }
 

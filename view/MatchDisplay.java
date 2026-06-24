@@ -12,11 +12,15 @@ import java.awt.*;
 import model.*;
 
 public class MatchDisplay {
-    public void draw(Graphics2D g, GameModel model) {
-        // 畫面頂端分數
+    public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
+        // 畫面頂端分數依觀看隊伍排序；P2 畫面先顯示藍隊分數。
+        String scoreText = bluePerspective
+                ? model.blueScore + " : " + model.redScore
+                : model.redScore + " : " + model.blueScore;
         g.setColor(Color.BLACK);
         g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString(model.redScore + " : " + model.blueScore, GameConfig.SCREEN_WIDTH / 2 - 28, 44);
+        FontMetrics scoreMetrics = g.getFontMetrics();
+        g.drawString(scoreText, (GameConfig.SCREEN_WIDTH - scoreMetrics.stringWidth(scoreText)) / 2, 44);
 
         // 若比賽結束，顯示勝利框 (圓角、以贏家顏色)
         if (model.matchOver) {
