@@ -18,16 +18,4 @@ public final class ServeInputLocker {
         input.backJump = false;
         input.backDive = false;
     }
-
-    // 鎖定本隊的所有攻擊與攔網輸入（發球保護期間使用）
-    public static void lockAttackAndBlock(TeamInput input) {
-        // 禁止起跳攻擊（後排/WS/MB 起跳）與主攻鍵
-        input.backJump = false;
-        input.wingAttack = false;
-        input.quickAttack = false;
-        // 禁止快速攔網輸入（如有映射）
-        input.quickBlock = false;
-        // 也保留撲球輸入不被觸發
-        input.backDive = false;
-    }
 }

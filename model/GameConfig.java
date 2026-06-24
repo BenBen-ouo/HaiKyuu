@@ -69,16 +69,8 @@ public final class GameConfig {
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
     // 調整這些數值即可自訂扣球判定區域。
-    public static final double ATTACK_HITBOX_WIDTH = 15;
+    public static final double ATTACK_HITBOX_WIDTH = 20;
     public static final double ATTACK_HITBOX_HEIGHT = 30;
-
-    // 攔網用 hitBox（較大且對齊頭頂），獨立於攻擊 hitbox
-    public static final double BLOCK_HITBOX_WIDTH = 40;
-    public static final double BLOCK_HITBOX_HEIGHT = 40;
-    public static final double RED_BLOCK_HITBOX_OFFSET_X = 50;
-    public static final double RED_BLOCK_HITBOX_OFFSET_Y = 10;
-    public static final double BLUE_BLOCK_HITBOX_OFFSET_X = 10;
-    public static final double BLUE_BLOCK_HITBOX_OFFSET_Y = 10;
 
     // 攻擊 hitBox，左隊放在角色右上角，右隊放在角色左上角。
     public static final double RED_ATTACK_HITBOX_OFFSET_X = 55;

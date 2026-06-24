@@ -19,7 +19,6 @@ public class PlayerActionAnimator {
         }
 
         player.attackHitBox.disable();
-        player.blockHitBox.disable();
         startGroundAction(PlayerAction.RECEIVING);
         player.vx = 0;
         animation.play(AnimationSequences.frames(player, "receive"), AnimationSequences.durations(30));
@@ -35,7 +34,6 @@ public class PlayerActionAnimator {
 
     public void playDive() {
         player.attackHitBox.disable();
-        player.blockHitBox.disable();
         player.action = PlayerAction.DIVE;
         player.attacking = false;
         player.blocking = false;
@@ -78,9 +76,7 @@ public class PlayerActionAnimator {
         player.blocking = true;
         player.attacking = false;
         player.diving = false;
-        // 攔網使用專屬的 blockHitBox，避免顯示攻擊 hitbox
         player.attackHitBox.disable();
-        player.blockHitBox.enable();
 
         if (!player.jumping) {
             player.vy = GameConfig.PLAYER_JUMP_SPEED;
@@ -126,7 +122,6 @@ public class PlayerActionAnimator {
         player.attacking = false;
         player.blocking = false;
         player.attackHitBox.disable();
-        player.blockHitBox.disable();
         animation.stopToIdle();
     }
 
@@ -143,7 +138,6 @@ public class PlayerActionAnimator {
         player.attacking = false;
         player.blocking = false;
         player.attackHitBox.disable();
-        player.blockHitBox.disable();
     }
 
     private boolean isRunLoopAction() {
