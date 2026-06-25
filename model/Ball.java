@@ -85,17 +85,17 @@ public class Ball {
     private void handleWorldBoundaries() {
         if (x - radius < GameConfig.WORLD_LEFT) {
             x = GameConfig.WORLD_LEFT + radius;
-            vx = -vx * GameConfig.NET_BOUNCE;
+            vx = -vx * GameConfig.WORLD_BOUNDARY_BOUNCE;
         }
 
         if (x + radius > GameConfig.WORLD_RIGHT) {
             x = GameConfig.WORLD_RIGHT - radius;
-            vx = -vx * GameConfig.NET_BOUNCE;
+            vx = -vx * GameConfig.WORLD_BOUNDARY_BOUNCE;
         }
 
         if (y - radius < GameConfig.WORLD_TOP) {
             y = GameConfig.WORLD_TOP + radius;
-            vy = -vy * GameConfig.NET_BOUNCE;
+            vy = -vy * GameConfig.WORLD_BOUNDARY_BOUNCE;
         }
 
         if (y + radius > GameConfig.FLOOR_Y) {
