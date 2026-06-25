@@ -13,6 +13,7 @@ import model.TeamInput;
 
 public class KeyboardController implements KeyListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
+    private boolean previousHitBoxTogglePressed;
 
     public synchronized TeamInput getRedInput() {
         TeamInput input = new TeamInput();
@@ -70,6 +71,14 @@ public class KeyboardController implements KeyListener {
 
     public synchronized boolean isCancelResetPressed() {
         return isPressed(KeyEvent.VK_N);
+    }
+
+    /** F3 僅切換測試畫面的碰撞箱顯示，不會送入遊戲輸入或網路封包。 */
+    public synchronized boolean consumeHitBoxTogglePressed() {
+        boolean currentlyPressed = isPressed(KeyEvent.VK_F3);
+        boolean justPressed = currentlyPressed && !previousHitBoxTogglePressed;
+        previousHitBoxTogglePressed = currentlyPressed;
+        return justPressed;
     }
 
     private synchronized ServeType getRedServeType() {
