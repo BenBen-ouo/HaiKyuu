@@ -388,7 +388,7 @@ public final class GameClient implements NetworkView {
         if (!receivedRemoteInput) {
             return redSide ? "已加入為 Player 1，等待 Player 2" : "已加入為 Player 2，等待 Player 1";
         }
-        return "已連線（本地預測，事件／球快照校正）";
+        return "已連線";
     }
 
     @Override
