@@ -6,6 +6,7 @@ package controller;
 
 import model.GameModel;
 import network.GameClient;
+import view.DebugSettings;
 
 public class GameController {
     private final GameModel model;
@@ -23,6 +24,10 @@ public class GameController {
     }
 
     public void update() {
+        if (keyboard.consumeHitBoxTogglePressed()) {
+            DebugSettings.toggleHitBoxesVisible();
+        }
+
         if (client != null) {
             client.update(
                     keyboard.getRedInput(),

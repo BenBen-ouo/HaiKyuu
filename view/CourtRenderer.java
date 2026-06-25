@@ -39,10 +39,10 @@ public class CourtRenderer {
     }
 
     private void drawCourt(Graphics2D g) {
-        int floorY = (int) GameConfig.FLOOR_Y;
+        int floorY = GameConfig.FLOOR_Y_PX;
         int floorHeight = GameConfig.SCREEN_HEIGHT - floorY;
-        int courtLeftX = GameConfig.SCREEN_WIDTH / 2 - 500;
-        int courtRightX = GameConfig.SCREEN_WIDTH / 2 + 500;
+        int courtLeftX = (int) Math.round(GameConfig.COURT_LEFT_X);
+        int courtRightX = (int) Math.round(GameConfig.COURT_RIGHT_X);
 
         drawFloor(g, floorY, floorHeight, courtLeftX, courtRightX);
         drawCourtLines(g, floorY, courtLeftX, courtRightX);

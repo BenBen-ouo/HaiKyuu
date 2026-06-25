@@ -1,14 +1,28 @@
 /*
 負責繪製所有球員、圖片翻轉、碰撞箱與狀態文字。
-角色圖片、debug hitBox 與 ATK / BLK / DIVE 顯示都集中在這裡。
+一般、攻擊與攔網使用的碰撞箱只在 DebugSettings 啟用時繪製，判定本身仍由 model 層執行。
 */
 package view;
 
-import java.awt.*;
-import java.awt.geom.AffineTransform;
-import model.*;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import model.AttackHitBox;
+import model.GameConfig;
+import model.HitBox;
+import model.Player;
+import model.Team;
 
 public class PlayerRenderer {
+    private static final Color RED_HITBOX_FILL = new Color(255, 40, 40, 70);
+    private static final Color BLUE_HITBOX_FILL = new Color(0, 90, 255, 70);
+    private static final Color RED_HITBOX_STROKE = new Color(220, 0, 0);
+    private static final Color BLUE_HITBOX_STROKE = new Color(0, 60, 220);
+    private static final Color ATTACK_HITBOX_FILL = new Color(255, 190, 0, 80);
+    private static final Color ATTACK_HITBOX_STROKE = new Color(255, 140, 0);
+
     private final AssetLoader assets;
 
     public PlayerRenderer(AssetLoader assets) {
@@ -44,8 +58,11 @@ public class PlayerRenderer {
             drawFallbackBody(g, player, redTeam, imageX, imageY);
         }
 
-        drawHitBox(g, player, redTeam);
-        drawAttackHitBox(g, player);
+        if (DebugSettings.areHitBoxesVisible()) {
+            drawDefaultHitBox(g, player, redTeam);
+            drawAttackHitBox(g, player);
+        }
+
         if (drawStateLabels) {
             drawStateText(g, player, imageX, imageY);
         }
@@ -65,32 +82,40 @@ public class PlayerRenderer {
         g.fillRoundRect(x, y, player.imageWidth, player.imageHeight, 14, 14);
     }
 
-    private void drawHitBox(Graphics2D g, Player player, boolean redTeam) {
+    private void drawDefaultHitBox(Graphics2D g, Player player, boolean redTeam) {
         if (!player.isDefaultHitBoxActive()) {
             return;
         }
 
         HitBox box = player.hitBox;
-        GraphicsState graphicsState = GraphicsState.capture(g);
+        Graphics2D hitBoxGraphics = (Graphics2D) g.create();
+        try {
+            hitBoxGraphics.rotate(Math.toRadians(box.rotationDegrees), box.getCenterX(), box.getCenterY());
+            hitBoxGraphics.setColor(hitBoxFillColor(redTeam));
+            hitBoxGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+            hitBoxGraphics.fillRoundRect(
+                    hitX(box),
+                    hitY(box),
+                    hitWidth(box),
+                    hitHeight(box),
+                    box.arcWidth,
+                    box.arcHeight
+            );
 
-        g.rotate(Math.toRadians(box.rotationDegrees), box.getCenterX(), box.getCenterY());
-        fillHitBox(g, box, redTeam);
-        strokeHitBox(g, box, redTeam);
-
-        graphicsState.restore(g);
-    }
-
-    private void fillHitBox(Graphics2D g, HitBox box, boolean redTeam) {
-        g.setColor(redTeam ? new Color(255, 40, 40, 70) : new Color(0, 90, 255, 70));
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-        g.fillRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
-    }
-
-    private void strokeHitBox(Graphics2D g, HitBox box, boolean redTeam) {
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
-        g.setColor(redTeam ? new Color(220, 0, 0) : new Color(0, 60, 220));
-        g.setStroke(new BasicStroke(2));
-        g.drawRoundRect(hitX(box), hitY(box), hitWidth(box), hitHeight(box), box.arcWidth, box.arcHeight);
+            hitBoxGraphics.setComposite(AlphaComposite.SrcOver);
+            hitBoxGraphics.setColor(hitBoxStrokeColor(redTeam));
+            hitBoxGraphics.setStroke(new BasicStroke(2));
+            hitBoxGraphics.drawRoundRect(
+                    hitX(box),
+                    hitY(box),
+                    hitWidth(box),
+                    hitHeight(box),
+                    box.arcWidth,
+                    box.arcHeight
+            );
+        } finally {
+            hitBoxGraphics.dispose();
+        }
     }
 
     private void drawAttackHitBox(Graphics2D g, Player player) {
@@ -99,14 +124,27 @@ public class PlayerRenderer {
             return;
         }
 
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-        g.setColor(new Color(255, 190, 0, 80));
-        g.fillRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
+        Graphics2D hitBoxGraphics = (Graphics2D) g.create();
+        try {
+            hitBoxGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+            hitBoxGraphics.setColor(ATTACK_HITBOX_FILL);
+            hitBoxGraphics.fillRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
 
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
-        g.setColor(new Color(255, 140, 0));
-        g.setStroke(new BasicStroke(2));
-        g.drawRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
+            hitBoxGraphics.setComposite(AlphaComposite.SrcOver);
+            hitBoxGraphics.setColor(ATTACK_HITBOX_STROKE);
+            hitBoxGraphics.setStroke(new BasicStroke(2));
+            hitBoxGraphics.drawRect(attackX(box), attackY(box), attackWidth(box), attackHeight(box));
+        } finally {
+            hitBoxGraphics.dispose();
+        }
+    }
+
+    private Color hitBoxFillColor(boolean redTeam) {
+        return redTeam ? RED_HITBOX_FILL : BLUE_HITBOX_FILL;
+    }
+
+    private Color hitBoxStrokeColor(boolean redTeam) {
+        return redTeam ? RED_HITBOX_STROKE : BLUE_HITBOX_STROKE;
     }
 
     private void drawStateText(Graphics2D g, Player player, int x, int y) {
@@ -146,34 +184,35 @@ public class PlayerRenderer {
         g.drawString(text, screenX, (int) Math.round(worldY));
     }
 
-    private int hitX(HitBox box) { return (int) Math.round(box.getX()); }
-    private int hitY(HitBox box) { return (int) Math.round(box.getY()); }
-    private int hitWidth(HitBox box) { return (int) Math.round(box.width); }
-    private int hitHeight(HitBox box) { return (int) Math.round(box.height); }
-    private int attackX(AttackHitBox box) { return (int) Math.round(box.getX()); }
-    private int attackY(AttackHitBox box) { return (int) Math.round(box.getY()); }
-    private int attackWidth(AttackHitBox box) { return (int) Math.round(box.width); }
-    private int attackHeight(AttackHitBox box) { return (int) Math.round(box.height); }
+    private int hitX(HitBox box) {
+        return (int) Math.round(box.getX());
+    }
 
-    private static class GraphicsState {
-        private final AffineTransform transform;
-        private final Composite composite;
-        private final Stroke stroke;
+    private int hitY(HitBox box) {
+        return (int) Math.round(box.getY());
+    }
 
-        private GraphicsState(Graphics2D g) {
-            transform = g.getTransform();
-            composite = g.getComposite();
-            stroke = g.getStroke();
-        }
+    private int hitWidth(HitBox box) {
+        return (int) Math.round(box.width);
+    }
 
-        static GraphicsState capture(Graphics2D g) {
-            return new GraphicsState(g);
-        }
+    private int hitHeight(HitBox box) {
+        return (int) Math.round(box.height);
+    }
 
-        void restore(Graphics2D g) {
-            g.setTransform(transform);
-            g.setComposite(composite);
-            g.setStroke(stroke);
-        }
+    private int attackX(AttackHitBox box) {
+        return (int) Math.round(box.getX());
+    }
+
+    private int attackY(AttackHitBox box) {
+        return (int) Math.round(box.getY());
+    }
+
+    private int attackWidth(AttackHitBox box) {
+        return (int) Math.round(box.width);
+    }
+
+    private int attackHeight(AttackHitBox box) {
+        return (int) Math.round(box.height);
     }
 }
