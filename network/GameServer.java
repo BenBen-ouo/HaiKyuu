@@ -10,16 +10,9 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import model.GameConfig;
 import model.GameModel;
 import model.ServeState;
@@ -34,7 +27,6 @@ public final class GameServer implements AutoCloseable {
     private static final long BALL_SNAPSHOT_INTERVAL_NANOS = 50_000_000L; // 20 Hz
     private static final long EVENT_RESEND_INTERVAL_NANOS = 200_000_000L;
     private static final long TERMINATION_ACK_TIMEOUT_NANOS = 2_000_000_000L;
-    private static final int MAX_PENDING_EVENTS = 8;
 
     private final GameModel model = new GameModel();
     private final DatagramSocket socket;
@@ -42,8 +34,8 @@ public final class GameServer implements AutoCloseable {
     private final Object slotsLock = new Object();
     private final AtomicBoolean terminationStarted = new AtomicBoolean();
 
-    private volatile PlayerSlot redPlayer;
-    private volatile PlayerSlot bluePlayer;
+    private volatile ServerPlayerSlot redPlayer;
+    private volatile ServerPlayerSlot bluePlayer;
     private volatile boolean running = true;
     private volatile boolean terminating;
     private volatile String endMessage = "";
@@ -73,7 +65,7 @@ public final class GameServer implements AutoCloseable {
 
         System.out.println("HaiKyuu UDP Server 已啟動（無畫面）");
         System.out.println("UDP 5001: " + localIp);
-        System.out.println("Player 1 與 Player 2 都使用：java Main join <Server-IP>");
+        System.out.println("Player 1 與 Player 2 都使用：java -cp build Main join <Server-IP>");
 
         long nextTick = System.nanoTime();
         while (running) {
@@ -94,8 +86,8 @@ public final class GameServer implements AutoCloseable {
         }
 
         serverTick++;
-        PlayerSlot red = redPlayer;
-        PlayerSlot blue = bluePlayer;
+        ServerPlayerSlot red = redPlayer;
+        ServerPlayerSlot blue = bluePlayer;
         if (hasTimedOut(red) || hasTimedOut(blue)) {
             beginTermination();
             return;
@@ -137,10 +129,10 @@ public final class GameServer implements AutoCloseable {
         sendBallSnapshotIfNeeded();
     }
 
-    private ControlResult processControls(PlayerSlot red, PlayerSlot blue) {
+    private ControlResult processControls(ServerPlayerSlot red, ServerPlayerSlot blue) {
         boolean statusChanged = false;
 
-        ControlCommand command;
+        ServerControlCommand command;
         while ((command = red.pollControl()) != null) {
             if (command.action == UdpCodec.ControlAction.DISCONNECT) {
                 beginTermination();
@@ -212,7 +204,7 @@ public final class GameServer implements AutoCloseable {
                 || "TOUCH OUT".equals(message);
     }
 
-    private void relayRemoteInputs(PlayerSlot red, PlayerSlot blue, int redMask, int blueMask) {
+    private void relayRemoteInputs(ServerPlayerSlot red, ServerPlayerSlot blue, int redMask, int blueMask) {
         long now = System.nanoTime();
         if (redMask != lastRedInputMask || now - lastRedInputRelayNanos >= INPUT_RELAY_INTERVAL_NANOS) {
             sendRemoteInput(blue, redMask);
@@ -226,7 +218,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private void sendRemoteInput(PlayerSlot target, int inputMask) {
+    private void sendRemoteInput(ServerPlayerSlot target, int inputMask) {
         try {
             sendUdp(UdpCodec.remoteInput(target.sessionToken, serverTick, inputMask), target.address, target.port);
         } catch (IOException exception) {
@@ -246,7 +238,7 @@ public final class GameServer implements AutoCloseable {
         queueReliableEvent(bluePlayer, event);
     }
 
-    private void queueReliableEvent(PlayerSlot target, ReliableEvent event) {
+    private void queueReliableEvent(ServerPlayerSlot target, ReliableEvent event) {
         if (target == null || !target.isGameplayReady()) {
             return;
         }
@@ -254,7 +246,7 @@ public final class GameServer implements AutoCloseable {
         sendEvent(target, pending);
     }
 
-    private void resendPendingEvents(PlayerSlot target) {
+    private void resendPendingEvents(ServerPlayerSlot target) {
         if (target == null) {
             return;
         }
@@ -266,7 +258,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private void sendEvent(PlayerSlot target, PendingEvent pending) {
+    private void sendEvent(ServerPlayerSlot target, PendingEvent pending) {
         try {
             ReliableEvent event = pending.event;
             sendUdp(
@@ -305,7 +297,7 @@ public final class GameServer implements AutoCloseable {
         sendBallSnapshot(bluePlayer, sequence, snapshot);
     }
 
-    private void sendBallSnapshot(PlayerSlot target, int sequence, Packet.BallSnapshot snapshot) {
+    private void sendBallSnapshot(ServerPlayerSlot target, int sequence, Packet.BallSnapshot snapshot) {
         if (target == null || !target.isGameplayReady()) {
             return;
         }
@@ -347,7 +339,7 @@ public final class GameServer implements AutoCloseable {
             return;
         }
 
-        PlayerSlot slot = findSlotByToken(decoded, address, port);
+        ServerPlayerSlot slot = findSlotByToken(decoded, address, port);
         if (slot == null) {
             return;
         }
@@ -366,15 +358,15 @@ public final class GameServer implements AutoCloseable {
     }
 
     private void handleHello(UdpCodec.Hello hello, InetAddress address, int port) {
-        PlayerSlot slot;
+        ServerPlayerSlot slot;
         synchronized (slotsLock) {
             slot = findSlotByNonce(hello.clientNonce);
             if (slot == null) {
                 if (redPlayer == null) {
-                    slot = new PlayerSlot(true, hello.clientNonce, address, port);
+                    slot = new ServerPlayerSlot(true, hello.clientNonce, address, port);
                     redPlayer = slot;
                 } else if (bluePlayer == null) {
-                    slot = new PlayerSlot(false, hello.clientNonce, address, port);
+                    slot = new ServerPlayerSlot(false, hello.clientNonce, address, port);
                     bluePlayer = slot;
                 }
             }
@@ -407,7 +399,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private PlayerSlot findSlotByToken(UdpCodec.Decoded decoded, InetAddress address, int port) {
+    private ServerPlayerSlot findSlotByToken(UdpCodec.Decoded decoded, InetAddress address, int port) {
         long token;
         if (decoded instanceof UdpCodec.InputFrame input) {
             token = input.token;
@@ -419,22 +411,22 @@ public final class GameServer implements AutoCloseable {
             return null;
         }
 
-        PlayerSlot red = redPlayer;
+        ServerPlayerSlot red = redPlayer;
         if (red != null && red.matches(token, address, port)) {
             return red;
         }
-        PlayerSlot blue = bluePlayer;
+        ServerPlayerSlot blue = bluePlayer;
         return blue != null && blue.matches(token, address, port) ? blue : null;
     }
 
-    private PlayerSlot findSlotByNonce(long nonce) {
-        PlayerSlot red = redPlayer;
+    private ServerPlayerSlot findSlotByNonce(long nonce) {
+        ServerPlayerSlot red = redPlayer;
         if (red != null && red.clientNonce == nonce) return red;
-        PlayerSlot blue = bluePlayer;
+        ServerPlayerSlot blue = bluePlayer;
         return blue != null && blue.clientNonce == nonce ? blue : null;
     }
 
-    private void sendControlStatus(PlayerSlot target, int acknowledgedSequence) {
+    private void sendControlStatus(ServerPlayerSlot target, int acknowledgedSequence) {
         try {
             sendUdp(
                     UdpCodec.controlStatus(
@@ -452,14 +444,14 @@ public final class GameServer implements AutoCloseable {
     }
 
     private void broadcastControlStatus() {
-        PlayerSlot red = redPlayer;
-        PlayerSlot blue = bluePlayer;
+        ServerPlayerSlot red = redPlayer;
+        ServerPlayerSlot blue = bluePlayer;
         if (red != null) sendControlStatus(red, red.getLastControlSequence());
         if (blue != null) sendControlStatus(blue, blue.getLastControlSequence());
     }
 
-    private boolean hasTimedOut(PlayerSlot slot) {
-        return slot != null && System.nanoTime() - slot.lastHeardNanos.get() > CLIENT_TIMEOUT_NANOS;
+    private boolean hasTimedOut(ServerPlayerSlot slot) {
+        return slot != null && slot.hasTimedOut(System.nanoTime(), CLIENT_TIMEOUT_NANOS);
     }
 
     private boolean clearResetConfirmation() {
@@ -488,7 +480,7 @@ public final class GameServer implements AutoCloseable {
         queueMatchAborted(bluePlayer);
     }
 
-    private void queueMatchAborted(PlayerSlot target) {
+    private void queueMatchAborted(ServerPlayerSlot target) {
         if (target == null) {
             return;
         }
@@ -507,7 +499,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private void resendMatchAborted(PlayerSlot target) {
+    private void resendMatchAborted(ServerPlayerSlot target) {
         if (target == null) {
             return;
         }
@@ -517,7 +509,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private void sendMatchAborted(PlayerSlot target, PendingMatchAbort pending) {
+    private void sendMatchAborted(ServerPlayerSlot target, PendingMatchAbort pending) {
         try {
             sendUdp(UdpCodec.matchAborted(target.sessionToken, pending.eventId), target.address, target.port);
             pending.markSent();
@@ -526,7 +518,7 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private boolean isMatchAbortAcknowledged(PlayerSlot target) {
+    private boolean isMatchAbortAcknowledged(ServerPlayerSlot target) {
         return target == null || target.getPendingMatchAbort() == null;
     }
 
@@ -588,176 +580,5 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    private static final class ControlCommand {
-        final int sequence;
-        final UdpCodec.ControlAction action;
 
-        ControlCommand(int sequence, UdpCodec.ControlAction action) {
-            this.sequence = sequence;
-            this.action = action;
-        }
-    }
-
-    private static final class ReliableEvent {
-        final int id;
-        final int serverTick;
-        final Packet.EventType type;
-        final int collisionRevision;
-        final Packet.CompactState state;
-
-        ReliableEvent(
-                int id,
-                int serverTick,
-                Packet.EventType type,
-                int collisionRevision,
-                Packet.CompactState state
-        ) {
-            this.id = id;
-            this.serverTick = serverTick;
-            this.type = type;
-            this.collisionRevision = collisionRevision;
-            this.state = state;
-        }
-    }
-
-    private static final class PendingEvent {
-        final ReliableEvent event;
-        volatile long lastSentNanos;
-
-        PendingEvent(ReliableEvent event) {
-            this.event = event;
-        }
-
-        void markSent() {
-            lastSentNanos = System.nanoTime();
-        }
-    }
-
-    private static final class PendingMatchAbort {
-        final int eventId;
-        volatile long lastSentNanos;
-
-        PendingMatchAbort(int eventId) {
-            this.eventId = eventId;
-        }
-
-        void markSent() {
-            lastSentNanos = System.nanoTime();
-        }
-    }
-
-    private static final class PlayerSlot {
-        final boolean redSide;
-        final long clientNonce;
-        final long sessionToken = ThreadLocalRandom.current().nextLong();
-        final AtomicInteger latestInputMask = new AtomicInteger();
-        final AtomicInteger pendingPressedMask = new AtomicInteger();
-        final AtomicInteger lastInputSequence = new AtomicInteger(-1);
-        final AtomicInteger latestScheduledServerTick = new AtomicInteger();
-        final AtomicInteger lastControlSequence = new AtomicInteger(-1);
-        final AtomicLong lastHeardNanos = new AtomicLong(System.nanoTime());
-        final ConcurrentLinkedQueue<ControlCommand> pendingControls = new ConcurrentLinkedQueue<>();
-        final Deque<PendingEvent> pendingEvents = new ArrayDeque<>();
-
-        volatile InetAddress address;
-        volatile int port;
-        volatile boolean gameplayReady;
-        private PendingMatchAbort pendingMatchAbort;
-
-        PlayerSlot(boolean redSide, long clientNonce, InetAddress address, int port) {
-            this.redSide = redSide;
-            this.clientNonce = clientNonce;
-            this.address = address;
-            this.port = port;
-        }
-
-        void updateEndpoint(InetAddress address, int port) {
-            this.address = address;
-            this.port = port;
-        }
-
-        void markHeard() {
-            lastHeardNanos.set(System.nanoTime());
-        }
-
-        boolean matches(long token, InetAddress address, int port) {
-            return sessionToken == token
-                    && this.address != null
-                    && this.address.equals(address)
-                    && this.port == port;
-        }
-
-        void acceptInput(UdpCodec.InputFrame input) {
-            markHeard();
-            if (input.sequence <= lastInputSequence.get()) {
-                return;
-            }
-            lastInputSequence.set(input.sequence);
-            latestScheduledServerTick.set(input.scheduledServerTick);
-            int previousMask = latestInputMask.getAndSet(input.inputMask);
-            int pressedSinceLastFrame = input.inputMask & ~previousMask;
-            pendingPressedMask.getAndAccumulate(pressedSinceLastFrame, (current, pressed) -> current | pressed);
-            gameplayReady = true;
-        }
-
-        boolean acceptControl(UdpCodec.ControlFrame control) {
-            markHeard();
-            if (control.sequence <= lastControlSequence.get()) return false;
-            lastControlSequence.set(control.sequence);
-            pendingControls.offer(new ControlCommand(control.sequence, control.action));
-            return true;
-        }
-
-        int takeInputMaskForTick() {
-            return latestInputMask.get() | pendingPressedMask.getAndSet(0);
-        }
-
-        int getLastControlSequence() {
-            return lastControlSequence.get();
-        }
-
-        boolean isGameplayReady() {
-            return gameplayReady;
-        }
-
-        ControlCommand pollControl() {
-            return pendingControls.poll();
-        }
-
-        synchronized PendingEvent addPendingEvent(ReliableEvent event) {
-            PendingEvent pending = new PendingEvent(event);
-            pendingEvents.addLast(pending);
-            while (pendingEvents.size() > MAX_PENDING_EVENTS) {
-                pendingEvents.removeFirst();
-            }
-            return pending;
-        }
-
-        synchronized void acknowledgeEvent(int eventId) {
-            for (Iterator<PendingEvent> iterator = pendingEvents.iterator(); iterator.hasNext();) {
-                if (iterator.next().event.id <= eventId) {
-                    iterator.remove();
-                }
-            }
-            if (pendingMatchAbort != null && pendingMatchAbort.eventId == eventId) {
-                pendingMatchAbort = null;
-            }
-            markHeard();
-        }
-
-        synchronized PendingEvent[] pendingEventsSnapshot() {
-            return pendingEvents.toArray(new PendingEvent[0]);
-        }
-
-        synchronized PendingMatchAbort beginMatchAbort(int eventId) {
-            if (pendingMatchAbort == null) {
-                pendingMatchAbort = new PendingMatchAbort(eventId);
-            }
-            return pendingMatchAbort;
-        }
-
-        synchronized PendingMatchAbort getPendingMatchAbort() {
-            return pendingMatchAbort;
-        }
-    }
 }

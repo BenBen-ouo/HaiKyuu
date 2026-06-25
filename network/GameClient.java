@@ -56,12 +56,8 @@ public final class GameClient implements NetworkView {
     private long terminationAckUntilNanos;
     private PendingControl pendingControl;
 
-    // 僅供畫面使用：物理球會立即採用 Server 狀態，畫面球才依誤差短暫追上。
-    private boolean ballRenderInitialized;
-    private double ballRenderOffsetX;
-    private double ballRenderOffsetY;
-    private double ballRenderRotationOffset;
-    private int ballCorrectionFramesRemaining;
+    // 物理球立即採用 Server 狀態；畫面球則由此校正器短暫平滑追上。
+    private final BallRenderCorrection ballRenderCorrection = new BallRenderCorrection();
 
     public GameClient(GameModel renderModel, String hostIp) throws IOException {
         this.renderModel = renderModel;
@@ -110,7 +106,7 @@ public final class GameClient implements NetworkView {
             }
         }
 
-        advanceBallRenderCorrection();
+        ballRenderCorrection.advance();
 
         if (receivedRemoteInput && System.nanoTime() - lastServerPacketNanos > SERVER_TIMEOUT_NANOS) {
             endLocally();
@@ -196,7 +192,7 @@ public final class GameClient implements NetworkView {
         assigned = true;
         estimatedServerTick = welcome.serverTick;
         welcome.state.applyTo(renderModel);
-        resetBallRenderCorrection();
+        ballRenderCorrection.reset();
         markServerPacketReceived();
     }
 
@@ -214,7 +210,7 @@ public final class GameClient implements NetworkView {
         lastCollisionRevision = Math.max(lastCollisionRevision, event.collisionRevision);
         estimatedServerTick = Math.max(estimatedServerTick, event.serverTick);
         event.state.applyTo(renderModel);
-        scheduleBallVisualCorrection(visibleX, visibleY, visibleRotation);
+        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
     }
 
     private void handleBallSnapshot(UdpCodec.BallSnapshotFrame snapshot) {
@@ -230,51 +226,21 @@ public final class GameClient implements NetworkView {
         lastBallSnapshotSequence = snapshot.snapshotSequence;
         estimatedServerTick = Math.max(estimatedServerTick, snapshot.serverTick);
         snapshot.ball.applyTo(renderModel.ball);
-        scheduleBallVisualCorrection(visibleX, visibleY, visibleRotation);
+        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
     }
 
-    private void scheduleBallVisualCorrection(double visibleX, double visibleY, double visibleRotation) {
-        ballRenderInitialized = true;
-        double errorX = renderModel.ball.x - visibleX;
-        double errorY = renderModel.ball.y - visibleY;
-        double distance = Math.hypot(errorX, errorY);
-
-        if (distance > 80.0) {
-            resetBallRenderCorrection();
+    private void clearSpikeTrailIfLargeCorrection(double visibleX, double visibleY, double visibleRotation) {
+        boolean largeCorrection = ballRenderCorrection.schedule(
+                renderModel.ball.x,
+                renderModel.ball.y,
+                renderModel.ball.rotationDegrees,
+                visibleX,
+                visibleY,
+                visibleRotation
+        );
+        if (largeCorrection) {
             renderModel.spikeEffect.clearSpikeTrail();
-            return;
         }
-
-        ballRenderOffsetX = visibleX - renderModel.ball.x;
-        ballRenderOffsetY = visibleY - renderModel.ball.y;
-        ballRenderRotationOffset = normalizeDegrees(visibleRotation - renderModel.ball.rotationDegrees);
-        ballCorrectionFramesRemaining = distance < 20.0 ? 3 : 5;
-    }
-
-    private void advanceBallRenderCorrection() {
-        if (!ballRenderInitialized || ballCorrectionFramesRemaining <= 0) {
-            return;
-        }
-
-        ballRenderOffsetX -= ballRenderOffsetX / ballCorrectionFramesRemaining;
-        ballRenderOffsetY -= ballRenderOffsetY / ballCorrectionFramesRemaining;
-        ballRenderRotationOffset -= ballRenderRotationOffset / ballCorrectionFramesRemaining;
-        ballCorrectionFramesRemaining--;
-    }
-
-    private void resetBallRenderCorrection() {
-        ballRenderInitialized = true;
-        ballRenderOffsetX = 0;
-        ballRenderOffsetY = 0;
-        ballRenderRotationOffset = 0;
-        ballCorrectionFramesRemaining = 0;
-    }
-
-    private static double normalizeDegrees(double degrees) {
-        double normalized = degrees % 360.0;
-        if (normalized > 180.0) return normalized - 360.0;
-        if (normalized < -180.0) return normalized + 360.0;
-        return normalized;
     }
 
     private void handleMatchAborted(UdpCodec.MatchAborted aborted) {
@@ -369,31 +335,7 @@ public final class GameClient implements NetworkView {
     }
 
     private TeamInput toWorldInput(TeamInput keyboardInput) {
-        TeamInput input = copyInput(keyboardInput);
-        if (!redSide) {
-            boolean left = input.backLeft;
-            input.backLeft = input.backRight;
-            input.backRight = left;
-        }
-        return input;
-    }
-
-    private TeamInput copyInput(TeamInput source) {
-        TeamInput input = new TeamInput();
-        input.backLeft = source.backLeft;
-        input.backRight = source.backRight;
-        input.backJump = source.backJump;
-        input.backDive = source.backDive;
-        input.setterJump = source.setterJump;
-        input.quickAttack = source.quickAttack;
-        input.quickBlock = source.quickBlock;
-        input.wingAttack = source.wingAttack;
-        input.spikeFlat = source.spikeFlat;
-        input.spikeShort = source.spikeShort;
-        input.spikeLob = source.spikeLob;
-        input.servePressed = source.servePressed;
-        input.serveType = source.serveType;
-        return input;
+        return redSide ? keyboardInput.copy() : keyboardInput.mirroredHorizontally();
     }
 
     private boolean isOwnToken(long token) {
@@ -472,19 +414,17 @@ public final class GameClient implements NetworkView {
 
     @Override
     public double getRenderedBallX(double authoritativeX) {
-        return ballRenderInitialized ? authoritativeX + ballRenderOffsetX : authoritativeX;
+        return ballRenderCorrection.renderedX(authoritativeX);
     }
 
     @Override
     public double getRenderedBallY(double authoritativeY) {
-        return ballRenderInitialized ? authoritativeY + ballRenderOffsetY : authoritativeY;
+        return ballRenderCorrection.renderedY(authoritativeY);
     }
 
     @Override
     public double getRenderedBallRotation(double authoritativeRotationDegrees) {
-        return ballRenderInitialized
-                ? authoritativeRotationDegrees + ballRenderRotationOffset
-                : authoritativeRotationDegrees;
+        return ballRenderCorrection.renderedRotation(authoritativeRotationDegrees);
     }
 
     @Override

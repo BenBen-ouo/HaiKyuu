@@ -98,7 +98,7 @@ public class RallyContactHandler {
 
         return false;
     }
-  
+
     private boolean isBackRowAttackFault(Player player, boolean redSide) {
         if (!(player instanceof BackPlayer)) {
             return false;
@@ -196,7 +196,7 @@ public class RallyContactHandler {
         if (!(player instanceof QuickAttacker) || !player.isBlockHitBoxActive()) {
             return false;
         }
- 
+
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
@@ -220,48 +220,16 @@ public class RallyContactHandler {
             model.resetTeamContacts(attackingTeam);
         }
 
-        /*
-         * 攔網後不停止扣球軌跡。
-         * 軌跡會持續到球落地，或被其他球員一般接球時才停止。
-         */
-
-        /*
-         * 攔網後預測球落地位置。
-         * 若攻擊方最後觸球，且攔網後球將飛出界，
-         * 則記錄 touch out，等球實際落地時由 RallyScorer 判定攻擊方得分。
-         */
-        // 記錄攔網為本回合的一次觸球（雖然 blocking 不會增加 hitCount）
+        // 攔網後保留扣球軌跡，直到落地或下一次一般接球才停止。
+        // 攔網記為本回合觸球；RallyState 仍依既有規則決定計數方式。
         model.recordHit(player.redSide, player);
-        
-        if (attackingTeam != null && attackingTeam != player.redSide) {
-            double ballX = model.ball.x;
-            double ballY = model.ball.y;
-            double velocityX = model.ball.vx;
-            double velocityY = model.ball.vy;
 
-            double a = 0.5 * GameConfig.GRAVITY;
-            double b = velocityY;
-            double c = ballY - (GameConfig.FLOOR_Y - model.ball.radius);
-            double discriminant = b * b - 4 * a * c;
-
-            if (discriminant >= 0) {
-                double landingTime = (-b + Math.sqrt(discriminant)) / (2 * a);
-
-                if (landingTime < 0) {
-                    landingTime = (-b - Math.sqrt(discriminant)) / (2 * a);
-                }
-
-                if (landingTime > 0) {
-                    double landingX = ballX + velocityX * landingTime;
-                    boolean inCourt = landingX >= GameConfig.COURT_LEFT_X
-                            && landingX <= GameConfig.COURT_RIGHT_X;
-
-                    if (!inCourt) {
-                        model.pendingTouchOut = true;
-                        model.pendingTouchOutWinner = attackingTeam;
-                    }
-                }
-            }
+        // 攻擊方最後觸球、且反彈球預計出界時，延後到實際落地再依 touch out 給分。
+        if (attackingTeam != null
+                && attackingTeam != player.redSide
+                && BallLandingPredictor.willLandOutsideCourt(model.ball)) {
+            model.pendingTouchOut = true;
+            model.pendingTouchOutWinner = attackingTeam;
         }
 
         return true;
