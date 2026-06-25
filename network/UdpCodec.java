@@ -197,7 +197,7 @@ public final class UdpCodec {
             out.writeLong(sessionToken);
             out.writeBoolean(redSide);
             out.writeInt(serverTick);
-            writeState(out, state);
+            NetworkStateCodec.writeState(out, state);
         });
     }
 
@@ -232,7 +232,7 @@ public final class UdpCodec {
             out.writeInt(serverTick);
             out.writeByte(type.ordinal());
             out.writeInt(collisionRevision);
-            writeState(out, state);
+            NetworkStateCodec.writeState(out, state);
         });
     }
 
@@ -247,7 +247,7 @@ public final class UdpCodec {
             out.writeInt(serverTick);
             out.writeInt(snapshotSequence);
             out.writeInt(snapshot.collisionRevision);
-            writeBall(out, snapshot.ball);
+            NetworkStateCodec.writeBall(out, snapshot.ball);
         });
     }
 
@@ -300,7 +300,7 @@ public final class UdpCodec {
                         in.readLong(),
                         in.readBoolean(),
                         in.readInt(),
-                        readState(in)
+                        NetworkStateCodec.readState(in)
                 );
                 case TYPE_INPUT -> new InputFrame(in.readLong(), in.readInt(), in.readInt(), in.readInt());
                 case TYPE_REMOTE_INPUT -> new RemoteInputFrame(in.readLong(), in.readInt(), in.readInt());
@@ -310,7 +310,7 @@ public final class UdpCodec {
                         in.readInt(),
                         readEventType(in.readByte()),
                         in.readInt(),
-                        readState(in)
+                        NetworkStateCodec.readState(in)
                 );
                 case TYPE_EVENT_ACK -> new EventAck(in.readLong(), in.readInt());
                 case TYPE_MATCH_ABORTED -> new MatchAborted(in.readLong(), in.readInt());
@@ -323,7 +323,7 @@ public final class UdpCodec {
                         in.readInt(),
                         in.readInt(),
                         in.readInt(),
-                        readBall(in)
+                        NetworkStateCodec.readBall(in)
                 );
                 default -> null;
             };
@@ -352,159 +352,6 @@ public final class UdpCodec {
             out.flush();
             return bytes.toByteArray();
         }
-    }
-
-    private static void writeState(DataOutputStream out, Packet.CompactState state) throws IOException {
-        writeBall(out, state.ball);
-        writeTeam(out, state.redTeam);
-        writeTeam(out, state.blueTeam);
-
-        out.writeInt(state.redScore);
-        out.writeInt(state.blueScore);
-        out.writeInt(state.redHitCount);
-        out.writeInt(state.blueHitCount);
-        out.writeInt(state.redLastHitterIndex);
-        out.writeInt(state.blueLastHitterIndex);
-        out.writeByte(state.lastHitTeamCode);
-        out.writeBoolean(state.lastTouchWasBlock);
-
-        out.writeByte(state.serveStateOrdinal);
-        out.writeBoolean(state.redServing);
-        out.writeBoolean(state.rallyOver);
-        out.writeInt(state.deadBallTimer);
-
-        out.writeBoolean(state.matchOver);
-        out.writeByte(state.matchWinnerCode);
-        writeNullableString(out, state.transientMessage);
-        out.writeInt(state.transientMessageTimer);
-        out.writeByte(state.transientMessageColorCode);
-        out.writeBoolean(state.pendingTouchOut);
-        out.writeByte(state.pendingTouchOutWinnerCode);
-        out.writeInt(state.matchOverCountdownFrames);
-    }
-
-    private static Packet.CompactState readState(DataInputStream in) throws IOException {
-        Packet.BallState ball = readBall(in);
-        Packet.TeamState redTeam = readTeam(in);
-        Packet.TeamState blueTeam = readTeam(in);
-
-        int redScore = in.readInt();
-        int blueScore = in.readInt();
-        int redHitCount = in.readInt();
-        int blueHitCount = in.readInt();
-        int redLastHitterIndex = in.readInt();
-        int blueLastHitterIndex = in.readInt();
-        int lastHitTeamCode = in.readByte();
-        boolean lastTouchWasBlock = in.readBoolean();
-
-        int serveStateOrdinal = in.readByte();
-        boolean redServing = in.readBoolean();
-        boolean rallyOver = in.readBoolean();
-        int deadBallTimer = in.readInt();
-
-        boolean matchOver = in.readBoolean();
-        int matchWinnerCode = in.readByte();
-        String transientMessage = readNullableString(in);
-        int transientMessageTimer = in.readInt();
-        int transientMessageColorCode = in.readByte();
-        boolean pendingTouchOut = in.readBoolean();
-        int pendingTouchOutWinnerCode = in.readByte();
-        int matchOverCountdownFrames = in.readInt();
-
-        return new Packet.CompactState(
-                ball, redTeam, blueTeam,
-                redScore, blueScore,
-                redHitCount, blueHitCount,
-                redLastHitterIndex, blueLastHitterIndex,
-                lastHitTeamCode, lastTouchWasBlock,
-                serveStateOrdinal, redServing, rallyOver, deadBallTimer,
-                matchOver, matchWinnerCode,
-                transientMessage, transientMessageTimer, transientMessageColorCode,
-                pendingTouchOut, pendingTouchOutWinnerCode, matchOverCountdownFrames
-        );
-    }
-
-    private static void writeBall(DataOutputStream out, Packet.BallState ball) throws IOException {
-        out.writeDouble(ball.x);
-        out.writeDouble(ball.y);
-        out.writeDouble(ball.vx);
-        out.writeDouble(ball.vy);
-        out.writeDouble(ball.radius);
-        out.writeDouble(ball.rotationDegrees);
-        out.writeDouble(ball.rotationSpeed);
-        out.writeBoolean(ball.fastFloorBounceSpin);
-    }
-
-    private static Packet.BallState readBall(DataInputStream in) throws IOException {
-        return new Packet.BallState(
-                in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
-                in.readDouble(), in.readDouble(), in.readDouble(), in.readBoolean()
-        );
-    }
-
-    private static void writeTeam(DataOutputStream out, Packet.TeamState team) throws IOException {
-        out.writeByte(team.players.length);
-        for (Packet.PlayerState player : team.players) {
-            writePlayer(out, player);
-        }
-    }
-
-    private static Packet.TeamState readTeam(DataInputStream in) throws IOException {
-        int count = Byte.toUnsignedInt(in.readByte());
-        if (count > 8) {
-            throw new IOException("Invalid player count");
-        }
-
-        Packet.PlayerState[] players = new Packet.PlayerState[count];
-        for (int i = 0; i < count; i++) {
-            players[i] = readPlayer(in);
-        }
-        return new Packet.TeamState(players);
-    }
-
-    private static void writePlayer(DataOutputStream out, Packet.PlayerState player) throws IOException {
-        writeNullableString(out, player.assetName);
-        out.writeDouble(player.x);
-        out.writeDouble(player.y);
-        out.writeDouble(player.vx);
-        out.writeDouble(player.vy);
-        out.writeBoolean(player.jumping);
-        out.writeBoolean(player.attacking);
-        out.writeBoolean(player.blocking);
-        out.writeBoolean(player.diving);
-        out.writeBoolean(player.mirrorImage);
-        out.writeDouble(player.jumpStartX);
-        out.writeByte(player.actionOrdinal);
-        out.writeBoolean(player.attackHitBoxEnabled);
-        out.writeDouble(player.hitBoxOffsetX);
-        out.writeDouble(player.hitBoxOffsetY);
-        out.writeDouble(player.hitBoxWidth);
-        out.writeDouble(player.hitBoxHeight);
-        out.writeInt(player.hitBoxArcWidth);
-        out.writeInt(player.hitBoxArcHeight);
-        out.writeDouble(player.hitBoxRotationDegrees);
-    }
-
-    private static Packet.PlayerState readPlayer(DataInputStream in) throws IOException {
-        return new Packet.PlayerState(
-                readNullableString(in),
-                in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(),
-                in.readDouble(), in.readByte(), in.readBoolean(),
-                in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
-                in.readInt(), in.readInt(), in.readDouble()
-        );
-    }
-
-    private static void writeNullableString(DataOutputStream out, String value) throws IOException {
-        out.writeBoolean(value != null);
-        if (value != null) {
-            out.writeUTF(value);
-        }
-    }
-
-    private static String readNullableString(DataInputStream in) throws IOException {
-        return in.readBoolean() ? in.readUTF() : null;
     }
 
     @FunctionalInterface
