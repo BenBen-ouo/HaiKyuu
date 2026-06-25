@@ -1,6 +1,6 @@
 /*
-預留給攻擊動作使用的碰撞箱資料。
-目前只保存攻擊碰撞箱的位置、大小與開關，不參與球的碰撞邏輯。
+攻擊動作專用碰撞箱，使用相對於角色圖片左上角的位置與大小。
+只有角色進入攻擊準備或揮臂狀態時啟用，負責扣球命中判定。
 */
 package model;
 
@@ -38,5 +38,26 @@ public class AttackHitBox {
 
     public double getY() {
         return owner.y + offsetY;
+    }
+
+    public double getCenterX() {
+        return getX() + width / 2.0;
+    }
+
+    public double getCenterY() {
+        return getY() + height / 2.0;
+    }
+
+    public boolean intersectsBall(Ball ball) {
+        if (!enabled || width <= 0 || height <= 0) {
+            return false;
+        }
+
+        double nearestX = Math.max(getX(), Math.min(ball.x, getX() + width));
+        double nearestY = Math.max(getY(), Math.min(ball.y, getY() + height));
+        double dx = ball.x - nearestX;
+        double dy = ball.y - nearestY;
+
+        return dx * dx + dy * dy <= ball.radius * ball.radius;
     }
 }

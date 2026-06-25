@@ -1,6 +1,6 @@
 /*
-Swing 遊戲畫面面板，負責啟動 60 FPS 遊戲迴圈。
-每幀呼叫 controller 更新模型，再呼叫 renderer 重繪畫面。
+Swing 遊戲畫面面板，負責固定 60 tick/s 更新與重繪。
+連線模式每個 tick 交由 GameClient 執行本地預測與 UDP 封包處理，並顯示網路狀態。
 */
 package view;
 
@@ -12,48 +12,64 @@ import java.awt.RenderingHints;
 import javax.swing.JPanel;
 import model.GameConfig;
 import model.GameModel;
+import network.NetworkView;
 
 public class GamePanel extends JPanel {
     private final GameModel model;
     private final GameController controller;
+    private final NetworkView networkView;
     private final GameRenderer renderer = new GameRenderer();
+    private final NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
 
     public GamePanel(GameModel model, GameController controller) {
+        this(model, controller, null);
+    }
+
+    public GamePanel(GameModel model, GameController controller, NetworkView networkView) {
         this.model = model;
         this.controller = controller;
+        this.networkView = networkView;
         setPreferredSize(new Dimension(GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT));
         setFocusable(true);
     }
 
     public void startGameLoop() {
         Thread loop = new Thread(() -> {
-            final int fps = 60;
-            final long frameTime = 1000L / fps;
+            long tickNanos = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
+            long nextTickNanos = System.nanoTime();
 
-            while (true) {
-                long start = System.currentTimeMillis();
+            while (!Thread.currentThread().isInterrupted()) {
                 controller.update();
                 repaint();
 
-                long used = System.currentTimeMillis() - start;
-                long sleep = Math.max(2, frameTime - used);
-                try {
-                    Thread.sleep(sleep);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
+                nextTickNanos += tickNanos;
+                sleepUntil(nextTickNanos);
             }
-        });
+        }, "haikyuu-game-loop");
         loop.setDaemon(true);
         loop.start();
     }
 
+    private void sleepUntil(long deadlineNanos) {
+        long remaining = deadlineNanos - System.nanoTime();
+        if (remaining <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(remaining / 1_000_000L, (int) (remaining % 1_000_000L));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2 = (Graphics2D) g;
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        renderer.render(g2, model);
+    protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
+        Graphics2D g = (Graphics2D) graphics.create();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        boolean mirrorWorld = networkView != null && networkView.isBluePerspective();
+        renderer.render(g, model, mirrorWorld, networkView);
+        networkStatusRenderer.draw(g, networkView);
+        g.dispose();
     }
 }

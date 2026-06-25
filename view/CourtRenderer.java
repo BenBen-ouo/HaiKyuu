@@ -15,21 +15,27 @@ public class CourtRenderer {
     private static final Color GUIDE_COLOR = new Color(180, 180, 180);
 
     public void draw(Graphics2D g) {
+        draw(g, true);
+    }
+
+    public void draw(Graphics2D g, boolean drawWorldBoundaryGuide) {
         drawBackground(g);
-        drawWorldBoundaryGuide(g);
+        if (drawWorldBoundaryGuide) {
+            drawWorldBoundaryGuide(g);
+        }
         drawCourt(g);
+    }
+
+    public void drawWorldBoundaryGuide(Graphics2D g) {
+        g.setColor(GUIDE_COLOR);
+        g.drawString("World boundary: left=" + (int) GameConfig.WORLD_LEFT
+                + ", right=" + (int) GameConfig.WORLD_RIGHT
+                + ", top=" + (int) GameConfig.WORLD_TOP, 16, 22);
     }
 
     private void drawBackground(Graphics2D g) {
         g.setColor(BACKGROUND_COLOR);
         g.fillRect(0, 0, GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT);
-    }
-
-    private void drawWorldBoundaryGuide(Graphics2D g) {
-        g.setColor(GUIDE_COLOR);
-        g.drawString("World boundary: left=" + (int) GameConfig.WORLD_LEFT
-                + ", right=" + (int) GameConfig.WORLD_RIGHT
-                + ", top=" + (int) GameConfig.WORLD_TOP, 16, 22);
     }
 
     private void drawCourt(Graphics2D g) {
@@ -59,8 +65,9 @@ public class CourtRenderer {
         g.setStroke(new BasicStroke(3));
         g.drawLine(0, floorY, GameConfig.SCREEN_WIDTH, floorY);
         g.drawLine(centerX, floorY, centerX, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(centerX - 167, floorY, centerX - 167, GameConfig.SCREEN_HEIGHT);
-        g.drawLine(centerX + 167, floorY, centerX + 167, GameConfig.SCREEN_HEIGHT);
+        int threeMeter = (int) GameConfig.THREE_METER_PX;
+        g.drawLine(centerX - threeMeter, floorY, centerX - threeMeter, GameConfig.SCREEN_HEIGHT);
+        g.drawLine(centerX + threeMeter, floorY, centerX + threeMeter, GameConfig.SCREEN_HEIGHT);
         g.drawLine(courtLeftX, floorY, courtLeftX, GameConfig.SCREEN_HEIGHT);
         g.drawLine(courtRightX, floorY, courtRightX, GameConfig.SCREEN_HEIGHT);
     }

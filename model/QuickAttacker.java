@@ -38,13 +38,21 @@ public class QuickAttacker extends Player {
         if (justPressedQuick) {
             if (input.ballOnOwnSide) {
                 startAttackReady(0);
+                // 稍微降低非後排（QuickAttacker）起跳高度
+                vy *= GameConfig.NON_BACK_AI_JUMP_MULTIPLIER;
             } else {
                 startBlockAnimation();
+                // 若剛起跳成為攔網，也降低起跳高度
+                vy *= GameConfig.NON_BACK_AI_JUMP_MULTIPLIER;
             }
         }
 
         applyGravity();
         updateActionAnimation();
         previousQuickAttack = input.quickAttack;
+    }
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        return isBlockHitBoxActive();
     }
 }

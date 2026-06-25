@@ -1,6 +1,6 @@
 /*
-負責繪製排球圖片。
-依照 Ball 的中心點與半徑計算圖片位置與大小。
+負責繪製排球圖片與畫面上的旋轉效果。
+依照 Ball 的中心點、半徑與 rotationDegrees 計算圖片的位置與旋轉角度。
 */
 package view;
 
@@ -15,6 +15,11 @@ public class BallRenderer {
     }
 
     public void draw(Graphics2D g, Ball ball) {
+        draw(g, ball, ball.x, ball.y, ball.rotationDegrees);
+    }
+
+    /** 球物理仍使用 Ball；畫面座標可由網路校正層暫時覆蓋。 */
+    public void draw(Graphics2D g, Ball ball, double renderX, double renderY, double renderRotationDegrees) {
         Image image = assets.get("mikasa.png");
 
         if (image == null) {
@@ -22,9 +27,12 @@ public class BallRenderer {
         }
 
         int diameter = (int) (ball.radius * 2);
-        int x = (int) (ball.x - ball.radius);
-        int y = (int) (ball.y - ball.radius);
+        int x = (int) (renderX - ball.radius);
+        int y = (int) (renderY - ball.radius);
 
-        g.drawImage(image, x, y, diameter, diameter, null);
+        Graphics2D rotatedGraphics = (Graphics2D) g.create();
+        rotatedGraphics.rotate(Math.toRadians(renderRotationDegrees), renderX, renderY);
+        rotatedGraphics.drawImage(image, x, y, diameter, diameter, null);
+        rotatedGraphics.dispose();
     }
 }

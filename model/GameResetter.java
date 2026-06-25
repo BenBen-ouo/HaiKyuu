@@ -14,6 +14,10 @@ public class GameResetter {
         model.redScore = 0;
         model.blueScore = 0;
 
+        // 重置比賽狀態
+        model.matchOver = false;
+        model.matchWinnerRed = null;
+
         // 重置擊球計數與最後觸球者
         model.resetCounters();
 
@@ -26,5 +30,13 @@ public class GameResetter {
 
         // 重置發球狀態
         model.getServeHandler().reset();
+
+        // 清除暫時顯示與 pending touch out / match 規則計時
+        model.transientMessage = null;
+        model.transientMessageTimer = 0;
+        model.transientMessageIsRed = null;
+        model.pendingTouchOut = false;
+        model.pendingTouchOutWinner = null;
+        model.matchOverCountdownFrames = 0;
     }
 }

@@ -14,7 +14,8 @@ public class Setter extends Player {
         vx = 0;
 
         if (input.setterJump && !jumping) {
-            vy = GameConfig.PLAYER_JUMP_SPEED * 0.92;
+            // 原先為 0.92 的乘數，對 AI 再稍微降低一些
+            vy = GameConfig.PLAYER_JUMP_SPEED * 0.92 * GameConfig.NON_BACK_AI_JUMP_MULTIPLIER;
             jumping = true;
         }
 

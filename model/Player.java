@@ -29,6 +29,8 @@ public abstract class Player {
     public boolean redSide;
     public boolean mirrorImage = false;
 
+    // 當次跳起的起跳 X 座標（用於判定三米線違規）
+    public double jumpStartX = Double.NaN;
     protected final PlayerAnimation animation;
     protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
@@ -62,7 +64,19 @@ public abstract class Player {
     }
 
     public boolean intersectsBall(Ball ball) {
-        return hitBox.intersectsBall(ball);
+        return isDefaultHitBoxActive() && hitBox.intersectsBall(ball);
+    }
+
+    public boolean isDefaultHitBoxActive() {
+        return true;
+    }
+
+    public boolean isBlockHitBoxActive() {
+        return action == PlayerAction.BLOCK && isShowingActionFrame("block2");
+    }
+
+    protected boolean isShowingActionFrame(String actionName) {
+        return assetName.equals(teamAsset(actionName));
     }
 
     public double getHitBoxCenterX() {
@@ -129,6 +143,16 @@ public abstract class Player {
         actionAnimator.updateActionState();
     }
 
+    /**
+     * Client 等待 Server 回合結果時，只延續既有角色動作的視覺與落地。
+     * 不讀取新的玩家輸入，也不自行開始新的角色動作。
+     */
+    public void updateWhileAwaitingAuthority() {
+        vx = 0;
+        applyGravity();
+        updateActionAnimation();
+    }
+
     protected void finishAction() {
         actionAnimator.finishAction();
     }
@@ -139,5 +163,25 @@ public abstract class Player {
 
     protected double directionTowardNet() {
         return SideRules.directionTowardOpponent(redSide);
+    }
+
+    /* 供網路快照還原角色動作與對應 hitBox 顯示。 */
+    public PlayerAction getAction() {
+        return action;
+    }
+
+    public void setActionForNetwork(PlayerAction action) {
+        this.action = action == null ? PlayerAction.IDLE : action;
+    }
+
+    /**
+     * 套用 Server 快照指定的動作與圖片，並停止本地尚未結束的動畫序列。
+     * 避免舊動畫在下一幀覆蓋 Server 已同步的角色畫面。
+     */
+    public void applyNetworkAction(PlayerAction action, String assetName) {
+        this.action = action == null ? PlayerAction.IDLE : action;
+        if (assetName != null && !assetName.isBlank()) {
+            animation.applyNetworkAsset(assetName);
+        }
     }
 }

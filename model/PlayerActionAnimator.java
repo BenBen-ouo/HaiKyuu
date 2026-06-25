@@ -18,6 +18,7 @@ public class PlayerActionAnimator {
             return;
         }
 
+        player.attackHitBox.disable();
         startGroundAction(PlayerAction.RECEIVING);
         player.vx = 0;
         animation.play(AnimationSequences.frames(player, "receive"), AnimationSequences.durations(30));
@@ -32,12 +33,13 @@ public class PlayerActionAnimator {
     }
 
     public void playDive() {
+        player.attackHitBox.disable();
         player.action = PlayerAction.DIVE;
         player.attacking = false;
         player.blocking = false;
         animation.play(
                 AnimationSequences.frames(player, "dive1", "dive2", "dive3"),
-                AnimationSequences.durations(5, 10, AnimationSequences.HOLD)
+                AnimationSequences.durations(5, 5, AnimationSequences.HOLD)
         );
     }
 
@@ -47,8 +49,11 @@ public class PlayerActionAnimator {
         player.attacking = true;
         player.blocking = false;
         player.diving = false;
+        player.attackHitBox.enable();
         player.vx = horizontalSpeed;
         player.vy = GameConfig.PLAYER_JUMP_SPEED;
+        // 紀錄起跳時的 X 座標以便後續三米線判定（以圖片中心為基準）
+        player.jumpStartX = player.x + player.imageWidth / 2.0;
         player.jumping = true;
         animation.show(player.teamAsset("attack1"));
     }
@@ -58,6 +63,7 @@ public class PlayerActionAnimator {
         player.action = PlayerAction.ATTACK_SWING;
         player.attacking = true;
         player.blocking = false;
+        player.attackHitBox.enable();
         animation.play(
                 AnimationSequences.frames(player, "attack2", "attack3"),
                 AnimationSequences.durations(5, AnimationSequences.HOLD)
@@ -70,6 +76,7 @@ public class PlayerActionAnimator {
         player.blocking = true;
         player.attacking = false;
         player.diving = false;
+        player.attackHitBox.disable();
 
         if (!player.jumping) {
             player.vy = GameConfig.PLAYER_JUMP_SPEED;
@@ -78,7 +85,7 @@ public class PlayerActionAnimator {
 
         animation.play(
                 AnimationSequences.frames(player, "block1", "block2", "block1"),
-                AnimationSequences.durations(20, 20, AnimationSequences.HOLD)
+                AnimationSequences.durations(15, 30, AnimationSequences.HOLD)
         );
     }
 
@@ -88,6 +95,7 @@ public class PlayerActionAnimator {
         player.attacking = false;
         player.blocking = false;
         player.diving = false;
+        player.attackHitBox.disable();
         AnimationSequences.playRunCycles(animation, player, cycles);
     }
 
@@ -101,6 +109,7 @@ public class PlayerActionAnimator {
 
     public void updateActionState() {
         animation.update();
+        disableAttackHitBoxAfterSwingMotion();
 
         if (shouldFinishAirAction() || shouldFinishHeldDive() || shouldFinishTimedGroundAction()) {
             finishAction();
@@ -112,6 +121,7 @@ public class PlayerActionAnimator {
         player.action = PlayerAction.IDLE;
         player.attacking = false;
         player.blocking = false;
+        player.attackHitBox.disable();
         animation.stopToIdle();
     }
 
@@ -127,10 +137,17 @@ public class PlayerActionAnimator {
         player.action = action;
         player.attacking = false;
         player.blocking = false;
+        player.attackHitBox.disable();
     }
 
     private boolean isRunLoopAction() {
         return player.action == PlayerAction.RUN_LOOP || player.action == PlayerAction.RUN_RETURN;
+    }
+    
+    private void disableAttackHitBoxAfterSwingMotion() {
+        if (player.action == PlayerAction.ATTACK_SWING && animation.isHoldingFrame()) {
+            player.attackHitBox.disable();
+        }
     }
 
     private boolean shouldFinishAirAction() {

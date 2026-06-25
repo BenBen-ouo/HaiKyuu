@@ -5,9 +5,10 @@
 package model;
 
 public class BackPlayer extends Player {
-    private static final double BACK_ATTACK_AIR_SPEED = 2.5;
+    private static final double BACK_ATTACK_AIR_SPEED = 3.0;
 
     private final DiveController diveController;
+    private HitBoxSnapshot defaultHitBox;
     private boolean previousBackAction = false;
 
     public BackPlayer(String assetName, double x, double y, boolean redSide) {
@@ -74,6 +75,29 @@ public class BackPlayer extends Player {
         previousBackAction = actionPressed;
     }
 
+    @Override
+    public void updateWhileAwaitingAuthority() {
+        if (diveController.isActive()) {
+            diveController.update(false);
+            updateActionAnimation();
+            return;
+        }
+
+        super.updateWhileAwaitingAuthority();
+    }
+
+    /** Team 設定一般 hitBox 後呼叫，保存此角色的固定站立碰撞框。 */
+    public void captureDefaultHitBox() {
+        defaultHitBox = HitBoxSnapshot.capture(hitBox);
+    }
+
+    /** 撲球被取消、結束或進入發球準備時，強制恢復一般站立碰撞框。 */
+    public void restoreDefaultHitBox() {
+        if (defaultHitBox != null) {
+            defaultHitBox.restoreTo(hitBox);
+        }
+    }
+
     private boolean tryStartPriorityAction(TeamInput input, boolean justPressedAction) {
         if (input.backJump && justPressedAction && !jumping) {
             startAttackReady(directionTowardNet() * BACK_ATTACK_AIR_SPEED);
@@ -138,5 +162,35 @@ public class BackPlayer extends Player {
         if (input.backRight) {
             vx += GameConfig.PLAYER_SPEED;
         }
+    }
+    /**
+     * 發球準備時清除舊的撲球／攻擊動作，避免發球鍵沿用上一個 Space 狀態。
+     */
+    public void prepareForServe() {
+        diveController.cancel();
+        restoreDefaultHitBox();
+        previousBackAction = false;
+        PlayerPhysics.clearMotionAndActions(this);
+        finishAction();
+        attackHitBox.disable();
+    }
+
+    @Override
+    public void resetToInitial() {
+        diveController.cancel();
+        super.resetToInitial();
+        restoreDefaultHitBox();
+        previousBackAction = false;
+    }
+
+    @Override
+    public boolean isDefaultHitBoxActive() {
+        if (diving || action == PlayerAction.DIVE) {
+            return true;
+        }
+
+        return !jumping
+                && action != PlayerAction.ATTACK_READY
+                && action != PlayerAction.ATTACK_SWING;
     }
 }

@@ -33,6 +33,7 @@ public class Team {
 
             setTeamBoundaries(redMinX, redMaxX);
             setupRedHitBoxes();
+            setupRedAttackHitBoxes();
         } else {
             backPlayer = new BackPlayer("player 2 back.png", baseX + GameConfig.BLUE_BACK_OFFSET_X, baseY, false);
             setter = new Setter("player 2 S.png", baseX + GameConfig.BLUE_SETTER_OFFSET_X, baseY, false);
@@ -44,7 +45,10 @@ public class Team {
 
             setTeamBoundaries(blueMinX, blueMaxX);
             setupBlueHitBoxes();
+            setupBlueAttackHitBoxes();
         }
+
+        backPlayer.captureDefaultHitBox();
     }
 
     private void setTeamBoundaries(double min, double max) {
@@ -56,18 +60,64 @@ public class Team {
 
     private void setupRedHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
-        backPlayer.hitBox.set(40, 60, 25, 10, 10, 10, 20);
+        backPlayer.hitBox.set(45, 60, 20, 10, 10, 10, 20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(50, 30, 10, 30, 10, 10, 40);
+        quickAttacker.hitBox.set(50, 25, 15, 40, 10, 10, 40);
         wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
 
     private void setupBlueHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
-        backPlayer.hitBox.set(35, 60, 25, 10, 10, 10, -20);
+        backPlayer.hitBox.set(35, 60, 20, 10, 10, 10, -20);
         setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
-        quickAttacker.hitBox.set(40, 30, 10, 30, 10, 10, -40);
+        quickAttacker.hitBox.set(35, 25, 15, 40, 10, 10, -40);
         wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
+    }
+
+    private void setupRedAttackHitBoxes() {
+        // set(offsetX, offsetY, width, height)
+        // 左隊攻擊 hitBox 預設在角色圖片右上角。
+        backPlayer.attackHitBox.set(
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+        quickAttacker.attackHitBox.set(
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+        wingSpiker.attackHitBox.set(
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.RED_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+    }
+
+    private void setupBlueAttackHitBoxes() {
+        // set(offsetX, offsetY, width, height)
+        // 右隊攻擊 hitBox 預設在角色圖片左上角。
+        backPlayer.attackHitBox.set(
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+        quickAttacker.attackHitBox.set(
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
+        wingSpiker.attackHitBox.set(
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_X,
+                GameConfig.BLUE_ATTACK_HITBOX_OFFSET_Y,
+                GameConfig.ATTACK_HITBOX_WIDTH,
+                GameConfig.ATTACK_HITBOX_HEIGHT
+        );
     }
 
     public Player[] getPlayers() {
@@ -83,6 +133,13 @@ public class Team {
     public void update(TeamInput input) {
         for (Player player : getPlayers()) {
             player.update(input);
+        }
+    }
+
+    /** 等待 Server 回合結果時，只延續角色既有動作與落地，不讀取新輸入。 */
+    public void updateWhileAwaitingAuthority() {
+        for (Player player : getPlayers()) {
+            player.updateWhileAwaitingAuthority();
         }
     }
 }

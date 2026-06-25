@@ -1,0 +1,5 @@
+# 不會被ㄓㄨㄣ許提交到版本控制系統的文件和目錄列表：
+build/
+out/
+*.class
+sources.txt
