@@ -5,8 +5,9 @@
 package model;
 
 public class RallyContactHandler {
-    private static final double SETTER_PASS_POWER = 11.5;
-    private static final double ATTACK_PASS_POWER = 15.5;
+    private static final double TO_SETTER_PASS_POWER = 13;
+    private static final double THIRD_TOUCH_PASS_POWER = 16;
+    private static final double Setter_THIRD_TOUCH_PASS_POWER = 10;
     private static final double BALL_UNSTUCK_DISTANCE = 6.0;
 
     private final GameModel model;
@@ -45,7 +46,7 @@ public class RallyContactHandler {
                 continue;
             }
 
-            if (collidePlayer(player, target, redSide)) {
+            if (collidePlayer(player, target, redSide, hitCount)) {
                 // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
 
@@ -235,13 +236,17 @@ public class RallyContactHandler {
         return true;
     }
 
-    private boolean collidePlayer(Player player, BallTarget target, boolean redSide) {
+    private boolean collidePlayer(Player player, BallTarget target, boolean redSide, int hitCountBeforeTouch) {
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
 
         pushBallOutsidePlayer(player);
-        setBallVelocity(target);
+        if (player instanceof Setter && hitCountBeforeTouch < 2) {
+            setSetterBallVelocity(target);
+        } else {
+            setBallVelocity(target);
+        }
         setRotationForRegularTouch(player, redSide);
         return true;
     }
@@ -381,6 +386,28 @@ public class RallyContactHandler {
         model.ball.vy = velocity[1];
     }
 
+    private void setSetterBallVelocity(BallTarget target) {
+        double gravity = GameConfig.GRAVITY;
+        double heightToApex = model.ball.y - GameConfig.SETTER_SET_APEX_Y;
+
+        // Ball.update() 會先加重力再移動；以整數幀計算，確保畫面上的最高點到達設定值。
+        int framesToApex = Math.max(1, (int) Math.ceil(
+                (-1.0 + Math.sqrt(1.0 + 8.0 * heightToApex / gravity)) / 2.0
+        ));
+
+        double initialVy = (GameConfig.SETTER_SET_APEX_Y - model.ball.y) / framesToApex
+                - gravity * (framesToApex + 1) / 2.0;
+
+        // 依新的飛行時間重算 vx，使球下降時仍通過原本的預定目標點。
+        double verticalLinearTerm = initialVy + gravity / 2.0;
+        double discriminant = verticalLinearTerm * verticalLinearTerm
+                - 2.0 * gravity * (model.ball.y - target.y);
+        double timeToTarget = (-verticalLinearTerm + Math.sqrt(Math.max(0.0, discriminant))) / gravity;
+
+        model.ball.vx = (target.x - model.ball.x) / Math.max(1.0, timeToTarget);
+        model.ball.vy = initialVy;
+    }
+
     private static class BallTarget {
         final double x;
         final double y;
@@ -397,20 +424,32 @@ public class RallyContactHandler {
                 return setterTarget(team, ballX, player);
             }
 
+            if (player instanceof Setter) {
+                return setterThirdTouchTarget(redSide);
+            }
+
             return attackTarget(redSide);
         }
 
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y + 30, SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + 15, TO_SETTER_PASS_POWER);
         }
 
         private static BallTarget attackTarget(boolean redSide) {
             return new BallTarget(
                     SideRules.thirdTouchTargetX(redSide),
                     GameConfig.FLOOR_Y - 50,
-                    ATTACK_PASS_POWER
+                    THIRD_TOUCH_PASS_POWER
+            );
+        }
+
+        private static BallTarget setterThirdTouchTarget(boolean redSide) {
+            return new BallTarget(
+                    SideRules.setterThirdTouchTargetX(redSide),
+                    GameConfig.FLOOR_Y - 50,
+                    Setter_THIRD_TOUCH_PASS_POWER
             );
         }
     }

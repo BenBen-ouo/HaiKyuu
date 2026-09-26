@@ -25,6 +25,10 @@ public final class GameConfig {
     public static final int FLOOR_Y_PX = SCREEN_HEIGHT - 50;
     public static final double FLOOR_Y = FLOOR_Y_PX;
     public static final double GRAVITY = 0.25;
+    
+    // Setter 實際觸球舉球時，球心固定到達的最高世界座標。
+    public static final double SETTER_SET_APEX_Y = 350;
+
     public static final double PLAYER_SPEED = 4.3;
     public static final double PLAYER_JUMP_SPEED = -9;
     public static final double DIVE_SPEED = 5.0;
@@ -99,7 +103,7 @@ public final class GameConfig {
     public static final double SHORT_SPIKE_SPEED_X = 15.0;
     public static final double SHORT_SPIKE_SPEED_Y = 10.0;
 
-    // S + D / ↓ + →：比普通球再更多力量。
+    // S + D / ↓ + →：比普通球再更多力量。 /// 待刪除
     public static final double LONG_SPIKE_SPEED_X = 10.0;
     public static final double LONG_SPIKE_SPEED_Y = 10.0;
 

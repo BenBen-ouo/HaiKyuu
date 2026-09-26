@@ -61,7 +61,7 @@ public class Team {
     private void setupRedHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(45, 60, 20, 10, 10, 10, 20);
-        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        setter.hitBox.set(45, 50, 10, 10, 5, 5, 0);
         quickAttacker.hitBox.set(50, 25, 15, 40, 10, 10, 40);
         wingSpiker.hitBox.set(45, 60, 20, 10, 10, 10, 20);
     }
@@ -69,7 +69,7 @@ public class Team {
     private void setupBlueHitBoxes() {
         // set(offsetX, offsetY, width, height, arcWidth, arcHeight, rotationDegrees)
         backPlayer.hitBox.set(35, 60, 20, 10, 10, 10, -20);
-        setter.hitBox.set(40, 50, 20, 10, 5, 5, 0);
+        setter.hitBox.set(45, 50, 10, 10, 5, 5, 0);
         quickAttacker.hitBox.set(35, 25, 15, 40, 10, 10, -40);
         wingSpiker.hitBox.set(35, 60, 20, 10, 10, 10, -20);
     }
