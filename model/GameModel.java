@@ -260,6 +260,12 @@ public class GameModel {
         updateTeams(redInput, blueInput);
     }
 
+    /** 得分後球仍在移動時保留撞網；不重新判定觸球、落地得分或球權。 */
+    public void updatePostPointBall() {
+        ball.update();
+        ballHitNetThisFrame = ball.collideWithNet(netHitBox);
+    }
+
     public void observeLockedActions(TeamInput redInput, TeamInput blueInput) {
         redActionReleaseGate.observeLocked(redInput);
         blueActionReleaseGate.observeLocked(blueInput);
@@ -272,7 +278,7 @@ public class GameModel {
     private void updateNetworkWaitingFrame() {
         if (!scorer.isLockedPhase()) {
             if (scorer.isRallyOver()) {
-                ball.update();
+                updatePostPointBall();
                 if (spikeEffect.isSpikeTrailActive()) {
                     spikeEffect.addTrailPoint(ball.x, ball.y);
                 }

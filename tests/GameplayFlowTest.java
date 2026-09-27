@@ -16,11 +16,25 @@ public class GameplayFlowTest {
     public static void main(String[] args) throws Exception {
         testInitialHitBoxMirrors();
         testRemovedShortFlatCombination();
+        testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
         testServeFaults();
+        testNetCollisionAfterPoint();
         testScorePhasesAndReleaseGate();
         testFinalPointStopsBeforeNextServe();
         System.out.println("GameplayFlowTest passed");
+    }
+
+    private static void testDiveSelectsSlowFloorBounceSpin() {
+        GameModel model = new GameModel();
+        model.redTeam.backPlayer.diving = true;
+        model.ball.x = model.redTeam.backPlayer.hitBox.getCenterX();
+        model.ball.y = model.redTeam.backPlayer.hitBox.getCenterY();
+        model.ball.useFastFloorBounceSpin();
+
+        new RallyContactHandler(model).collideTeam(model.redTeam, true, new TeamInput());
+
+        check(!model.ball.usesFastFloorBounceSpin(), "撲球接球選擇慢速落地旋轉");
     }
 
     private static void testInitialHitBoxMirrors() {
@@ -207,6 +221,37 @@ public class GameplayFlowTest {
         check(legalBlockModel.redScore == 0 && legalBlockModel.blueScore == 0,
                 "第一次正常接發後，既有攔網動作不會判發球犯規");
         check(legalBlockModel.getHitCount(false) == 1, "攔網接觸完全不計次");
+    }
+
+    private static void testNetCollisionAfterPoint() {
+        GameModel scoreModel = new GameModel();
+        scoreModel.awardPointWithMessage(true, "IN");
+        placeBallApproachingNet(scoreModel);
+        scoreModel.update(new TeamInput(), new TeamInput());
+        check(scoreModel.ball.vx < 0 && scoreModel.didBallHitNetThisFrame(),
+                "得分後前 60 幀仍會撞網反彈");
+
+        GameModel clientModel = new GameModel();
+        Packet.CompactState.from(scoreModel).applyTo(clientModel);
+        placeBallApproachingNet(clientModel);
+        clientModel.updateForNetworkPrediction(new TeamInput(), new TeamInput());
+        check(clientModel.ball.vx < 0 && clientModel.didBallHitNetThisFrame(),
+                "Client 等待得分結果期間仍會撞網反彈");
+
+        GameModel finalModel = new GameModel();
+        finalModel.redScore = 24;
+        finalModel.awardPointWithMessage(true, "IN");
+        placeBallApproachingNet(finalModel);
+        finalModel.update(new TeamInput(), new TeamInput());
+        check(finalModel.ball.vx < 0 && finalModel.didBallHitNetThisFrame(),
+                "賽末結果畫面仍會撞網反彈");
+    }
+
+    private static void placeBallApproachingNet(GameModel model) {
+        model.ball.x = model.netHitBox.getLeft() - model.ball.radius - 2;
+        model.ball.y = model.netHitBox.getTop() + 30;
+        model.ball.vx = 8;
+        model.ball.vy = 0;
     }
 
     private static void testScorePhasesAndReleaseGate() throws Exception {

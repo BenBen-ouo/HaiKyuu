@@ -49,8 +49,8 @@ public final class GameConfig {
     public static final double LOB_SPIKE_SPIN_SPEED = 5.0;
 
     // 球落地時，依上一個觸球類型設定的旋轉速度。
-    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 5.0;
-    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 30.0;
+    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 30.0;
+    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 5.0;
 
     public static final double NET_WIDTH = 4;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9

@@ -281,7 +281,7 @@ public class RallyContactHandler {
                     : GameConfig.DIVE_RECEIVE_SPIN_SPEED;
 
             model.ball.setRotationSpeed(diveSpin);
-            model.ball.useFastFloorBounceSpin();
+            model.ball.useSlowFloorBounceSpin();
             return;
         }
 

@@ -85,7 +85,7 @@ public class RallyScorer {
     }
 
     private void updatePostPointMotion(TeamInput redInput, TeamInput blueInput) {
-        model.ball.update();
+        model.updatePostPointBall();
         model.effects.update();
         if (model.spikeEffect.isSpikeTrailActive()) {
             model.spikeEffect.addTrailPoint(model.ball.x, model.ball.y);
