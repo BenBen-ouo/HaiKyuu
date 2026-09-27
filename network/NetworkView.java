@@ -44,6 +44,10 @@ public interface NetworkView extends AutoCloseable {
         return player.assetName;
     }
 
+    default boolean getRenderedPlayerMirror(Player player) {
+        return player.mirrorImage;
+    }
+
     @Override
     void close();
 }

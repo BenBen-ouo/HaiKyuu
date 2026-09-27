@@ -21,12 +21,7 @@ final class PlayerRenderCorrection {
         return player.y + (offset == null ? 0 : offset.y);
     }
 
-    synchronized String serverAsset(Player player) {
-        Offset offset = offsets.get(player);
-        return offset == null ? player.assetName : offset.assetName;
-    }
-
-    synchronized void schedule(Player player, double visibleX, double visibleY, String assetName) {
+    synchronized void schedule(Player player, double visibleX, double visibleY) {
         Offset offset = offsets.computeIfAbsent(player, ignored -> new Offset());
         double dx = visibleX - player.x;
         double dy = visibleY - player.y;
@@ -37,7 +32,6 @@ final class PlayerRenderCorrection {
         offset.x = dx;
         offset.y = dy;
         offset.framesRemaining = CORRECTION_FRAMES;
-        offset.assetName = assetName;
     }
 
     synchronized void advance() {
@@ -59,6 +53,5 @@ final class PlayerRenderCorrection {
         double x;
         double y;
         int framesRemaining;
-        String assetName;
     }
 }

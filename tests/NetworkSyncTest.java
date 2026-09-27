@@ -1,6 +1,8 @@
 package network;
 
 import java.net.InetAddress;
+import java.util.HashSet;
+import java.util.Set;
 import model.GameModel;
 import model.TeamInput;
 import model.player.PlayerAction;
@@ -13,6 +15,8 @@ public final class NetworkSyncTest {
         testServerKeepsUnacknowledgedEvents();
         testControlsStayInOrder();
         testMotionSnapshotKeepsAnimationAlive();
+        testRemoteInterpolationStopsAfterBoundedExtrapolation();
+        testSnapshotDrivenVisualEffects();
         if (args.length > 0 && "loopback".equals(args[0])) {
             testLocalLoopback();
         }
@@ -23,22 +27,24 @@ public final class NetworkSyncTest {
         GameModel model = new GameModel();
         model.ball.x = 312.5;
         model.redTeam.setter.x = 345.5;
+        model.spikeEffect.startSpikeTrail(true);
         Packet.WorldSnapshot state = Packet.WorldSnapshot.from(model, 0);
         UdpCodec.WorldSnapshotFrame first = snapshot(1, 0, state);
         check(first.snapshot.ball.x == 312.5
                         && first.snapshot.redTeam.players[1].x == 345.5
-                        && first.snapshot.blueTeam.players.length == 4,
-                "即時快照包含球與雙方球員");
+                        && first.snapshot.blueTeam.players.length == 4
+                        && first.snapshot.spikeTrailActive && first.snapshot.spikeTrailRedSide,
+                "即時快照包含球、雙方球員及純視覺軌跡狀態");
 
         WorldSnapshotInbox inbox = new WorldSnapshotInbox();
         check(inbox.offer(first, 0) == first, "初始快照可立即套用");
         UdpCodec.WorldSnapshotFrame future = snapshot(2, 1, Packet.WorldSnapshot.from(model, 1));
         UdpCodec.WorldSnapshotFrame newer = snapshot(3, 1, Packet.WorldSnapshot.from(model, 1));
-        check(inbox.offer(future, 0) == null && inbox.offer(newer, 0) == null,
-                "缺少碰撞事件時不提前套用快照");
-        check(inbox.releaseAfterEvent(0) == null, "事件尚未補齊時仍等待");
-        check(inbox.releaseAfterEvent(1) == newer, "事件補齊後只套用最新快照");
+        check(inbox.offer(future, 0) == future && inbox.offer(newer, 0) == newer,
+                "位置快照不因可靠事件尚未抵達而停止");
         check(inbox.offer(future, 1) == null, "過期快照不倒退球員位置");
+        UdpCodec.WorldSnapshotFrame oldRevision = snapshot(4, 0, Packet.WorldSnapshot.from(model, 0));
+        check(inbox.offer(oldRevision, 1) == null, "舊碰撞版本不得覆蓋較新位置");
     }
 
     private static UdpCodec.WorldSnapshotFrame snapshot(int sequence, int revision,
@@ -129,6 +135,34 @@ public final class NetworkSyncTest {
                 "逐 tick 位置校正不重置 Setter 動畫序列");
     }
 
+    private static void testRemoteInterpolationStopsAfterBoundedExtrapolation() {
+        GameModel model = new GameModel();
+        model.blueTeam.wingSpiker.x = 700;
+        RemotePlayerInterpolator interpolator = new RemotePlayerInterpolator();
+        interpolator.observeAt(model.blueTeam.wingSpiker,
+                Packet.PlayerState.from(model.blueTeam.wingSpiker), 10, 0);
+        model.blueTeam.wingSpiker.x = 710;
+        interpolator.observeAt(model.blueTeam.wingSpiker,
+                Packet.PlayerState.from(model.blueTeam.wingSpiker), 11, 16_666_666L);
+        double interpolated = interpolator.renderedXAt(model.blueTeam.wingSpiker, 41_666_665L);
+        double held = interpolator.renderedXAt(model.blueTeam.wingSpiker, 2_000_000_000L);
+        check(interpolated > 700 && interpolated < 710, "對手在相鄰快照間平滑插值");
+        check(Math.abs(held - 770) < 0.01, "漏包只外推六 tick，之後不繼續猜測位置");
+    }
+
+    private static void testSnapshotDrivenVisualEffects() {
+        GameModel client = new GameModel();
+        client.ball.y = 400;
+        client.syncNetworkVisualEffects(true, true);
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(!client.spikeEffect.getTrailPoints().isEmpty(), "Server 軌跡旗標驅動 Client 純視覺軌跡");
+        client.ball.y = model.GameConfig.FLOOR_Y - client.ball.radius;
+        client.syncNetworkVisualEffects(false, true);
+        check(!client.spikeEffect.isSpikeTrailActive()
+                        && !client.spikeEffect.getSmokeParticles().isEmpty(),
+                "Server 軌跡結束且球落地時仍能顯示煙霧");
+    }
+
     private static void testLocalLoopback() throws Exception {
         GameServer server = new GameServer();
         Thread serverThread = new Thread(server::run, "network-sync-test-server");
@@ -145,6 +179,17 @@ public final class NetworkSyncTest {
                 Thread.sleep(17);
             }
             check(red.isConnected() && blue.isConnected(), "本機兩端可連線並接收對方輸入");
+            check(!red.isBluePerspective() && blue.isBluePerspective(), "本機測試紅藍兩端分配正確");
+
+            double serverBallX = blueModel.ball.x;
+            redModel.ball.x += 120;
+            for (int tick = 0; tick < 5; tick++) {
+                red.update(idle, false, false);
+                blue.update(idle, false, false);
+                Thread.sleep(17);
+            }
+            check(Math.abs(redModel.ball.x - serverBallX) < 0.01,
+                    "沒有可靠事件時，球仍逐 tick 接受 Server 快照");
 
             double start = blueModel.blueTeam.backPlayer.x;
             TeamInput move = new TeamInput();
@@ -158,6 +203,22 @@ public final class NetworkSyncTest {
                     "本地按鍵仍立即移動球員");
             check(Math.abs(redModel.blueTeam.backPlayer.x - blueModel.blueTeam.backPlayer.x) < 30,
                     "對方球員由 Server 每 tick 快照校正");
+
+            double wingStart = redModel.blueTeam.wingSpiker.x;
+            TeamInput wingAction = new TeamInput();
+            wingAction.wingAttack = true;
+            Set<String> observedAssets = new HashSet<>();
+            for (int tick = 0; tick < 12; tick++) {
+                red.update(idle, false, false);
+                blue.update(tick == 0 ? wingAction : idle, false, false);
+                observedAssets.add(red.getRenderedPlayerAsset(redModel.blueTeam.wingSpiker));
+                Thread.sleep(17);
+            }
+            check(Math.abs(redModel.blueTeam.wingSpiker.x - wingStart) > 20,
+                    "沒有可靠事件時，對手 WS 助跑位置仍由快照更新");
+            check(observedAssets.contains("player 2 run1.png")
+                            && observedAssets.contains("player 2 run2.png"),
+                    "沒有可靠事件時，對手 WS 仍顯示 Server 的跑步動畫");
         } finally {
             server.close();
             serverThread.join(4_000);

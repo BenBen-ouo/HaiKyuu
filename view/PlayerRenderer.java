@@ -42,10 +42,12 @@ public class PlayerRenderer {
         int imageX = (int) Math.round(networkView == null ? player.x : networkView.getRenderedPlayerX(player));
         int imageY = (int) Math.round(networkView == null ? player.y : networkView.getRenderedPlayerY(player));
         String assetName = networkView == null ? player.assetName : networkView.getRenderedPlayerAsset(player);
+        boolean mirrorImage = networkView == null ? player.mirrorImage
+                : networkView.getRenderedPlayerMirror(player);
         Image image = assets.get(assetName);
 
         if (image != null) {
-            drawPlayerImage(g, image, player, imageX, imageY);
+            drawPlayerImage(g, image, player, imageX, imageY, mirrorImage);
         } else {
             drawFallbackBody(g, player, redTeam, imageX, imageY);
         }
@@ -57,8 +59,8 @@ public class PlayerRenderer {
         }
     }
 
-    private void drawPlayerImage(Graphics2D g, Image image, Player player, int x, int y) {
-        if (player.mirrorImage) {
+    private void drawPlayerImage(Graphics2D g, Image image, Player player, int x, int y, boolean mirrorImage) {
+        if (mirrorImage) {
             g.drawImage(image, x + player.imageWidth, y, -player.imageWidth, player.imageHeight, null);
             return;
         }

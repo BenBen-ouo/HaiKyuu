@@ -91,12 +91,17 @@ public final class Packet {
         public final TeamState redTeam;
         public final TeamState blueTeam;
         public final int collisionRevision;
+        public final boolean spikeTrailActive;
+        public final boolean spikeTrailRedSide;
 
-        public WorldSnapshot(BallState ball, TeamState redTeam, TeamState blueTeam, int collisionRevision) {
+        public WorldSnapshot(BallState ball, TeamState redTeam, TeamState blueTeam,
+                             int collisionRevision, boolean spikeTrailActive, boolean spikeTrailRedSide) {
             this.ball = ball;
             this.redTeam = redTeam;
             this.blueTeam = blueTeam;
             this.collisionRevision = collisionRevision;
+            this.spikeTrailActive = spikeTrailActive;
+            this.spikeTrailRedSide = spikeTrailRedSide;
         }
 
         public static WorldSnapshot from(GameModel model, int collisionRevision) {
@@ -104,7 +109,9 @@ public final class Packet {
                     BallState.from(model.ball),
                     TeamState.from(model.redTeam),
                     TeamState.from(model.blueTeam),
-                    collisionRevision
+                    collisionRevision,
+                    model.spikeEffect.isSpikeTrailActive(),
+                    model.spikeEffect.getCurrentSpikeIsRed()
             );
         }
     }
@@ -216,9 +223,23 @@ public final class Packet {
         }
 
         public void applyTo(GameModel model) {
+            applyTo(model, false);
+        }
+
+        /** Client 回合事件同步裁決，但不停止仍在本地預測的角色動畫。 */
+        public void applyToForClient(GameModel model) {
+            applyTo(model, true);
+        }
+
+        private void applyTo(GameModel model, boolean preserveAnimations) {
             ball.applyTo(model.ball);
-            redTeam.applyTo(model.redTeam);
-            blueTeam.applyTo(model.blueTeam);
+            if (preserveAnimations) {
+                redTeam.applyMotionTo(model.redTeam);
+                blueTeam.applyMotionTo(model.blueTeam);
+            } else {
+                redTeam.applyTo(model.redTeam);
+                blueTeam.applyTo(model.blueTeam);
+            }
 
             model.redScore = redScore;
             model.blueScore = blueScore;

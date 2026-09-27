@@ -20,7 +20,9 @@ public class GameplayFlowTest {
         testServeReceptionAndMbChoice();
         testSetterQuickSetApex();
         testServeFaults();
+        testNetworkServeKeyMustBeReleasedBeforeDive();
         testNetCollisionAfterPoint();
+        testClientPredictionDoesNotResolveCollisions();
         testScorePhasesAndReleaseGate();
         testPracticeMode();
         testFinalPointStopsBeforeNextServe();
@@ -310,9 +312,9 @@ public class GameplayFlowTest {
         GameModel clientModel = new GameModel();
         Packet.CompactState.from(scoreModel).applyTo(clientModel);
         placeBallApproachingNet(clientModel);
-        clientModel.updateForNetworkPrediction(new TeamInput(), new TeamInput());
-        check(clientModel.ball.vx < 0 && clientModel.didBallHitNetThisFrame(),
-                "Client 等待得分結果期間仍會撞網反彈");
+        clientModel.updateForNetworkPrediction(new TeamInput(), true);
+        check(clientModel.ball.vx == 8 && !clientModel.didBallHitNetThisFrame(),
+                "Client 不自行判定撞網，球速等待 Server 快照");
 
         GameModel finalModel = new GameModel();
         finalModel.redScore = 24;
@@ -328,6 +330,62 @@ public class GameplayFlowTest {
         model.ball.y = model.netHitBox.getTop() + 30;
         model.ball.vx = 8;
         model.ball.vy = 0;
+    }
+
+    private static void testClientPredictionDoesNotResolveCollisions() {
+        GameModel client = new GameModel();
+        client.getServeHandler().setWaitingForServe(false);
+        placeBallApproachingNet(client);
+        double ballX = client.ball.x;
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.ball.x == ballX && client.ball.vx == 8 && !client.didBallHitNetThisFrame(),
+                "Client 不模擬撞網，也不改變權威球位置或速度");
+
+        client.ball.x = client.redTeam.setter.hitBox.getCenterX();
+        client.ball.y = client.redTeam.setter.hitBox.getCenterY();
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.redHitCount == 0 && client.ball.vx == 8,
+                "Client 不自行判定球員觸球");
+
+        client.ball.y = GameConfig.FLOOR_Y - client.ball.radius + 1;
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        TeamInput action = new TeamInput();
+        action.quickAttack = true;
+        client.updateForNetworkPrediction(action, true);
+        check(client.redScore == 0 && client.blueScore == 0
+                        && !client.isRallyOverForNetwork()
+                        && client.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
+                "Client 預測到落地也不能停止本機操作或自行結束回合");
+    }
+
+    private static void testNetworkServeKeyMustBeReleasedBeforeDive() {
+        GameModel server = new GameModel();
+        TeamInput heldServe = new TeamInput();
+        heldServe.servePressed = true;
+        heldServe.backJump = true;
+        heldServe.backDive = true;
+        server.update(heldServe.copy(), new TeamInput());
+        check(server.getServeHandler().getState() == ServeState.IN_PLAY,
+                "Server 可在發球同幀直接進入 IN_PLAY");
+
+        GameModel client = new GameModel();
+        Packet.CompactState.from(server).applyToForClient(client);
+        client.getServeHandler().lockNetworkPostServeBackAction();
+        for (int frame = 0; frame < 5; frame++) {
+            if (frame == 2) {
+                Packet.CompactState.from(server).applyToForClient(client);
+            }
+            client.updateForNetworkPrediction(heldServe, true);
+        }
+        check(client.redTeam.backPlayer.getAction() != PlayerAction.DIVE,
+                "Client 收到 IN_PLAY 的 SERVE 事件後，按住原發球鍵不會撲球");
+
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.redTeam.backPlayer.getAction() != PlayerAction.DIVE,
+                "放開發球鍵的當幀也不會撲球");
+        client.updateForNetworkPrediction(heldServe, true);
+        check(client.redTeam.backPlayer.getAction() == PlayerAction.DIVE,
+                "發球鍵放開後重新按下，才允許後排撲球");
     }
 
     private static void testScorePhasesAndReleaseGate() throws Exception {
@@ -385,11 +443,11 @@ public class GameplayFlowTest {
         Packet.CompactState.from(serverModel).applyTo(networkModel);
         TeamInput networkAction = new TeamInput();
         networkAction.quickAttack = true;
-        networkModel.updateForNetworkPrediction(networkAction, new TeamInput());
+        networkModel.updateForNetworkPrediction(networkAction, true);
         check(networkModel.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
                 "網路 Client 在得分後前 60 幀仍能操作角色");
         Packet.CompactState.from(model).applyTo(networkModel);
-        networkModel.updateForNetworkPrediction(networkAction, new TeamInput());
+        networkModel.updateForNetworkPrediction(networkAction, true);
         check(networkModel.redTeam.quickAttacker.getAction() == PlayerAction.IDLE,
                 "網路 Client 在後 30 幀禁止新動作");
 
@@ -529,9 +587,9 @@ public class GameplayFlowTest {
         GameModel networkCopy = new GameModel();
         Packet.CompactState.from(model).applyTo(networkCopy);
         double networkBallX = networkCopy.ball.x;
-        networkCopy.updateForNetworkPrediction(new TeamInput(), new TeamInput());
-        check(networkCopy.matchOver && networkCopy.ball.x != networkBallX,
-                "網路 Client 收到賽末結果後仍更新球與角色");
+        networkCopy.updateForNetworkPrediction(new TeamInput(), true);
+        check(networkCopy.matchOver && networkCopy.ball.x == networkBallX,
+                "網路 Client 賽末只延續本機操作，不自行推進權威球");
 
         model.restart();
         check(!model.matchOver && model.redScore == 0
