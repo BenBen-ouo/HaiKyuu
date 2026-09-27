@@ -1,8 +1,10 @@
 /*
-提供畫面層讀取 UDP Client 的連線、重設與球畫面校正狀態。
+提供畫面層讀取 UDP Client 的連線、重設與球員／球畫面校正狀態。
 NetworkStatusRenderer 與 GameRenderer 只讀取這個介面，不介入遊戲規則或封包處理。
 */
 package network;
+
+import model.player.Player;
 
 public interface NetworkView extends AutoCloseable {
     boolean isBluePerspective();
@@ -28,6 +30,18 @@ public interface NetworkView extends AutoCloseable {
 
     default double getRenderedBallRotation(double authoritativeRotationDegrees) {
         return authoritativeRotationDegrees;
+    }
+
+    default double getRenderedPlayerX(Player player) {
+        return player.x;
+    }
+
+    default double getRenderedPlayerY(Player player) {
+        return player.y;
+    }
+
+    default String getRenderedPlayerAsset(Player player) {
+        return player.assetName;
     }
 
     @Override

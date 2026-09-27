@@ -1,6 +1,6 @@
 /*
 純 UDP 二進位協定。
-UDP 5001 分為 INPUT、BALL_SNAPSHOT、COLLISION_EVENT 三層；事件 ACK、重設控制與對局中止仍走同一 port。
+UDP 5001 分為 INPUT、WORLD_SNAPSHOT、COLLISION_EVENT 三層；事件 ACK、重設控制與對局中止仍走同一 port。
 */
 package network;
 
@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 6;
+    private static final short VERSION = 7;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -23,7 +23,7 @@ public final class UdpCodec {
     private static final byte TYPE_CONTROL_STATUS = 7;
     private static final byte TYPE_EVENT_ACK = 8;
     private static final byte TYPE_MATCH_ABORTED = 9;
-    private static final byte TYPE_BALL_SNAPSHOT = 10;
+    private static final byte TYPE_WORLD_SNAPSHOT = 10;
 
     public enum ControlAction {
         RESET_REQUEST,
@@ -112,26 +112,23 @@ public final class UdpCodec {
         }
     }
 
-    /** 不可靠 BALL_SNAPSHOT，只包含球資料與碰撞版本。 */
-    public static final class BallSnapshotFrame implements Decoded {
+    /** 不可靠即時快照，包含球及兩隊球員。 */
+    public static final class WorldSnapshotFrame implements Decoded {
         public final long token;
         public final int serverTick;
         public final int snapshotSequence;
-        public final int collisionRevision;
-        public final Packet.BallState ball;
+        public final Packet.WorldSnapshot snapshot;
 
-        private BallSnapshotFrame(
+        private WorldSnapshotFrame(
                 long token,
                 int serverTick,
                 int snapshotSequence,
-                int collisionRevision,
-                Packet.BallState ball
+                Packet.WorldSnapshot snapshot
         ) {
             this.token = token;
             this.serverTick = serverTick;
             this.snapshotSequence = snapshotSequence;
-            this.collisionRevision = collisionRevision;
-            this.ball = ball;
+            this.snapshot = snapshot;
         }
     }
 
@@ -148,10 +145,12 @@ public final class UdpCodec {
     public static final class MatchAborted implements Decoded {
         public final long token;
         public final int eventId;
+        public final String message;
 
-        private MatchAborted(long token, int eventId) {
+        private MatchAborted(long token, int eventId, String message) {
             this.token = token;
             this.eventId = eventId;
+            this.message = message;
         }
     }
 
@@ -169,12 +168,15 @@ public final class UdpCodec {
 
     public static final class ControlStatus implements Decoded {
         public final long token;
+        public final int statusSequence;
         public final int acknowledgedSequence;
         public final boolean redResetConfirmed;
         public final boolean blueResetConfirmed;
 
-        private ControlStatus(long token, int acknowledgedSequence, boolean redResetConfirmed, boolean blueResetConfirmed) {
+        private ControlStatus(long token, int statusSequence, int acknowledgedSequence,
+                              boolean redResetConfirmed, boolean blueResetConfirmed) {
             this.token = token;
+            this.statusSequence = statusSequence;
             this.acknowledgedSequence = acknowledgedSequence;
             this.redResetConfirmed = redResetConfirmed;
             this.blueResetConfirmed = blueResetConfirmed;
@@ -236,18 +238,20 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] ballSnapshot(
+    public static byte[] worldSnapshot(
             long token,
             int serverTick,
             int snapshotSequence,
-            Packet.BallSnapshot snapshot
+            Packet.WorldSnapshot snapshot
     ) throws IOException {
-        return write(TYPE_BALL_SNAPSHOT, out -> {
+        return write(TYPE_WORLD_SNAPSHOT, out -> {
             out.writeLong(token);
             out.writeInt(serverTick);
             out.writeInt(snapshotSequence);
             out.writeInt(snapshot.collisionRevision);
             NetworkStateCodec.writeBall(out, snapshot.ball);
+            NetworkStateCodec.writeTeam(out, snapshot.redTeam);
+            NetworkStateCodec.writeTeam(out, snapshot.blueTeam);
         });
     }
 
@@ -258,10 +262,11 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] matchAborted(long token, int eventId) throws IOException {
+    public static byte[] matchAborted(long token, int eventId, String message) throws IOException {
         return write(TYPE_MATCH_ABORTED, out -> {
             out.writeLong(token);
             out.writeInt(eventId);
+            out.writeUTF(message);
         });
     }
 
@@ -275,12 +280,14 @@ public final class UdpCodec {
 
     public static byte[] controlStatus(
             long token,
+            int statusSequence,
             int acknowledgedSequence,
             boolean redResetConfirmed,
             boolean blueResetConfirmed
     ) throws IOException {
         return write(TYPE_CONTROL_STATUS, out -> {
             out.writeLong(token);
+            out.writeInt(statusSequence);
             out.writeInt(acknowledgedSequence);
             out.writeBoolean(redResetConfirmed);
             out.writeBoolean(blueResetConfirmed);
@@ -313,18 +320,23 @@ public final class UdpCodec {
                         NetworkStateCodec.readState(in)
                 );
                 case TYPE_EVENT_ACK -> new EventAck(in.readLong(), in.readInt());
-                case TYPE_MATCH_ABORTED -> new MatchAborted(in.readLong(), in.readInt());
+                case TYPE_MATCH_ABORTED -> new MatchAborted(in.readLong(), in.readInt(), in.readUTF());
                 case TYPE_CONTROL -> new ControlFrame(in.readLong(), in.readInt(), readControlAction(in.readByte()));
                 case TYPE_CONTROL_STATUS -> new ControlStatus(
-                        in.readLong(), in.readInt(), in.readBoolean(), in.readBoolean()
+                        in.readLong(), in.readInt(), in.readInt(), in.readBoolean(), in.readBoolean()
                 );
-                case TYPE_BALL_SNAPSHOT -> new BallSnapshotFrame(
-                        in.readLong(),
-                        in.readInt(),
-                        in.readInt(),
-                        in.readInt(),
-                        NetworkStateCodec.readBall(in)
-                );
+                case TYPE_WORLD_SNAPSHOT -> {
+                    long token = in.readLong();
+                    int serverTick = in.readInt();
+                    int sequence = in.readInt();
+                    int revision = in.readInt();
+                    yield new WorldSnapshotFrame(token, serverTick, sequence, new Packet.WorldSnapshot(
+                            NetworkStateCodec.readBall(in),
+                            NetworkStateCodec.readTeam(in),
+                            NetworkStateCodec.readTeam(in),
+                            revision
+                    ));
+                }
                 default -> null;
             };
         } catch (IOException | RuntimeException ignored) {

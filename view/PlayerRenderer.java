@@ -15,6 +15,7 @@ import model.player.HitBox;
 import model.player.Player;
 import model.player.QuickAttacker;
 import model.player.Team;
+import network.NetworkView;
 
 public class PlayerRenderer {
     private static final Color RED_HITBOX_FILL = new Color(255, 40, 40, 70);
@@ -30,17 +31,18 @@ public class PlayerRenderer {
         this.assets = assets;
     }
 
-    public void drawTeam(Graphics2D g, Team team, boolean redTeam) {
-        drawPlayer(g, team.wingSpiker, redTeam);
-        drawPlayer(g, team.backPlayer, redTeam);
-        drawPlayer(g, team.setter, redTeam);
-        drawPlayer(g, team.quickAttacker, redTeam);
+    public void drawTeam(Graphics2D g, Team team, boolean redTeam, NetworkView networkView) {
+        drawPlayer(g, team.wingSpiker, redTeam, networkView);
+        drawPlayer(g, team.backPlayer, redTeam, networkView);
+        drawPlayer(g, team.setter, redTeam, networkView);
+        drawPlayer(g, team.quickAttacker, redTeam, networkView);
     }
 
-    private void drawPlayer(Graphics2D g, Player player, boolean redTeam) {
-        int imageX = (int) player.x;
-        int imageY = (int) player.y;
-        Image image = assets.get(player.assetName);
+    private void drawPlayer(Graphics2D g, Player player, boolean redTeam, NetworkView networkView) {
+        int imageX = (int) Math.round(networkView == null ? player.x : networkView.getRenderedPlayerX(player));
+        int imageY = (int) Math.round(networkView == null ? player.y : networkView.getRenderedPlayerY(player));
+        String assetName = networkView == null ? player.assetName : networkView.getRenderedPlayerAsset(player);
+        Image image = assets.get(assetName);
 
         if (image != null) {
             drawPlayerImage(g, image, player, imageX, imageY);

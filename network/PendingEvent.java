@@ -6,6 +6,7 @@ package network;
 
 final class PendingEvent {
     final ReliableEvent event;
+    final long firstSentNanos = System.nanoTime();
     volatile long lastSentNanos;
 
     PendingEvent(ReliableEvent event) {

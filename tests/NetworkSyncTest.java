@@ -1,0 +1,173 @@
+package network;
+
+import java.net.InetAddress;
+import model.GameModel;
+import model.TeamInput;
+import model.player.PlayerAction;
+
+/** 可用 java -cp build network.NetworkSyncTest 執行的封包與亂序測試。 */
+public final class NetworkSyncTest {
+    public static void main(String[] args) throws Exception {
+        testWorldSnapshotRoundTripAndOrdering();
+        testReliableEventsStayInOrder();
+        testServerKeepsUnacknowledgedEvents();
+        testControlsStayInOrder();
+        testMotionSnapshotKeepsAnimationAlive();
+        if (args.length > 0 && "loopback".equals(args[0])) {
+            testLocalLoopback();
+        }
+        System.out.println("NetworkSyncTest passed");
+    }
+
+    private static void testWorldSnapshotRoundTripAndOrdering() throws Exception {
+        GameModel model = new GameModel();
+        model.ball.x = 312.5;
+        model.redTeam.setter.x = 345.5;
+        Packet.WorldSnapshot state = Packet.WorldSnapshot.from(model, 0);
+        UdpCodec.WorldSnapshotFrame first = snapshot(1, 0, state);
+        check(first.snapshot.ball.x == 312.5
+                        && first.snapshot.redTeam.players[1].x == 345.5
+                        && first.snapshot.blueTeam.players.length == 4,
+                "即時快照包含球與雙方球員");
+
+        WorldSnapshotInbox inbox = new WorldSnapshotInbox();
+        check(inbox.offer(first, 0) == first, "初始快照可立即套用");
+        UdpCodec.WorldSnapshotFrame future = snapshot(2, 1, Packet.WorldSnapshot.from(model, 1));
+        UdpCodec.WorldSnapshotFrame newer = snapshot(3, 1, Packet.WorldSnapshot.from(model, 1));
+        check(inbox.offer(future, 0) == null && inbox.offer(newer, 0) == null,
+                "缺少碰撞事件時不提前套用快照");
+        check(inbox.releaseAfterEvent(0) == null, "事件尚未補齊時仍等待");
+        check(inbox.releaseAfterEvent(1) == newer, "事件補齊後只套用最新快照");
+        check(inbox.offer(future, 1) == null, "過期快照不倒退球員位置");
+    }
+
+    private static UdpCodec.WorldSnapshotFrame snapshot(int sequence, int revision,
+                                                         Packet.WorldSnapshot state) throws Exception {
+        byte[] bytes = UdpCodec.worldSnapshot(7, sequence, sequence, state);
+        check(bytes.length < 1400, "即時快照應避免超過常見網路 MTU 而被分片");
+        UdpCodec.WorldSnapshotFrame decoded = (UdpCodec.WorldSnapshotFrame) UdpCodec.decode(bytes, bytes.length);
+        check(decoded.snapshotSequence == sequence && decoded.snapshot.collisionRevision == revision,
+                "即時快照保留序號與事件版本");
+        return decoded;
+    }
+
+    private static void testReliableEventsStayInOrder() throws Exception {
+        Packet.CompactState state = Packet.CompactState.from(new GameModel());
+        ReliableEventInbox inbox = new ReliableEventInbox();
+        UdpCodec.Event first = event(1, state);
+        UdpCodec.Event second = event(2, state);
+        inbox.offer(second);
+        check(inbox.pollNext() == null, "第二件先到時不跳過第一件");
+        inbox.offer(first);
+        check(inbox.pollNext() == first && inbox.pollNext() == second,
+                "亂序事件按 ID 逐件處理");
+        inbox.offer(first);
+        check(inbox.pollNext() == null, "重送的事件不重複處理");
+
+        byte[] abortBytes = UdpCodec.matchAborted(7, 3, GameServer.SYNC_TIMEOUT_MESSAGE);
+        UdpCodec.MatchAborted aborted = (UdpCodec.MatchAborted) UdpCodec.decode(abortBytes, abortBytes.length);
+        inbox.offer(aborted);
+        check(inbox.pollNext() == aborted
+                        && GameServer.SYNC_TIMEOUT_MESSAGE.equals(aborted.message),
+                "中止通知延續事件順序並攜帶原因");
+    }
+
+    private static UdpCodec.Event event(int id, Packet.CompactState state) throws Exception {
+        byte[] bytes = UdpCodec.event(7, id, id, Packet.EventType.SCORE, id, state);
+        return (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
+    }
+
+    private static void testServerKeepsUnacknowledgedEvents() {
+        ServerPlayerSlot slot = new ServerPlayerSlot(true, 1, InetAddress.getLoopbackAddress(), 5001);
+        Packet.CompactState state = Packet.CompactState.from(new GameModel());
+        for (int id = 1; id <= 10; id++) {
+            slot.addPendingEvent(new ReliableEvent(id, id, Packet.EventType.SCORE, id, state));
+        }
+        check(slot.pendingEventsSnapshot().length == 10, "超過原本 8 件上限仍不得默默丟棄");
+        slot.acknowledgeEvent(10);
+        check(slot.pendingEventsSnapshot().length == 9
+                        && slot.pendingEventsSnapshot()[0].event.id == 1,
+                "ACK 第 10 件不代表前 9 件已收到");
+        check(slot.hasExpiredEvent(System.nanoTime() + 3_000_000_000L, 3_000_000_000L),
+                "首件事件逾時可明確中止連線");
+        for (int id = 1; id < 10; id++) {
+            slot.acknowledgeEvent(id);
+        }
+        check(!slot.hasPendingEvents(), "逐件 ACK 後清空待確認佇列");
+    }
+
+    private static void testControlsStayInOrder() throws Exception {
+        ServerPlayerSlot slot = new ServerPlayerSlot(true, 1, InetAddress.getLoopbackAddress(), 5001);
+        slot.acceptControl(control(2, UdpCodec.ControlAction.CANCEL_RESET));
+        check(slot.pollControl() == null, "控制指令第二件先到不得跳過第一件");
+        slot.acceptControl(control(1, UdpCodec.ControlAction.RESET_REQUEST));
+        check(slot.pollControl().action == UdpCodec.ControlAction.RESET_REQUEST
+                        && slot.pollControl().action == UdpCodec.ControlAction.CANCEL_RESET,
+                "重設與取消依發送順序執行");
+        check(!slot.acceptControl(control(1, UdpCodec.ControlAction.RESET_REQUEST)),
+                "控制指令重送不重複執行");
+
+        byte[] bytes = UdpCodec.controlStatus(7, 9, 2, false, true);
+        UdpCodec.ControlStatus status = (UdpCodec.ControlStatus) UdpCodec.decode(bytes, bytes.length);
+        check(status.statusSequence == 9 && status.acknowledgedSequence == 2,
+                "控制狀態保留自身序號及已確認指令序號");
+    }
+
+    private static UdpCodec.ControlFrame control(int sequence, UdpCodec.ControlAction action)
+            throws Exception {
+        byte[] bytes = UdpCodec.control(7, sequence, action);
+        return (UdpCodec.ControlFrame) UdpCodec.decode(bytes, bytes.length);
+    }
+
+    private static void testMotionSnapshotKeepsAnimationAlive() {
+        GameModel model = new GameModel();
+        model.redTeam.setter.playSettingAnimation();
+        Packet.PlayerState state = Packet.PlayerState.from(model.redTeam.setter);
+        state.applyMotionTo(model.redTeam.setter);
+        model.redTeam.setter.update(new TeamInput());
+        check(model.redTeam.setter.getAction() == PlayerAction.SETTING,
+                "逐 tick 位置校正不重置 Setter 動畫序列");
+    }
+
+    private static void testLocalLoopback() throws Exception {
+        GameServer server = new GameServer();
+        Thread serverThread = new Thread(server::run, "network-sync-test-server");
+        serverThread.start();
+        GameModel redModel = new GameModel();
+        GameModel blueModel = new GameModel();
+        try (GameClient red = new GameClient(redModel, "127.0.0.1");
+             GameClient blue = new GameClient(blueModel, "127.0.0.1")) {
+            TeamInput idle = new TeamInput();
+            long deadline = System.nanoTime() + 3_000_000_000L;
+            while ((!red.isConnected() || !blue.isConnected()) && System.nanoTime() < deadline) {
+                red.update(idle, false, false);
+                blue.update(idle, false, false);
+                Thread.sleep(17);
+            }
+            check(red.isConnected() && blue.isConnected(), "本機兩端可連線並接收對方輸入");
+
+            double start = blueModel.blueTeam.backPlayer.x;
+            TeamInput move = new TeamInput();
+            move.backRight = true;
+            for (int tick = 0; tick < 30; tick++) {
+                red.update(idle, false, false);
+                blue.update(move, false, false);
+                Thread.sleep(17);
+            }
+            check(Math.abs(blueModel.blueTeam.backPlayer.x - start) > 1,
+                    "本地按鍵仍立即移動球員");
+            check(Math.abs(redModel.blueTeam.backPlayer.x - blueModel.blueTeam.backPlayer.x) < 30,
+                    "對方球員由 Server 每 tick 快照校正");
+        } finally {
+            server.close();
+            serverThread.join(4_000);
+            check(!serverThread.isAlive(), "Server 可正常結束");
+        }
+    }
+
+    private static void check(boolean condition, String message) {
+        if (!condition) {
+            throw new AssertionError(message);
+        }
+    }
+}

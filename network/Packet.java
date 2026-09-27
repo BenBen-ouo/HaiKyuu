@@ -1,6 +1,6 @@
 /*
 UDP 遊戲資料定義。
-TeamInput 會壓成 bitmask；完整狀態只在指定同步事件以 UdpCodec 二進位傳送。
+TeamInput 會壓成 bitmask；即時快照傳球與球員，完整回合狀態只在可靠事件中傳送。
 */
 package network;
 
@@ -43,7 +43,8 @@ public final class Packet {
         LANDING,
         SCORE,
         RULE,
-        RESET
+        RESET,
+        FLOW
     }
 
     public static int encodeInput(TeamInput input) {
@@ -84,21 +85,27 @@ public final class Packet {
         return input;
     }
 
-    /**
-     * 不可靠 BALL_SNAPSHOT 使用的小型球狀態。
-     * 不包含球員、比分或回合資料，避免高頻同步覆寫整個 GameModel。
-     */
-    public static final class BallSnapshot {
+    /** 每 tick 的即時物理快照；回合裁決仍只由可靠事件同步。 */
+    public static final class WorldSnapshot {
         public final BallState ball;
+        public final TeamState redTeam;
+        public final TeamState blueTeam;
         public final int collisionRevision;
 
-        public BallSnapshot(BallState ball, int collisionRevision) {
+        public WorldSnapshot(BallState ball, TeamState redTeam, TeamState blueTeam, int collisionRevision) {
             this.ball = ball;
+            this.redTeam = redTeam;
+            this.blueTeam = blueTeam;
             this.collisionRevision = collisionRevision;
         }
 
-        public static BallSnapshot from(GameModel model, int collisionRevision) {
-            return new BallSnapshot(BallState.from(model.ball), collisionRevision);
+        public static WorldSnapshot from(GameModel model, int collisionRevision) {
+            return new WorldSnapshot(
+                    BallState.from(model.ball),
+                    TeamState.from(model.redTeam),
+                    TeamState.from(model.blueTeam),
+                    collisionRevision
+            );
         }
     }
 
@@ -321,6 +328,13 @@ public final class Packet {
                 players[i].applyTo(targets[i]);
             }
         }
+
+        public void applyMotionTo(Team team) {
+            Player[] targets = team.getPlayers();
+            for (int i = 0; i < targets.length && i < players.length; i++) {
+                players[i].applyMotionTo(targets[i]);
+            }
+        }
     }
 
     public static final class PlayerState {
@@ -417,6 +431,19 @@ public final class Packet {
         }
 
         public void applyTo(Player player) {
+            applyMotionTo(player);
+
+            PlayerAction[] actions = PlayerAction.values();
+            player.applyNetworkAction(
+                    actionOrdinal >= 0 && actionOrdinal < actions.length
+                            ? actions[actionOrdinal]
+                            : PlayerAction.IDLE,
+                    assetName
+            );
+        }
+
+        /** 即時快照不重置 Client 正在預測的動畫序列。 */
+        public void applyMotionTo(Player player) {
             player.x = x;
             player.y = y;
             player.vx = vx;
@@ -436,13 +463,11 @@ public final class Packet {
                     hitBoxArcHeight,
                     hitBoxRotationDegrees
             );
-
             PlayerAction[] actions = PlayerAction.values();
-            player.applyNetworkAction(
+            player.setActionForNetwork(
                     actionOrdinal >= 0 && actionOrdinal < actions.length
                             ? actions[actionOrdinal]
-                            : PlayerAction.IDLE,
-                    assetName
+                            : PlayerAction.IDLE
             );
 
             if (attackHitBoxEnabled) {

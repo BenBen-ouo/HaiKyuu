@@ -21,7 +21,7 @@ final class BallRenderCorrection {
      *
      * @return true 表示誤差過大，呼叫端應清除舊扣球軌跡。
      */
-    boolean schedule(
+    synchronized boolean schedule(
             double authoritativeX,
             double authoritativeY,
             double authoritativeRotation,
@@ -48,7 +48,7 @@ final class BallRenderCorrection {
         return false;
     }
 
-    void advance() {
+    synchronized void advance() {
         if (!initialized || framesRemaining <= 0) {
             return;
         }
@@ -59,7 +59,7 @@ final class BallRenderCorrection {
         framesRemaining--;
     }
 
-    void reset() {
+    synchronized void reset() {
         initialized = true;
         offsetX = 0;
         offsetY = 0;
@@ -67,15 +67,15 @@ final class BallRenderCorrection {
         framesRemaining = 0;
     }
 
-    double renderedX(double authoritativeX) {
+    synchronized double renderedX(double authoritativeX) {
         return initialized ? authoritativeX + offsetX : authoritativeX;
     }
 
-    double renderedY(double authoritativeY) {
+    synchronized double renderedY(double authoritativeY) {
         return initialized ? authoritativeY + offsetY : authoritativeY;
     }
 
-    double renderedRotation(double authoritativeRotation) {
+    synchronized double renderedRotation(double authoritativeRotation) {
         return initialized ? authoritativeRotation + rotationOffset : authoritativeRotation;
     }
 

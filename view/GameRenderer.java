@@ -67,8 +67,8 @@ public class GameRenderer {
         courtRenderer.draw(g, drawWorldBoundaryGuide);
         drawNetHitBox(g, model.netHitBox);
 
-        playerRenderer.drawTeam(g, model.redTeam, true);
-        playerRenderer.drawTeam(g, model.blueTeam, false);
+        playerRenderer.drawTeam(g, model.redTeam, true, networkView);
+        playerRenderer.drawTeam(g, model.blueTeam, false, networkView);
 
         if (!model.isLockedScorePhase()) {
             double ballX = networkView == null ? model.ball.x : networkView.getRenderedBallX(model.ball.x);
