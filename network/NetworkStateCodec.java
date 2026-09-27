@@ -27,6 +27,7 @@ final class NetworkStateCodec {
         out.writeInt(state.blueLastHitterIndex);
         out.writeByte(state.lastHitTeamCode);
         out.writeBoolean(state.lastTouchWasBlock);
+        out.writeBoolean(state.serveReceptionComplete);
 
         out.writeByte(state.serveStateOrdinal);
         out.writeBoolean(state.redServing);
@@ -40,7 +41,6 @@ final class NetworkStateCodec {
         out.writeByte(state.transientMessageColorCode);
         out.writeBoolean(state.pendingTouchOut);
         out.writeByte(state.pendingTouchOutWinnerCode);
-        out.writeInt(state.matchOverCountdownFrames);
     }
 
     static Packet.CompactState readState(DataInputStream in) throws IOException {
@@ -56,6 +56,7 @@ final class NetworkStateCodec {
         int blueLastHitterIndex = in.readInt();
         int lastHitTeamCode = in.readByte();
         boolean lastTouchWasBlock = in.readBoolean();
+        boolean serveReceptionComplete = in.readBoolean();
 
         int serveStateOrdinal = in.readByte();
         boolean redServing = in.readBoolean();
@@ -69,18 +70,17 @@ final class NetworkStateCodec {
         int transientMessageColorCode = in.readByte();
         boolean pendingTouchOut = in.readBoolean();
         int pendingTouchOutWinnerCode = in.readByte();
-        int matchOverCountdownFrames = in.readInt();
 
         return new Packet.CompactState(
                 ball, redTeam, blueTeam,
                 redScore, blueScore,
                 redHitCount, blueHitCount,
                 redLastHitterIndex, blueLastHitterIndex,
-                lastHitTeamCode, lastTouchWasBlock,
+                lastHitTeamCode, lastTouchWasBlock, serveReceptionComplete,
                 serveStateOrdinal, redServing, rallyOver, deadBallTimer,
                 matchOver, matchWinnerCode,
                 transientMessage, transientMessageTimer, transientMessageColorCode,
-                pendingTouchOut, pendingTouchOutWinnerCode, matchOverCountdownFrames
+                pendingTouchOut, pendingTouchOutWinnerCode
         );
     }
 

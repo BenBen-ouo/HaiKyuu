@@ -1,5 +1,5 @@
 /*
-負責繪製所有球員、圖片翻轉、碰撞箱與狀態文字。
+負責繪製所有球員、圖片翻轉與碰撞箱。
 一般、攻擊與攔網使用的碰撞箱只在 DebugSettings 啟用時繪製，判定本身仍由 model 層執行。
 */
 package view;
@@ -9,11 +9,12 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
-import model.AttackHitBox;
-import model.GameConfig;
-import model.HitBox;
-import model.Player;
-import model.Team;
+import model.player.AttackHitBox;
+import model.player.BlockHitBox;
+import model.player.HitBox;
+import model.player.Player;
+import model.player.QuickAttacker;
+import model.player.Team;
 
 public class PlayerRenderer {
     private static final Color RED_HITBOX_FILL = new Color(255, 40, 40, 70);
@@ -30,24 +31,13 @@ public class PlayerRenderer {
     }
 
     public void drawTeam(Graphics2D g, Team team, boolean redTeam) {
-        drawTeam(g, team, redTeam, true);
+        drawPlayer(g, team.wingSpiker, redTeam);
+        drawPlayer(g, team.backPlayer, redTeam);
+        drawPlayer(g, team.setter, redTeam);
+        drawPlayer(g, team.quickAttacker, redTeam);
     }
 
-    public void drawTeam(Graphics2D g, Team team, boolean redTeam, boolean drawStateLabels) {
-        drawPlayer(g, team.wingSpiker, redTeam, drawStateLabels);
-        drawPlayer(g, team.backPlayer, redTeam, drawStateLabels);
-        drawPlayer(g, team.setter, redTeam, drawStateLabels);
-        drawPlayer(g, team.quickAttacker, redTeam, drawStateLabels);
-    }
-
-    public void drawMirroredStateLabels(Graphics2D g, Team team) {
-        drawMirroredStateText(g, team.wingSpiker);
-        drawMirroredStateText(g, team.backPlayer);
-        drawMirroredStateText(g, team.setter);
-        drawMirroredStateText(g, team.quickAttacker);
-    }
-
-    private void drawPlayer(Graphics2D g, Player player, boolean redTeam, boolean drawStateLabels) {
+    private void drawPlayer(Graphics2D g, Player player, boolean redTeam) {
         int imageX = (int) player.x;
         int imageY = (int) player.y;
         Image image = assets.get(player.assetName);
@@ -60,11 +50,8 @@ public class PlayerRenderer {
 
         if (DebugSettings.areHitBoxesVisible()) {
             drawDefaultHitBox(g, player, redTeam);
+            drawBlockHitBox(g, player, redTeam);
             drawAttackHitBox(g, player);
-        }
-
-        if (drawStateLabels) {
-            drawStateText(g, player, imageX, imageY);
         }
     }
 
@@ -139,49 +126,48 @@ public class PlayerRenderer {
         }
     }
 
+    private void drawBlockHitBox(Graphics2D g, Player player, boolean redTeam) {
+        if (!(player instanceof QuickAttacker blocker) || !blocker.isBlockHitBoxActive()) {
+            return;
+        }
+
+        BlockHitBox box = blocker.blockHitBox;
+        Graphics2D hitBoxGraphics = (Graphics2D) g.create();
+        try {
+            hitBoxGraphics.rotate(Math.toRadians(box.rotationDegrees), box.getCenterX(), box.getCenterY());
+            hitBoxGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+            hitBoxGraphics.setColor(hitBoxFillColor(redTeam));
+            hitBoxGraphics.fillRoundRect(
+                    hitX(box),
+                    hitY(box),
+                    hitWidth(box),
+                    hitHeight(box),
+                    box.arcWidth,
+                    box.arcHeight
+            );
+
+            hitBoxGraphics.setComposite(AlphaComposite.SrcOver);
+            hitBoxGraphics.setColor(Color.BLACK);
+            hitBoxGraphics.setStroke(new BasicStroke(2));
+            hitBoxGraphics.drawRoundRect(
+                    hitX(box),
+                    hitY(box),
+                    hitWidth(box),
+                    hitHeight(box),
+                    box.arcWidth,
+                    box.arcHeight
+            );
+        } finally {
+            hitBoxGraphics.dispose();
+        }
+    }
+
     private Color hitBoxFillColor(boolean redTeam) {
         return redTeam ? RED_HITBOX_FILL : BLUE_HITBOX_FILL;
     }
 
     private Color hitBoxStrokeColor(boolean redTeam) {
         return redTeam ? RED_HITBOX_STROKE : BLUE_HITBOX_STROKE;
-    }
-
-    private void drawStateText(Graphics2D g, Player player, int x, int y) {
-        drawStateLabel(g, player.attacking, "ATK", Color.RED, x + 8, y - 8);
-        drawStateLabel(g, player.blocking, "BLK", Color.BLUE, x + 8, y - 22);
-        drawStateLabel(g, player.diving, "DIVE", Color.MAGENTA, x + 4, y - 8);
-    }
-
-    private void drawMirroredStateText(Graphics2D g, Player player) {
-        drawMirroredStateLabel(g, player.attacking, "ATK", Color.RED, player.x + 8, player.y - 8);
-        drawMirroredStateLabel(g, player.blocking, "BLK", Color.BLUE, player.x + 8, player.y - 22);
-        drawMirroredStateLabel(g, player.diving, "DIVE", Color.MAGENTA, player.x + 4, player.y - 8);
-    }
-
-    private void drawStateLabel(Graphics2D g, boolean visible, String text, Color color, int x, int y) {
-        if (!visible) {
-            return;
-        }
-        g.setColor(color);
-        g.drawString(text, x, y);
-    }
-
-    private void drawMirroredStateLabel(
-            Graphics2D g,
-            boolean visible,
-            String text,
-            Color color,
-            double worldX,
-            double worldY
-    ) {
-        if (!visible) {
-            return;
-        }
-        int textWidth = g.getFontMetrics().stringWidth(text);
-        int screenX = (int) Math.round(GameConfig.SCREEN_WIDTH - worldX - textWidth);
-        g.setColor(color);
-        g.drawString(text, screenX, (int) Math.round(worldY));
     }
 
     private int hitX(HitBox box) {

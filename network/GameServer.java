@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import model.GameConfig;
 import model.GameModel;
-import model.ServeState;
+import model.serve.ServeState;
 
 public final class GameServer implements AutoCloseable {
     public static final int UDP_PORT = 5001;
@@ -172,14 +172,18 @@ public final class GameServer implements AutoCloseable {
         List<Packet.EventType> events = new ArrayList<>(3);
 
         ServeState currentServeState = model.getServeHandler().getState();
-        if (before.serveState == ServeState.READY
-                && currentServeState != ServeState.READY
+        if (before.serveState == ServeState.WAITING_FOR_SERVE
+                && currentServeState != ServeState.WAITING_FOR_SERVE
                 && Math.abs(model.ball.vx) + Math.abs(model.ball.vy) > 0.01) {
             events.add(Packet.EventType.SERVE);
         }
 
         if (model.didSetterContactThisFrame()) {
             events.add(Packet.EventType.SETTER_CONTACT);
+        }
+
+        if (model.didFirstServeReceptionThisFrame() && !model.didSetterContactThisFrame()) {
+            events.add(Packet.EventType.RECEPTION);
         }
 
         if (model.didBallLandThisFrame()) {
@@ -190,8 +194,9 @@ public final class GameServer implements AutoCloseable {
         if (scoreChanged && isRuleMessage(model.transientMessage)) {
             events.add(Packet.EventType.RULE);
         }
-        if (scoreChanged || (before.rallyOver && !model.isRallyOverForNetwork())) {
-            // SCORE 也負責 Server 完成下一次發球準備後的位置同步。
+        if (scoreChanged || (before.rallyOver && !model.isRallyOverForNetwork())
+                || (!before.lockedScorePhase && model.isLockedScorePhase())) {
+            // SCORE 同步得分、歸位鎖定與下一次發球準備。
             events.add(Packet.EventType.SCORE);
         }
 
@@ -200,6 +205,7 @@ public final class GameServer implements AutoCloseable {
 
     private boolean isRuleMessage(String message) {
         return "四觸違規".equals(message)
+                || "發球犯規".equals(message)
                 || "後排三米線".equals(message)
                 || "TOUCH OUT".equals(message);
     }
@@ -551,12 +557,15 @@ public final class GameServer implements AutoCloseable {
         final int redScore;
         final int blueScore;
         final boolean rallyOver;
+        final boolean lockedScorePhase;
         final ServeState serveState;
 
-        FrameState(int redScore, int blueScore, boolean rallyOver, ServeState serveState) {
+        FrameState(int redScore, int blueScore, boolean rallyOver,
+                   boolean lockedScorePhase, ServeState serveState) {
             this.redScore = redScore;
             this.blueScore = blueScore;
             this.rallyOver = rallyOver;
+            this.lockedScorePhase = lockedScorePhase;
             this.serveState = serveState;
         }
 
@@ -565,6 +574,7 @@ public final class GameServer implements AutoCloseable {
                     model.redScore,
                     model.blueScore,
                     model.isRallyOverForNetwork(),
+                    model.isLockedScorePhase(),
                     model.getServeHandler().getState()
             );
         }

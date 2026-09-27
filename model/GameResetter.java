@@ -4,6 +4,9 @@
 */
 package model;
 
+import model.ball.Ball;
+import model.player.Team;
+
 public class GameResetter {
 
     // 將遊戲模型重置為初始狀態。
@@ -37,6 +40,5 @@ public class GameResetter {
         model.transientMessageIsRed = null;
         model.pendingTouchOut = false;
         model.pendingTouchOutWinner = null;
-        model.matchOverCountdownFrames = 0;
     }
 }

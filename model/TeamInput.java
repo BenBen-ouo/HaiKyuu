@@ -5,6 +5,8 @@ GameModel 會依球的位置填入球場側別資訊。
 */
 package model;
 
+import model.serve.ServeType;
+
 public class TeamInput {
     public boolean backLeft;
     public boolean backRight;
@@ -14,7 +16,8 @@ public class TeamInput {
     public boolean setterJump;
 
     public boolean quickAttack;
-    public boolean quickBlock;
+    // 本隊在這次球權內是否已完成第一次一般觸球。
+    public boolean hasFirstRegularTouch;
 
     public boolean wingAttack;
 
@@ -41,7 +44,7 @@ public class TeamInput {
         copy.backDive = backDive;
         copy.setterJump = setterJump;
         copy.quickAttack = quickAttack;
-        copy.quickBlock = quickBlock;
+        copy.hasFirstRegularTouch = hasFirstRegularTouch;
         copy.wingAttack = wingAttack;
         copy.spikeFlat = spikeFlat;
         copy.spikeShort = spikeShort;

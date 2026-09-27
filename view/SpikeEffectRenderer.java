@@ -20,7 +20,7 @@ import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.util.List;
 import model.GameConfig;
-import model.SpikeEffect;
+import model.effect.SpikeEffect;
 
 public class SpikeEffectRenderer {
     private static final float[] GRADIENT_DISTANCES = {0.0f, 0.6f, 1.0f};

@@ -4,6 +4,20 @@
 */
 package model;
 
+import model.ball.Ball;
+import model.ball.BallSideTracker;
+import model.ball.NetHitBox;
+import model.effect.EffectManager;
+import model.effect.SpikeEffect;
+import model.player.BackActionResolver;
+import model.player.Player;
+import model.player.Setter;
+import model.player.Team;
+import model.rally.RallyContactHandler;
+import model.rally.RallyScorer;
+import model.rally.RallyState;
+import model.serve.ServeHandler;
+
 public class GameModel {
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public final NetHitBox netHitBox = new NetHitBox();
@@ -34,6 +48,10 @@ public class GameModel {
     private boolean ballHitNetThisFrame;
     private boolean ballLandedThisFrame;
     private boolean setterContactThisFrame;
+    private boolean firstServeReceptionThisFrame;
+    private boolean serveReceptionComplete;
+    private final ActionReleaseGate redActionReleaseGate = new ActionReleaseGate();
+    private final ActionReleaseGate blueActionReleaseGate = new ActionReleaseGate();
 
     // Client 本地預測時不可自行裁決得分或下一次發球位置。
     private boolean resolvingRallyOutcomes = true;
@@ -48,9 +66,6 @@ public class GameModel {
     // 預期的攔網造成 out（等待落地再顯示與給分）
     public boolean pendingTouchOut = false;
     public Boolean pendingTouchOutWinner = null;
-
-    // matchOver 決定後，延遲幾幀才停止遊戲更新（用於顯示勝利動畫/效果）
-    public int matchOverCountdownFrames = 0;
 
     public GameModel() {
         serveHandler.setWaitingForServe(true);
@@ -76,6 +91,9 @@ public class GameModel {
         effects.clear();
         spikeEffect.clear();
         predictionAwaitingAuthority = false;
+        serveReceptionComplete = false;
+        redActionReleaseGate.reset();
+        blueActionReleaseGate.reset();
     }
 
     // 查詢本回合是否該隊已由舉球員接觸過
@@ -113,17 +131,24 @@ public class GameModel {
         ballHitNetThisFrame = false;
         ballLandedThisFrame = false;
         setterContactThisFrame = false;
+        firstServeReceptionThisFrame = false;
         resolvingRallyOutcomes = resolveRallyOutcomes;
 
         try {
-            // 當比賽結束且延遲倒數結束時，停止遊戲更新（仍由 controller 捕捉重開鍵）
-            if (matchOver && matchOverCountdownFrames <= 0) {
+            // 賽末只繼續物理、特效與雙方操作，不再碰撞、計分或準備發球。
+            if (matchOver) {
+                scorer.updateFinishedMatch(redInput, blueInput);
                 return;
             }
 
-            // Client 已預測到回合結束或收到 Server dead-ball 狀態時，
-            // 不自行裁決下一球，但角色與特效仍需持續更新。
+            // Client 收到 Server 的得分狀態後，前 60 幀仍可操作角色；
+            // 後 30 幀鎖住操作。階段切換與下一球準備一律由 Server 快照決定。
             if (!resolveRallyOutcomes && (predictionAwaitingAuthority || scorer.isRallyOver())) {
+                if (scorer.isLockedPhase()) {
+                    observeLockedActions(redInput, blueInput);
+                } else if (scorer.isRallyOver()) {
+                    updateDeadBallPlayers(redInput, blueInput);
+                }
                 updateNetworkWaitingFrame();
                 return;
             }
@@ -137,10 +162,6 @@ public class GameModel {
 
             updateActiveFrame(redInput, blueInput, resolveRallyOutcomes);
 
-            // 若處於 matchOver 的顯示倒數中，遞減計時器
-            if (matchOver && matchOverCountdownFrames > 0) {
-                matchOverCountdownFrames--;
-            }
         } finally {
             resolvingRallyOutcomes = true;
         }
@@ -151,26 +172,40 @@ public class GameModel {
         syncPublicHitCounters();
     }
 
-    int getHitCount(boolean redSide) {
+    public int getHitCount(boolean redSide) {
         return rallyState.getHitCount(redSide);
     }
 
-    Player getLastHitter(boolean redSide) {
+    public Player getLastHitter(boolean redSide) {
         return rallyState.getLastHitter(redSide);
     }
 
-    void recordHit(boolean redSide, Player hitter) {
-        // 若比賽結束，忽略後續擊球
+    public void recordHit(boolean redSide, Player hitter) {
+        recordContact(redSide, hitter, true);
+    }
+
+    public void recordRegularHit(boolean redSide, Player hitter) {
         if (matchOver) return;
 
-        rallyState.recordHit(redSide, hitter);
+        if (!serveReceptionComplete && redSide != serveHandler.isRedServing()) {
+            serveReceptionComplete = true;
+            firstServeReceptionThisFrame = true;
+        }
+
+        recordContact(redSide, hitter, serveReceptionComplete);
+    }
+
+    private void recordContact(boolean redSide, Player hitter, boolean counts) {
+        if (matchOver) return;
+
+        rallyState.recordHit(redSide, hitter, counts);
         if (hitter instanceof Setter) {
             setterContactThisFrame = true;
         }
         syncPublicHitCounters();
 
         // 四連擊只能由 Server 最終裁決；Client 預測到時先停止本地回合演算。
-        if (rallyState.getHitCount(redSide) > 3) {
+        if (counts && rallyState.getHitCount(redSide) > 3) {
             if (resolvingRallyOutcomes) {
                 scorer.awardPointWithMessage(!redSide, "四觸違規");
             } else {
@@ -179,11 +214,29 @@ public class GameModel {
         }
     }
 
+    public boolean isServeReceptionComplete() {
+        return serveReceptionComplete;
+    }
+
+    public void resetServeReception() {
+        serveReceptionComplete = false;
+    }
+
+    public void recordBlock(boolean redSide, Player blocker) {
+        if (matchOver) return;
+
+        rallyState.recordBlock(redSide, blocker);
+    }
+
     private void updateActiveFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
         lastBallX = ball.x;
 
+        redActionReleaseGate.filter(redInput);
+        blueActionReleaseGate.filter(blueInput);
         serveHandler.updateBeforeTeams(redInput, blueInput);
         configureBackActions(redInput, blueInput);
+        redInput.hasFirstRegularTouch = redHitCount > 0;
+        blueInput.hasFirstRegularTouch = blueHitCount > 0;
         updateTeams(redInput, blueInput);
         serveHandler.updateAfterTeams();
 
@@ -194,27 +247,50 @@ public class GameModel {
         effects.update();
         spikeEffect.update();
 
-        updateTransientMessage();
+        if (!scorer.isRallyOver()) {
+            updateTransientMessage();
+        }
+    }
+
+    public void updateDeadBallPlayers(TeamInput redInput, TeamInput blueInput) {
+        BackActionResolver.apply(redInput, redHitCount);
+        BackActionResolver.apply(blueInput, blueHitCount);
+        redInput.hasFirstRegularTouch = redHitCount > 0;
+        blueInput.hasFirstRegularTouch = blueHitCount > 0;
+        updateTeams(redInput, blueInput);
+    }
+
+    public void observeLockedActions(TeamInput redInput, TeamInput blueInput) {
+        redActionReleaseGate.observeLocked(redInput);
+        blueActionReleaseGate.observeLocked(blueInput);
     }
 
     /**
      * Client 等待 Server 的 SCORE 快照或下一次發球準備快照時使用。
-     * 不更新球、不做碰撞與得分判定，也不讓 Client 自行進入下一球；
-     * 但保留角色既有動畫、重力、撲球滑行與特效的視覺更新。
+     * 不做碰撞、得分或階段切換；得分後前 60 幀沿用本地物理與特效。
      */
     private void updateNetworkWaitingFrame() {
-        redTeam.updateWhileAwaitingAuthority();
-        blueTeam.updateWhileAwaitingAuthority();
-        effects.update();
-        spikeEffect.update();
-        updateTransientMessage();
-
-        if (matchOver && matchOverCountdownFrames > 0) {
-            matchOverCountdownFrames--;
+        if (!scorer.isLockedPhase()) {
+            if (scorer.isRallyOver()) {
+                ball.update();
+                if (spikeEffect.isSpikeTrailActive()) {
+                    spikeEffect.addTrailPoint(ball.x, ball.y);
+                }
+                if (ball.y + ball.radius >= GameConfig.FLOOR_Y
+                        && spikeEffect.isSpikeTrailActive()) {
+                    spikeEffect.spawnSmoke(ball.x, GameConfig.FLOOR_Y);
+                    spikeEffect.stopSpikeTrail();
+                }
+            } else {
+                redTeam.updateWhileAwaitingAuthority();
+                blueTeam.updateWhileAwaitingAuthority();
+            }
+            effects.update();
+            spikeEffect.update();
         }
     }
 
-    private void updateTransientMessage() {
+    public void updateTransientMessage() {
         if (transientMessageTimer <= 0) {
             return;
         }
@@ -275,6 +351,10 @@ public class GameModel {
             contactHandler.collideTeam(redTeam, true, redInput);
         }
 
+        if (scorer.isRallyOver() || predictionAwaitingAuthority) {
+            return;
+        }
+
         if (serveHandler.canTeamCollideWithBall(false)) {
             contactHandler.collideTeam(blueTeam, false, blueInput);
         }
@@ -309,6 +389,14 @@ public class GameModel {
         return setterContactThisFrame;
     }
 
+    public boolean didFirstServeReceptionThisFrame() {
+        return firstServeReceptionThisFrame;
+    }
+
+    public boolean isLockedScorePhase() {
+        return scorer.isLockedPhase();
+    }
+
     public boolean isRallyOverForNetwork() {
         return scorer.isRallyOver();
     }
@@ -330,6 +418,7 @@ public class GameModel {
             int blueHitCount,
             Boolean lastHitTeam,
             boolean lastTouchWasBlock,
+            boolean serveReceptionComplete,
             int redLastHitterIndex,
             int blueLastHitterIndex,
             boolean rallyOver,
@@ -346,7 +435,12 @@ public class GameModel {
                 blueTeam
         );
         syncPublicHitCounters();
+        this.serveReceptionComplete = serveReceptionComplete;
         scorer.applyNetworkState(rallyOver, deadBallTimer);
+        if (scorer.isLockedPhase()) {
+            effects.clear();
+            spikeEffect.clear();
+        }
     }
 
     public boolean isResolvingRallyOutcomes() {

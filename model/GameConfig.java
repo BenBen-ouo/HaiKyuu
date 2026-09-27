@@ -25,8 +25,16 @@ public final class GameConfig {
     public static final int FLOOR_Y_PX = SCREEN_HEIGHT - 50;
     public static final double FLOOR_Y = FLOOR_Y_PX;
     public static final double GRAVITY = 0.25;
+
+    // Setter 實際觸球舉球時，球心固定到達的最高世界座標。
+    public static final double SETTER_SET_APEX_Y = 350;
+
     public static final double PLAYER_SPEED = 4.3;
+    // 起跳初始 vy；負值代表向上。各角色可獨立調整。
     public static final double PLAYER_JUMP_SPEED = -9;
+    public static final double SETTER_JUMP_SPEED = -6.6;
+    public static final double QUICK_ATTACKER_JUMP_SPEED = -8.3;
+    public static final double WING_SPIKER_JUMP_SPEED = -8.3;
     public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
@@ -35,14 +43,14 @@ public final class GameConfig {
     public static final double WORLD_BOUNDARY_BOUNCE = 0.4;
 
     // 球旋轉：正值為畫面上的順時針，負值為逆時針；單位為每幀角度。
-    public static final double RECEIVE_SPIN_SPEED = 4.0;
-    public static final double DIVE_RECEIVE_SPIN_SPEED = 20.0;
-    public static final double SPIKE_SPIN_SPEED = 25.0;
+    public static final double RECEIVE_SPIN_SPEED = 15.0;
+    public static final double DIVE_RECEIVE_SPIN_SPEED = 25.0;
+    public static final double SPIKE_SPIN_SPEED = 40.0;
     public static final double LOB_SPIKE_SPIN_SPEED = 5.0;
 
     // 球落地時，依上一個觸球類型設定的旋轉速度。
-    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 10.0;
-    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 6.0;
+    public static final double FLOOR_BOUNCE_FAST_SPIN_SPEED = 5.0;
+    public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 30.0;
 
     public static final double NET_WIDTH = 4;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
@@ -77,16 +85,6 @@ public final class GameConfig {
 
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
-    // 調整這些數值即可自訂扣球判定區域。
-    public static final double ATTACK_HITBOX_WIDTH = 20;
-    public static final double ATTACK_HITBOX_HEIGHT = 30;
-
-    // 攻擊 hitBox，左隊放在角色右上角，右隊放在角色左上角。
-    public static final double RED_ATTACK_HITBOX_OFFSET_X = 55;
-    public static final double RED_ATTACK_HITBOX_OFFSET_Y = 35;
-    public static final double BLUE_ATTACK_HITBOX_OFFSET_X = 35;
-    public static final double BLUE_ATTACK_HITBOX_OFFSET_Y = 35;
-
     // 扣球球路。vy 為正時往下，為負時往上。
     public static final double SPIKE_SPEED_X = 17.0;
     public static final double SPIKE_SPEED_Y = 7.0;
@@ -98,10 +96,6 @@ public final class GameConfig {
     // S / ↓：短球，向下速度更大。
     public static final double SHORT_SPIKE_SPEED_X = 15.0;
     public static final double SHORT_SPIKE_SPEED_Y = 10.0;
-
-    // S + D / ↓ + →：比普通球再更多力量。
-    public static final double LONG_SPIKE_SPEED_X = 10.0;
-    public static final double LONG_SPIKE_SPEED_Y = 10.0;
 
     // W / ↑：吊球，慢速上拋後越過攔網。
     public static final double LOB_SPIKE_SPEED_X = 3.0;
@@ -138,27 +132,18 @@ public final class GameConfig {
     // 發球球速，可依手感調整。
     public static final double SERVE_NORMAL_VX = 9;
     public static final double SERVE_NORMAL_VY = -12;
-    public static final double SERVE_CEILING_VX = 4.5;
-    public static final double SERVE_CEILING_VY = -25;
+    public static final double SERVE_CEILING_VX = 5.1;
+    public static final double SERVE_CEILING_VY = -20;
     public static final double SERVE_LOW_NET_VX = 14.8;
     public static final double SERVE_LOW_NET_VY = -7;
-    public static final double SERVE_SHORT_VX = 6.5;
-    public static final double SERVE_SHORT_VY = -14.0;
+    public static final double SERVE_SHORT_VX = 6.4;
+    public static final double SERVE_SHORT_VY = -14.1;
     // 保留給之後啟用跳發出手階段；目前跳發動作尚未使用這兩個速度。
     public static final double SERVE_JUMP_VX = 11.5;
     public static final double SERVE_JUMP_VY = -9.5;
 
     // 三米線距離（像素），後排球員不得在此線內起跳攻擊
     public static final double THREE_METER_PX = 167.0;
-
-    // 比賽結束後延遲停止遊戲的幀數（60FPS），1.5秒 = 90 幀
-    public static final int MATCH_OVER_DELAY_FRAMES = 90;
-
-    // 預留給之後 AI 後排角色的跳躍高度乘數（目前未使用）。
-    public static final double BACK_ROW_AI_JUMP_MULTIPLIER = 0.90;
-
-    // 預留給之後 AI 非後排角色的跳躍高度乘數（目前未使用）。
-    public static final double NON_BACK_AI_JUMP_MULTIPLIER = 0.92;
 
     // 預留給之後啟用的跳發第一段拋球位置與力量（目前未使用）。
     public static final double RED_JUMP_SERVE_TOSS_LANDING_X = 75;
