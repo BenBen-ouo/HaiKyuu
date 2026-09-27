@@ -19,6 +19,8 @@ import model.rally.RallyState;
 import model.serve.ServeHandler;
 
 public class GameModel {
+    private final boolean practiceMode;
+
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public final NetHitBox netHitBox = new NetHitBox();
 
@@ -68,7 +70,19 @@ public class GameModel {
     public Boolean pendingTouchOutWinner = null;
 
     public GameModel() {
+        this(false);
+    }
+
+    public GameModel(boolean practiceMode) {
+        this.practiceMode = practiceMode;
+        if (practiceMode) {
+            serveHandler.setRedServing(false);
+        }
         serveHandler.setWaitingForServe(true);
+    }
+
+    public boolean isPracticeMode() {
+        return practiceMode;
     }
 
     public ServeHandler getServeHandler() {

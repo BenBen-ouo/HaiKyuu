@@ -18,9 +18,11 @@ public class GameplayFlowTest {
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
+        testSetterQuickSetApex();
         testServeFaults();
         testNetCollisionAfterPoint();
         testScorePhasesAndReleaseGate();
+        testPracticeMode();
         testFinalPointStopsBeforeNextServe();
         System.out.println("GameplayFlowTest passed");
     }
@@ -149,6 +151,80 @@ public class GameplayFlowTest {
         GameModel copy = new GameModel();
         received.state.applyTo(copy);
         check(copy.isServeReceptionComplete(), "網路快照保留已接起發球狀態");
+    }
+
+    private static void testSetterQuickSetApex() {
+        checkQuickSetApex(true, 0);
+        checkQuickSetApex(false, 0);
+        checkQuickSetApex(true, 80);
+        checkQuickSetApex(false, 80);
+
+        for (int previousTouches : new int[]{0, 2}) {
+            GameModel defaultModel = prepareSetterTouch(true, previousTouches, 0);
+            GameModel shortPressedModel = prepareSetterTouch(true, previousTouches, 0);
+            new RallyContactHandler(defaultModel).collideTeam(
+                    defaultModel.redTeam, true, new TeamInput());
+            TeamInput shortPressed = new TeamInput();
+            shortPressed.spikeShort = true;
+            new RallyContactHandler(shortPressedModel).collideTeam(
+                    shortPressedModel.redTeam, true, shortPressed);
+
+            check(Math.abs(defaultModel.ball.vx - shortPressedModel.ball.vx) < 1e-9
+                            && Math.abs(defaultModel.ball.vy - shortPressedModel.ball.vy) < 1e-9,
+                    "Setter 第一或第三球按 S 仍走原本球路");
+        }
+
+        GameModel regularSet = prepareSetterTouch(true, 1, 0);
+        new RallyContactHandler(regularSet).collideTeam(
+                regularSet.redTeam, true, new TeamInput());
+        double highestY = Double.POSITIVE_INFINITY;
+        for (int frame = 0; frame < 80; frame++) {
+            regularSet.ball.update();
+            highestY = Math.min(highestY, regularSet.ball.y);
+        }
+        check(Math.abs(highestY - GameConfig.SETTER_SET_APEX_Y) < 1e-9,
+                "Setter 第二球未按 S 仍維持原本舉球高度");
+    }
+
+    private static void checkQuickSetApex(boolean redSide, double setterRise) {
+        GameModel model = prepareSetterTouch(redSide, 1, setterRise);
+        TeamInput input = new TeamInput();
+        input.spikeShort = true;
+        new RallyContactHandler(model).collideTeam(
+                redSide ? model.redTeam : model.blueTeam, redSide, input);
+
+        double targetX = redSide
+                ? GameConfig.RED_QUICK_SET_APEX_X
+                : GameConfig.BLUE_QUICK_SET_APEX_X;
+        double targetY = GameConfig.QUICK_SET_APEX_Y;
+        double highestY = Double.POSITIVE_INFINITY;
+        boolean passedTarget = false;
+        for (int frame = 0; frame < 80; frame++) {
+            model.ball.update();
+            highestY = Math.min(highestY, model.ball.y);
+            if (Math.abs(model.ball.x - targetX) < 1e-9
+                    && Math.abs(model.ball.y - targetY) < 1e-9) {
+                passedTarget = true;
+            }
+        }
+        check(passedTarget && Math.abs(highestY - targetY) < 1e-9,
+                "紅藍快攻舉球每次均在最高點通過指定球心座標");
+        check(model.getHitCount(redSide) == 2, "快攻舉球仍計為 Setter 的第二球");
+    }
+
+    private static GameModel prepareSetterTouch(boolean redSide, int previousTouches,
+                                                double setterRise) {
+        GameModel model = new GameModel();
+        model.recordRegularHit(false, model.blueTeam.backPlayer);
+        model.resetCounters();
+        Team team = redSide ? model.redTeam : model.blueTeam;
+        for (int touch = 0; touch < previousTouches; touch++) {
+            model.recordHit(redSide, team.backPlayer);
+        }
+        team.setter.y -= setterRise;
+        model.ball.x = team.setter.hitBox.getCenterX();
+        model.ball.y = team.setter.hitBox.getY() - model.ball.radius / 2;
+        return model;
     }
 
     private static void testServeFaults() {
@@ -364,6 +440,58 @@ public class GameplayFlowTest {
         check(blueServing.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X
                         && blueServing.blueTeam.backPlayer.y == GameConfig.BLUE_BACK_SERVE_Y,
                 "藍隊取得發球權時也直接站到發球位");
+    }
+
+    private static void testPracticeMode() {
+        GameModel model = new GameModel(true);
+        check(model.isPracticeMode() && !model.getServeHandler().isRedServing()
+                        && model.getServeHandler().isWaitingForServe(),
+                "練習模式一開始由藍隊等待發球");
+        check(model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X
+                        && model.redTeam.backPlayer.x == new Team(true).backPlayer.x,
+                "練習模式只讓藍隊後排站到發球位");
+
+        TeamInput redServe = new TeamInput();
+        redServe.servePressed = true;
+        model.update(redServe, new TeamInput());
+        check(model.getServeHandler().isWaitingForServe(), "紅隊不能在練習模式發球");
+
+        TeamInput blueServe = new TeamInput();
+        blueServe.servePressed = true;
+        model.update(new TeamInput(), blueServe);
+        check(!model.getServeHandler().isWaitingForServe() && model.ball.vx < 0,
+                "藍隊仍使用一般發球流程向紅隊發球");
+
+        for (boolean redWins : new boolean[]{true, false}) {
+            model.awardPointWithMessage(redWins, redWins ? "IN" : "OUT");
+            check(model.redScore == 0 && model.blueScore == 0 && !model.matchOver
+                            && !model.getServeHandler().isRedServing(),
+                    "練習模式不計分且得失分後都維持藍隊發球");
+            check(model.transientMessageTimer == 90, "練習模式判決仍顯示 90 幀");
+
+            for (int frame = 0; frame < 60; frame++) {
+                model.update(new TeamInput(), new TeamInput());
+            }
+            check(model.isLockedScorePhase()
+                            && model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X,
+                    "練習模式前 60 幀結束後仍歸位並鎖定");
+
+            for (int frame = 0; frame < 30; frame++) {
+                model.update(new TeamInput(), new TeamInput());
+            }
+            check(model.getServeHandler().isWaitingForServe()
+                            && !model.getServeHandler().isRedServing()
+                            && model.transientMessage == null,
+                    "練習模式後 30 幀結束才重新等待藍隊發球");
+        }
+
+        model.restart();
+        check(model.isPracticeMode() && model.getServeHandler().isWaitingForServe()
+                        && !model.getServeHandler().isRedServing()
+                        && model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X
+                        && model.redTeam.backPlayer.x == new Team(true).backPlayer.x,
+                "練習模式按 R 重開後仍由藍隊發球");
+        check(!new GameModel().isPracticeMode(), "一般單機與 Server 預設不是練習模式");
     }
 
     private static void testFinalPointStopsBeforeNextServe() {
