@@ -26,8 +26,13 @@ public final class GameConfig {
     public static final double FLOOR_Y = FLOOR_Y_PX;
     public static final double GRAVITY = 0.25;
 
-    // Setter 實際觸球舉球時，球心固定到達的最高世界座標。
+    // Setter 未選快攻時，舉球球心固定到達的最高世界座標。
     public static final double SETTER_SET_APEX_Y = 350;
+
+    // Setter 第二球按住 S／↓ 時，快攻舉球的球心最高點世界座標。
+    public static final double RED_QUICK_SET_APEX_X = 591;
+    public static final double BLUE_QUICK_SET_APEX_X = 609;
+    public static final double QUICK_SET_APEX_Y = 420;
 
     public static final double PLAYER_SPEED = 4.3;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
@@ -71,7 +76,7 @@ public final class GameConfig {
     public static final double NET_MIN_REBOUND_SPEED = 1.5;
 
     // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
-    public static final double BLOCK_HITBOX_BOUNCE = 0.72;
+    public static final double BLOCK_HITBOX_BOUNCE = 0.5;
     public static final double BLOCK_HITBOX_MIN_SPEED = 6.0;
 
     // 球場範圍 (以網子中心點左右各 500)

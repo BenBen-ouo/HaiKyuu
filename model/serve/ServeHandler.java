@@ -75,8 +75,8 @@ public class ServeHandler {
 
     public void reset() {
         state = ServeState.WAITING_FOR_SERVE;
-        redServing = true;
-        ballController.prepareServe(true);
+        redServing = !model.isPracticeMode();
+        ballController.prepareServe(redServing);
         resetFrameFlags();
     }
 
