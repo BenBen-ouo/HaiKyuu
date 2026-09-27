@@ -5,7 +5,7 @@
 package view;
 
 import java.awt.*;
-import model.Ball;
+import model.ball.Ball;
 
 public class BallRenderer {
     private final AssetLoader assets;

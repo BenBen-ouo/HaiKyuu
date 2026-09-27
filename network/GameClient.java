@@ -210,6 +210,13 @@ public final class GameClient implements NetworkView {
         lastCollisionRevision = Math.max(lastCollisionRevision, event.collisionRevision);
         estimatedServerTick = Math.max(estimatedServerTick, event.serverTick);
         event.state.applyTo(renderModel);
+        if (event.type == Packet.EventType.SCORE
+                && (renderModel.isLockedScorePhase()
+                || renderModel.getServeHandler().isWaitingForServe())) {
+            // 歸位與重新擺球是階段切換，球不應從上一個位置平滑滑入。
+            ballRenderCorrection.reset();
+            return;
+        }
         clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
     }
 

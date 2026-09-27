@@ -5,8 +5,8 @@
 package view;
 
 import java.awt.*;
-import model.EffectManager;
-import model.VisualEffect;
+import model.effect.EffectManager;
+import model.effect.VisualEffect;
 
 public class EffectRenderer {
     private static final int DEFAULT_SIZE = 40;
