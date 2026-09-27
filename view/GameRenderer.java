@@ -10,7 +10,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import model.GameConfig;
 import model.GameModel;
-import model.NetHitBox;
+import model.ball.NetHitBox;
 import network.NetworkView;
 
 public class GameRenderer {
@@ -61,23 +61,23 @@ public class GameRenderer {
 
         // 世界座標已鏡像，但除錯文字維持可讀。
         courtRenderer.drawWorldBoundaryGuide(g);
-        playerRenderer.drawMirroredStateLabels(g, model.redTeam);
-        playerRenderer.drawMirroredStateLabels(g, model.blueTeam);
     }
 
-    private void drawWorld(Graphics2D g, GameModel model, boolean drawStateLabels, NetworkView networkView) {
-        courtRenderer.draw(g, drawStateLabels);
+    private void drawWorld(Graphics2D g, GameModel model, boolean drawWorldBoundaryGuide, NetworkView networkView) {
+        courtRenderer.draw(g, drawWorldBoundaryGuide);
         drawNetHitBox(g, model.netHitBox);
 
-        playerRenderer.drawTeam(g, model.redTeam, true, drawStateLabels);
-        playerRenderer.drawTeam(g, model.blueTeam, false, drawStateLabels);
+        playerRenderer.drawTeam(g, model.redTeam, true);
+        playerRenderer.drawTeam(g, model.blueTeam, false);
 
-        double ballX = networkView == null ? model.ball.x : networkView.getRenderedBallX(model.ball.x);
-        double ballY = networkView == null ? model.ball.y : networkView.getRenderedBallY(model.ball.y);
-        double ballRotation = networkView == null
-                ? model.ball.rotationDegrees
-                : networkView.getRenderedBallRotation(model.ball.rotationDegrees);
-        ballRenderer.draw(g, model.ball, ballX, ballY, ballRotation);
+        if (!model.isLockedScorePhase()) {
+            double ballX = networkView == null ? model.ball.x : networkView.getRenderedBallX(model.ball.x);
+            double ballY = networkView == null ? model.ball.y : networkView.getRenderedBallY(model.ball.y);
+            double ballRotation = networkView == null
+                    ? model.ball.rotationDegrees
+                    : networkView.getRenderedBallRotation(model.ball.rotationDegrees);
+            ballRenderer.draw(g, model.ball, ballX, ballY, ballRotation);
+        }
         effectRenderer.draw(g, model.effects);
         spikeEffectRenderer.draw(g, model.spikeEffect);
     }

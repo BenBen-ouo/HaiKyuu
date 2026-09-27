@@ -8,8 +8,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.HashSet;
 import java.util.Set;
-import model.ServeType;
 import model.TeamInput;
+import model.serve.ServeType;
 
 public class KeyboardController implements KeyListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
@@ -24,7 +24,6 @@ public class KeyboardController implements KeyListener {
         input.backDive = isPressed(KeyEvent.VK_SPACE);
         input.setterJump = isPressed(KeyEvent.VK_K);
         input.quickAttack = isPressed(KeyEvent.VK_L);
-        input.quickBlock = isPressed(KeyEvent.VK_L);
         input.wingAttack = isPressed(KeyEvent.VK_J);
         input.spikeFlat = isPressed(KeyEvent.VK_D);
         input.spikeShort = isPressed(KeyEvent.VK_S);
@@ -44,19 +43,17 @@ public class KeyboardController implements KeyListener {
         input.backDive = isPressed(KeyEvent.VK_NUMPAD0);
         input.setterJump = isPressed(KeyEvent.VK_NUMPAD5);
         input.quickAttack = isPressed(KeyEvent.VK_NUMPAD6);
-        input.quickBlock = isPressed(KeyEvent.VK_NUMPAD6);
         input.wingAttack = isPressed(KeyEvent.VK_NUMPAD4);
         input.spikeFlat = isPressed(KeyEvent.VK_RIGHT);
         input.spikeShort = isPressed(KeyEvent.VK_DOWN);
         input.spikeLob = isPressed(KeyEvent.VK_UP);
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
 
-        // 沒有獨立數字鍵測試用 之後會刪除
+        // 沒有獨立數字鍵測試用 之後會註解掉
         // input.backJump = isPressed(KeyEvent.VK_0);
         // input.backDive = isPressed(KeyEvent.VK_0);
         // input.setterJump = isPressed(KeyEvent.VK_8);
         // input.quickAttack = isPressed(KeyEvent.VK_9);
-        // input.quickBlock = isPressed(KeyEvent.VK_9);
         // input.wingAttack = isPressed(KeyEvent.VK_7);
         // input.servePressed = isPressed(KeyEvent.VK_0);
         

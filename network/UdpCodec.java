@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 5;
+    private static final short VERSION = 6;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;

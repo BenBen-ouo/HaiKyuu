@@ -4,14 +4,14 @@ TeamInput 會壓成 bitmask；完整狀態只在指定同步事件以 UdpCodec �
 */
 package network;
 
-import model.Ball;
 import model.GameModel;
-import model.Player;
-import model.PlayerAction;
-import model.ServeState;
-import model.ServeType;
-import model.Team;
 import model.TeamInput;
+import model.ball.Ball;
+import model.player.Player;
+import model.player.PlayerAction;
+import model.player.Team;
+import model.serve.ServeState;
+import model.serve.ServeType;
 
 public final class Packet {
     public static final int INPUT_BACK_LEFT = 1 << 0;
@@ -20,7 +20,7 @@ public final class Packet {
     public static final int INPUT_BACK_DIVE = 1 << 3;
     public static final int INPUT_SETTER_JUMP = 1 << 4;
     public static final int INPUT_QUICK_ATTACK = 1 << 5;
-    public static final int INPUT_QUICK_BLOCK = 1 << 6;
+    // bit 6 保留，不移動既有輸入位元位置。
     public static final int INPUT_WING_ATTACK = 1 << 7;
     public static final int INPUT_SPIKE_FLAT = 1 << 8;
     public static final int INPUT_SPIKE_SHORT = 1 << 9;
@@ -39,6 +39,7 @@ public final class Packet {
     public enum EventType {
         SERVE,
         SETTER_CONTACT,
+        RECEPTION,
         LANDING,
         SCORE,
         RULE,
@@ -53,7 +54,6 @@ public final class Packet {
         if (input.backDive) mask |= INPUT_BACK_DIVE;
         if (input.setterJump) mask |= INPUT_SETTER_JUMP;
         if (input.quickAttack) mask |= INPUT_QUICK_ATTACK;
-        if (input.quickBlock) mask |= INPUT_QUICK_BLOCK;
         if (input.wingAttack) mask |= INPUT_WING_ATTACK;
         if (input.spikeFlat) mask |= INPUT_SPIKE_FLAT;
         if (input.spikeShort) mask |= INPUT_SPIKE_SHORT;
@@ -72,7 +72,6 @@ public final class Packet {
         input.backDive = (mask & INPUT_BACK_DIVE) != 0;
         input.setterJump = (mask & INPUT_SETTER_JUMP) != 0;
         input.quickAttack = (mask & INPUT_QUICK_ATTACK) != 0;
-        input.quickBlock = (mask & INPUT_QUICK_BLOCK) != 0;
         input.wingAttack = (mask & INPUT_WING_ATTACK) != 0;
         input.spikeFlat = (mask & INPUT_SPIKE_FLAT) != 0;
         input.spikeShort = (mask & INPUT_SPIKE_SHORT) != 0;
@@ -116,6 +115,7 @@ public final class Packet {
         public final int blueLastHitterIndex;
         public final int lastHitTeamCode;
         public final boolean lastTouchWasBlock;
+        public final boolean serveReceptionComplete;
 
         public final int serveStateOrdinal;
         public final boolean redServing;
@@ -129,7 +129,6 @@ public final class Packet {
         public final int transientMessageColorCode;
         public final boolean pendingTouchOut;
         public final int pendingTouchOutWinnerCode;
-        public final int matchOverCountdownFrames;
 
         public CompactState(
                 BallState ball,
@@ -143,6 +142,7 @@ public final class Packet {
                 int blueLastHitterIndex,
                 int lastHitTeamCode,
                 boolean lastTouchWasBlock,
+                boolean serveReceptionComplete,
                 int serveStateOrdinal,
                 boolean redServing,
                 boolean rallyOver,
@@ -153,8 +153,7 @@ public final class Packet {
                 int transientMessageTimer,
                 int transientMessageColorCode,
                 boolean pendingTouchOut,
-                int pendingTouchOutWinnerCode,
-                int matchOverCountdownFrames
+                int pendingTouchOutWinnerCode
         ) {
             this.ball = ball;
             this.redTeam = redTeam;
@@ -167,6 +166,7 @@ public final class Packet {
             this.blueLastHitterIndex = blueLastHitterIndex;
             this.lastHitTeamCode = lastHitTeamCode;
             this.lastTouchWasBlock = lastTouchWasBlock;
+            this.serveReceptionComplete = serveReceptionComplete;
             this.serveStateOrdinal = serveStateOrdinal;
             this.redServing = redServing;
             this.rallyOver = rallyOver;
@@ -178,7 +178,6 @@ public final class Packet {
             this.transientMessageColorCode = transientMessageColorCode;
             this.pendingTouchOut = pendingTouchOut;
             this.pendingTouchOutWinnerCode = pendingTouchOutWinnerCode;
-            this.matchOverCountdownFrames = matchOverCountdownFrames;
         }
 
         public static CompactState from(GameModel model) {
@@ -194,6 +193,7 @@ public final class Packet {
                     model.getLastHitterIndexForNetwork(false),
                     encodeNullableBoolean(model.getLastHitTeam()),
                     model.wasLastTouchBlockForNetwork(),
+                    model.isServeReceptionComplete(),
                     model.getServeHandler().getState().ordinal(),
                     model.getServeHandler().isRedServing(),
                     model.isRallyOverForNetwork(),
@@ -204,8 +204,7 @@ public final class Packet {
                     model.transientMessageTimer,
                     encodeNullableBoolean(model.transientMessageIsRed),
                     model.pendingTouchOut,
-                    encodeNullableBoolean(model.pendingTouchOutWinner),
-                    model.matchOverCountdownFrames
+                    encodeNullableBoolean(model.pendingTouchOutWinner)
             );
         }
 
@@ -223,18 +222,18 @@ public final class Packet {
             model.transientMessageIsRed = decodeNullableBoolean(transientMessageColorCode);
             model.pendingTouchOut = pendingTouchOut;
             model.pendingTouchOutWinner = decodeNullableBoolean(pendingTouchOutWinnerCode);
-            model.matchOverCountdownFrames = matchOverCountdownFrames;
 
             ServeState[] states = ServeState.values();
             ServeState serveState = serveStateOrdinal >= 0 && serveStateOrdinal < states.length
                     ? states[serveStateOrdinal]
-                    : ServeState.READY;
+                    : ServeState.WAITING_FOR_SERVE;
             model.getServeHandler().applyNetworkState(serveState, redServing);
             model.applyNetworkRallyState(
                     redHitCount,
                     blueHitCount,
                     decodeNullableBoolean(lastHitTeamCode),
                     lastTouchWasBlock,
+                    serveReceptionComplete,
                     redLastHitterIndex,
                     blueLastHitterIndex,
                     rallyOver,
