@@ -28,6 +28,7 @@ public class GameplayFlowTest {
         testAttackPressBeforeBallMovesIntoHitBox();
         testSetterQuickSetApex();
         testServeFaults();
+        testBackRowAttackOnThreeMeterLine();
         testNetworkServeKeyMustBeReleasedBeforeDive();
         testNetCollisionAfterPoint();
         testClientPredictionDoesNotResolveCollisions();
@@ -274,6 +275,34 @@ public class GameplayFlowTest {
         model.ball.x = team.setter.hitBox.getCenterX();
         model.ball.y = team.setter.hitBox.getY() - model.ball.radius / 2;
         return model;
+    }
+
+    private static void testBackRowAttackOnThreeMeterLine() {
+        double redLine = GameConfig.NET_X - GameConfig.THREE_METER_PX;
+        double blueLine = GameConfig.NET_X + GameConfig.THREE_METER_PX;
+        checkBackRowAttackFault(true, redLine, true);
+        checkBackRowAttackFault(false, blueLine, true);
+        checkBackRowAttackFault(true, Math.nextDown(redLine), false);
+        checkBackRowAttackFault(false, Math.nextUp(blueLine), false);
+    }
+
+    private static void checkBackRowAttackFault(boolean redSide, double jumpStartX, boolean expectedFault) {
+        GameModel model = new GameModel();
+        model.recordRegularHit(false, model.blueTeam.setter);
+        Team team = redSide ? model.redTeam : model.blueTeam;
+        Player backPlayer = team.backPlayer;
+        backPlayer.startAttackSwingAnimation();
+        backPlayer.jumping = true;
+        backPlayer.jumpStartX = jumpStartX;
+        model.ball.x = backPlayer.attackHitBox.getCenterX();
+        model.ball.y = backPlayer.attackHitBox.getCenterY();
+        backPlayer.captureAttackAttemptBallOverlap(model.ball);
+
+        new RallyContactHandler(model).collideTeam(team, redSide, new TeamInput());
+
+        check((model.redScore + model.blueScore == 1) == expectedFault
+                        && ("後排三米線".equals(model.transientMessage)) == expectedFault,
+                (redSide ? "紅隊" : "藍隊") + "後排起跳中心在三米線上的判定");
     }
 
     private static void testServeFaults() {

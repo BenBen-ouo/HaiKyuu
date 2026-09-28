@@ -131,12 +131,12 @@ public class RallyContactHandler {
         }
 
         if (redSide) {
-            // 紅隊在左側：起跳位置越過左側三米線、靠近網子時違規。
-            return jumpStartX > GameConfig.NET_X - GameConfig.THREE_METER_PX;
+            // 紅隊在左側：起跳中心在線上或更靠近網子時違規。
+            return jumpStartX >= GameConfig.NET_X - GameConfig.THREE_METER_PX;
         }
 
-        // 藍隊在右側：起跳位置越過右側三米線、靠近網子時違規。
-        return jumpStartX < GameConfig.NET_X + GameConfig.THREE_METER_PX;
+        // 藍隊在右側：起跳中心在線上或更靠近網子時違規。
+        return jumpStartX <= GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
     private boolean canSpike(Player player) {
