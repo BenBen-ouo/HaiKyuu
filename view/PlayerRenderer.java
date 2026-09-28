@@ -31,11 +31,14 @@ public class PlayerRenderer {
         this.assets = assets;
     }
 
-    public void drawTeam(Graphics2D g, Team team, boolean redTeam, NetworkView networkView) {
+    public void drawTeamExceptBack(Graphics2D g, Team team, boolean redTeam, NetworkView networkView) {
         drawPlayer(g, team.wingSpiker, redTeam, networkView);
-        drawPlayer(g, team.backPlayer, redTeam, networkView);
         drawPlayer(g, team.setter, redTeam, networkView);
         drawPlayer(g, team.quickAttacker, redTeam, networkView);
+    }
+
+    public void drawBackPlayer(Graphics2D g, Team team, boolean redTeam, NetworkView networkView) {
+        drawPlayer(g, team.backPlayer, redTeam, networkView);
     }
 
     private void drawPlayer(Graphics2D g, Player player, boolean redTeam, NetworkView networkView) {

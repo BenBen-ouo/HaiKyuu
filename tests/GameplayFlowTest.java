@@ -1,3 +1,6 @@
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import model.GameConfig;
 import model.GameModel;
 import model.TeamInput;
@@ -11,10 +14,12 @@ import model.rally.RallyContactHandler;
 import model.serve.ServeState;
 import network.Packet;
 import network.UdpCodec;
+import view.GameRenderer;
 
 /** 以純 Java 執行主要回合規則與同步狀態的回歸檢查。 */
 public class GameplayFlowTest {
     public static void main(String[] args) throws Exception {
+        testBackPlayerDrawnAboveAllOtherPlayers();
         testInitialHitBoxMirrors();
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
@@ -30,6 +35,44 @@ public class GameplayFlowTest {
         testPracticeMode();
         testFinalPointStopsBeforeNextServe();
         System.out.println("GameplayFlowTest passed");
+    }
+
+    private static void testBackPlayerDrawnAboveAllOtherPlayers() {
+        GameModel model = new GameModel();
+        for (Player player : model.redTeam.getPlayers()) {
+            player.x = -500;
+            player.assetName = "missing-red-layer-test.png";
+        }
+        for (Player player : model.blueTeam.getPlayers()) {
+            player.x = -500;
+            player.assetName = "missing-blue-layer-test.png";
+        }
+
+        model.redTeam.backPlayer.x = 200;
+        model.redTeam.backPlayer.y = 200;
+        model.blueTeam.wingSpiker.x = 200;
+        model.blueTeam.wingSpiker.y = 200;
+        checkRenderedPlayerColor(model, new Color(220, 90, 90), "紅隊後排應蓋住藍隊 WS");
+
+        model.redTeam.backPlayer.x = -500;
+        model.blueTeam.wingSpiker.x = -500;
+        model.redTeam.setter.x = 200;
+        model.redTeam.setter.y = 200;
+        model.blueTeam.backPlayer.x = 200;
+        model.blueTeam.backPlayer.y = 200;
+        checkRenderedPlayerColor(model, new Color(80, 125, 220), "藍隊後排應蓋住紅隊 S");
+    }
+
+    private static void checkRenderedPlayerColor(GameModel model, Color expected, String message) {
+        BufferedImage canvas = new BufferedImage(
+                GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            new GameRenderer().render(graphics, model);
+        } finally {
+            graphics.dispose();
+        }
+        check(canvas.getRGB(250, 250) == expected.getRGB(), message);
     }
 
     private static void testDiveSelectsSlowFloorBounceSpin() {
