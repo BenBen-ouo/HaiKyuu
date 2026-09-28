@@ -9,6 +9,7 @@ import model.TeamInput;
 import model.ball.Ball;
 import model.player.Player;
 import model.player.PlayerAction;
+import model.player.QuickAttacker;
 import model.player.Team;
 import model.serve.ServeState;
 import model.serve.ServeType;
@@ -454,6 +455,10 @@ public final class Packet {
         public void applyTo(Player player) {
             applyMotionTo(player);
 
+            if (player instanceof QuickAttacker) {
+                return;
+            }
+
             PlayerAction[] actions = PlayerAction.values();
             player.applyNetworkAction(
                     actionOrdinal >= 0 && actionOrdinal < actions.length
@@ -463,7 +468,7 @@ public final class Packet {
             );
         }
 
-        /** 即時快照不重置 Client 正在預測的動畫序列。 */
+        /** 一般角色保留 Client 動畫；MB 的動作、圖片與攻擊框須採同一份 Server 狀態。 */
         public void applyMotionTo(Player player) {
             player.x = x;
             player.y = y;
@@ -485,11 +490,14 @@ public final class Packet {
                     hitBoxRotationDegrees
             );
             PlayerAction[] actions = PlayerAction.values();
-            player.setActionForNetwork(
-                    actionOrdinal >= 0 && actionOrdinal < actions.length
-                            ? actions[actionOrdinal]
-                            : PlayerAction.IDLE
-            );
+            PlayerAction serverAction = actionOrdinal >= 0 && actionOrdinal < actions.length
+                    ? actions[actionOrdinal]
+                    : PlayerAction.IDLE;
+            if (player instanceof QuickAttacker) {
+                player.applyNetworkAction(serverAction, assetName);
+            } else {
+                player.setActionForNetwork(serverAction);
+            }
 
             if (attackHitBoxEnabled) {
                 player.attackHitBox.enable();

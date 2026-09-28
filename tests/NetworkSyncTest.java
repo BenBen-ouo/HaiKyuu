@@ -16,6 +16,7 @@ public final class NetworkSyncTest {
         testServerKeepsUnacknowledgedEvents();
         testControlsStayInOrder();
         testMotionSnapshotKeepsAnimationAlive();
+        testMbSnapshotReconcilesActionAndAsset();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
         if (args.length > 0 && "loopback".equals(args[0])) {
@@ -136,6 +137,30 @@ public final class NetworkSyncTest {
                 "逐 tick 位置校正不重置 Setter 動畫序列");
     }
 
+    private static void testMbSnapshotReconcilesActionAndAsset() {
+        GameModel local = new GameModel();
+        TeamInput block = new TeamInput();
+        block.quickAttack = true;
+        local.redTeam.quickAttacker.update(block);
+        check(local.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
+                "本機 MB 預測為攔網");
+
+        GameModel authoritative = new GameModel();
+        TeamInput attack = new TeamInput();
+        attack.quickAttack = true;
+        attack.hasFirstRegularTouch = true;
+        authoritative.redTeam.quickAttacker.update(attack);
+        Packet.PlayerState state = Packet.PlayerState.from(authoritative.redTeam.quickAttacker);
+        state.applyMotionTo(local.redTeam.quickAttacker);
+        check(local.redTeam.quickAttacker.getAction() == PlayerAction.ATTACK_READY
+                        && local.redTeam.quickAttacker.attackHitBox.enabled
+                        && local.redTeam.quickAttacker.assetName.equals(state.assetName),
+                "Server 改判 MB 攻擊時，本機圖片與攻擊框一起校正");
+        local.redTeam.quickAttacker.update(new TeamInput());
+        check(!local.redTeam.quickAttacker.assetName.contains("block"),
+                "舊攔網動畫不會在下一幀覆蓋攻擊圖片");
+    }
+
     private static void testRemoteInterpolationStopsAfterBoundedExtrapolation() {
         GameModel model = new GameModel();
         model.blueTeam.wingSpiker.x = 700;
@@ -181,6 +206,18 @@ public final class NetworkSyncTest {
             }
             check(red.isConnected() && blue.isConnected(), "本機兩端可連線並接收對方輸入");
             check(!red.isBluePerspective() && blue.isBluePerspective(), "本機測試紅藍兩端分配正確");
+
+            GameModel authoritativeMb = new GameModel();
+            TeamInput mbAttack = new TeamInput();
+            mbAttack.quickAttack = true;
+            mbAttack.hasFirstRegularTouch = true;
+            authoritativeMb.blueTeam.quickAttacker.update(mbAttack);
+            Packet.PlayerState.from(authoritativeMb.blueTeam.quickAttacker)
+                    .applyMotionTo(redModel.blueTeam.quickAttacker);
+            check(redModel.blueTeam.quickAttacker.attackHitBox.enabled
+                            && red.getRenderedPlayerAsset(redModel.blueTeam.quickAttacker)
+                            .equals(authoritativeMb.blueTeam.quickAttacker.assetName),
+                    "對手 MB 的圖片直接對應 Server 攻擊框，不顯示舊攔網圖片");
 
             double serverBallX = blueModel.ball.x;
             redModel.ball.x += 120;

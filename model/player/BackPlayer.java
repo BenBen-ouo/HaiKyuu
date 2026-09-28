@@ -21,6 +21,7 @@ public class BackPlayer extends Player {
 
     @Override
     public void update(TeamInput input) {
+        clearAttackAttempt();
         boolean actionPressed = input.backJump || input.backDive;
         boolean justPressedAction = actionPressed && !previousBackAction;
 
@@ -80,6 +81,7 @@ public class BackPlayer extends Player {
 
     @Override
     public void updateWhileAwaitingAuthority() {
+        clearAttackAttempt();
         if (diveController.isActive()) {
             diveController.update(false);
             updateActionAnimation();

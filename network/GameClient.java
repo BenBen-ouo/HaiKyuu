@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import model.GameModel;
 import model.TeamInput;
 import model.player.Player;
+import model.player.QuickAttacker;
 import model.player.Team;
 
 public final class GameClient implements NetworkView {
@@ -593,14 +594,15 @@ public final class GameClient implements NetworkView {
 
     @Override
     public String getRenderedPlayerAsset(Player player) {
-        return assigned && player.redSide != redSide
+        // MB 的圖片不得比 Server 的 BLOCK／ATTACK_READY 判定框落後兩 tick。
+        return assigned && player.redSide != redSide && !(player instanceof QuickAttacker)
                 ? remotePlayerInterpolator.renderedAsset(player)
                 : player.assetName;
     }
 
     @Override
     public boolean getRenderedPlayerMirror(Player player) {
-        return assigned && player.redSide != redSide
+        return assigned && player.redSide != redSide && !(player instanceof QuickAttacker)
                 ? remotePlayerInterpolator.renderedMirror(player)
                 : player.mirrorImage;
     }

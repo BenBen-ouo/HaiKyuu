@@ -289,6 +289,12 @@ public class GameModel {
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
         updateTeams(redInput, blueInput);
+        for (Player player : redTeam.getPlayers()) {
+            player.captureAttackAttemptBallOverlap(ball);
+        }
+        for (Player player : blueTeam.getPlayers()) {
+            player.captureAttackAttemptBallOverlap(ball);
+        }
         serveHandler.updateAfterTeams();
 
         updateBallIfNeeded(resolveRallyOutcomes);

@@ -27,6 +27,7 @@ public class WingSpiker extends Player {
 
     @Override
     public void update(TeamInput input) {
+        clearAttackAttempt();
         boolean justPressedAttack = input.wingAttack && !previousWingAttack;
 
         if (isMovementLockedByAnimation()) {

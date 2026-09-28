@@ -39,6 +39,8 @@ public abstract class Player {
     protected final PlayerAnimation animation;
     protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
+    private boolean attackAttemptThisFrame;
+    private boolean ballInAttackHitBoxWhenPressed;
 
     public double minX = GameConfig.WORLD_LEFT;
     public double maxX = GameConfig.WORLD_RIGHT;
@@ -59,6 +61,8 @@ public abstract class Player {
     public abstract void update(TeamInput input);
 
     public void resetToInitial() {
+        attackAttemptThisFrame = false;
+        ballInAttackHitBoxWhenPressed = false;
         PlayerPhysics.resetToInitial(this);
         finishAction();
         attackHitBox.disable();
@@ -129,7 +133,22 @@ public abstract class Player {
     }
 
     public void startAttackSwingAnimation() {
+        attackAttemptThisFrame = true;
         actionAnimator.startAttackSwing();
+    }
+
+    public boolean hasValidAttackAttemptThisFrame() {
+        return attackAttemptThisFrame && ballInAttackHitBoxWhenPressed;
+    }
+
+    /** 球移動前記錄按下攻擊鍵當下是否已碰到攻擊框；提早空揮不會預約命中。 */
+    public void captureAttackAttemptBallOverlap(Ball ball) {
+        ballInAttackHitBoxWhenPressed = attackAttemptThisFrame && attackHitBox.intersectsBall(ball);
+    }
+
+    protected void clearAttackAttempt() {
+        attackAttemptThisFrame = false;
+        ballInAttackHitBoxWhenPressed = false;
     }
 
     protected void startBlockAnimation() {
@@ -153,6 +172,7 @@ public abstract class Player {
      * 不讀取新的玩家輸入，也不自行開始新的角色動作。
      */
     public void updateWhileAwaitingAuthority() {
+        clearAttackAttempt();
         vx = 0;
         applyGravity();
         updateActionAnimation();

@@ -8,9 +8,9 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class Team {
-    private static final double RECEIVE_HITBOX_RED_X = 45;
+    private static final double RECEIVE_HITBOX_RED_X = 40;
     private static final double RECEIVE_HITBOX_Y = 60;
-    private static final double RECEIVE_HITBOX_WIDTH = 20;
+    private static final double RECEIVE_HITBOX_WIDTH = 25;
     private static final double RECEIVE_HITBOX_HEIGHT = 10;
     private static final int RECEIVE_HITBOX_ARC = 10;
     private static final double RECEIVE_HITBOX_ROTATION = 20;
