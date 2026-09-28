@@ -74,8 +74,7 @@ public final class GameClient implements NetworkView {
     private long lastInputSendNanos;
     private long terminationAckUntilNanos;
 
-    // 物理球立即採用 Server 狀態；畫面球則由此校正器短暫平滑追上。
-    private final BallRenderCorrection ballRenderCorrection = new BallRenderCorrection();
+    private static final double SPIKE_TRAIL_CLEAR_DISTANCE = 80.0;
     private final PlayerRenderCorrection playerRenderCorrection = new PlayerRenderCorrection();
     private final RemotePlayerInterpolator remotePlayerInterpolator = new RemotePlayerInterpolator();
 
@@ -126,7 +125,6 @@ public final class GameClient implements NetworkView {
             renderModel.updateForNetworkPrediction(localInput, redSide);
         }
 
-        ballRenderCorrection.advance();
         playerRenderCorrection.advance();
 
         if (receivedRemoteInput && System.nanoTime() - lastServerPacketNanos > SERVER_TIMEOUT_NANOS) {
@@ -240,7 +238,6 @@ public final class GameClient implements NetworkView {
         assigned = true;
         estimatedServerTick = welcome.serverTick;
         welcome.state.applyTo(renderModel);
-        ballRenderCorrection.reset();
         playerRenderCorrection.reset();
         remotePlayerInterpolator.reset();
         observeRemotePlayers(welcome.state.redTeam, welcome.state.blueTeam, welcome.serverTick);
@@ -260,9 +257,8 @@ public final class GameClient implements NetworkView {
     }
 
     private void applyOrderedEvent(UdpCodec.Event event) {
-        double visibleX = getRenderedBallX(renderModel.ball.x);
-        double visibleY = getRenderedBallY(renderModel.ball.y);
-        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
+        double previousBallX = renderModel.ball.x;
+        double previousBallY = renderModel.ball.y;
         PlayerVisualPositions playersBefore = captureVisiblePlayers();
         String previousMessage = renderModel.transientMessage;
         int previousMessageTimer = renderModel.transientMessageTimer;
@@ -291,15 +287,14 @@ public final class GameClient implements NetworkView {
             renderModel.spikeEffect.stopSpikeTrail();
         }
         if (phaseReset) {
-            // 歸位與重新擺球是階段切換，球不應從上一個位置平滑滑入。
-            ballRenderCorrection.reset();
+            // 歸位與重新擺球是階段切換，球直接採用 Server 狀態。
             playerRenderCorrection.reset();
             remotePlayerInterpolator.reset();
             observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
             restoreNewerWorldMotion(event.serverTick);
             return;
         }
-        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
+        clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         scheduleOwnPlayerCorrections(playersBefore, event.state.redTeam, event.state.blueTeam);
         observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
         restoreNewerWorldMotion(event.serverTick);
@@ -313,16 +308,15 @@ public final class GameClient implements NetworkView {
     }
 
     private void applyWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
-        double visibleX = getRenderedBallX(renderModel.ball.x);
-        double visibleY = getRenderedBallY(renderModel.ball.y);
-        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
+        double previousBallX = renderModel.ball.x;
+        double previousBallY = renderModel.ball.y;
         PlayerVisualPositions playersBefore = captureVisiblePlayers();
 
         estimatedServerTick = Math.max(estimatedServerTick, frame.serverTick);
         frame.snapshot.ball.applyTo(renderModel.ball);
         frame.snapshot.redTeam.applyMotionTo(renderModel.redTeam);
         frame.snapshot.blueTeam.applyMotionTo(renderModel.blueTeam);
-        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
+        clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         renderModel.syncNetworkVisualEffects(
                 frame.snapshot.spikeTrailActive, frame.snapshot.spikeTrailRedSide);
         scheduleOwnPlayerCorrections(playersBefore, frame.snapshot.redTeam, frame.snapshot.blueTeam);
@@ -336,16 +330,9 @@ public final class GameClient implements NetworkView {
         }
     }
 
-    private void clearSpikeTrailIfLargeCorrection(double visibleX, double visibleY, double visibleRotation) {
-        boolean largeCorrection = ballRenderCorrection.schedule(
-                renderModel.ball.x,
-                renderModel.ball.y,
-                renderModel.ball.rotationDegrees,
-                visibleX,
-                visibleY,
-                visibleRotation
-        );
-        if (largeCorrection) {
+    private void clearSpikeTrailIfLargeCorrection(double previousBallX, double previousBallY) {
+        if (Math.hypot(renderModel.ball.x - previousBallX,
+                renderModel.ball.y - previousBallY) > SPIKE_TRAIL_CLEAR_DISTANCE) {
             renderModel.spikeEffect.clearSpikeTrail();
         }
     }
@@ -588,21 +575,6 @@ public final class GameClient implements NetworkView {
     @Override
     public boolean isSessionEnded() {
         return sessionEnded;
-    }
-
-    @Override
-    public double getRenderedBallX(double authoritativeX) {
-        return ballRenderCorrection.renderedX(authoritativeX);
-    }
-
-    @Override
-    public double getRenderedBallY(double authoritativeY) {
-        return ballRenderCorrection.renderedY(authoritativeY);
-    }
-
-    @Override
-    public double getRenderedBallRotation(double authoritativeRotationDegrees) {
-        return ballRenderCorrection.renderedRotation(authoritativeRotationDegrees);
     }
 
     @Override

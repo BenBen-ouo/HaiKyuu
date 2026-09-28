@@ -6,6 +6,7 @@ import java.util.Set;
 import model.GameModel;
 import model.TeamInput;
 import model.player.PlayerAction;
+import model.serve.ServeState;
 
 /** 可用 java -cp build network.NetworkSyncTest 執行的封包與亂序測試。 */
 public final class NetworkSyncTest {
@@ -191,6 +192,30 @@ public final class NetworkSyncTest {
             check(Math.abs(redModel.ball.x - serverBallX) < 0.01,
                     "沒有可靠事件時，球仍逐 tick 接受 Server 快照");
 
+            double serverBallY = blueModel.ball.y;
+            double serverBallRotation = blueModel.ball.rotationDegrees;
+            redModel.ball.x += 10;
+            redModel.ball.y += 7;
+            redModel.ball.rotationDegrees += 25;
+            boolean smallCorrectionReceived = false;
+            for (int tick = 0; tick < 10; tick++) {
+                red.update(idle, false, false);
+                blue.update(idle, false, false);
+                if (Math.abs(redModel.ball.x - serverBallX) < 0.01
+                        && Math.abs(redModel.ball.y - serverBallY) < 0.01
+                        && Math.abs(redModel.ball.rotationDegrees - serverBallRotation) < 0.01) {
+                    check(red.getRenderedBallX(redModel.ball.x) == redModel.ball.x
+                                    && red.getRenderedBallY(redModel.ball.y) == redModel.ball.y
+                                    && red.getRenderedBallRotation(redModel.ball.rotationDegrees)
+                                    == redModel.ball.rotationDegrees,
+                            "球心與旋轉角度在收到 Server 快照後立即顯示，不保留平滑偏移");
+                    smallCorrectionReceived = true;
+                    break;
+                }
+                Thread.sleep(17);
+            }
+            check(smallCorrectionReceived, "小幅球心與旋轉誤差仍能收到 Server 快照校正");
+
             double start = blueModel.blueTeam.backPlayer.x;
             TeamInput move = new TeamInput();
             move.backRight = true;
@@ -219,6 +244,34 @@ public final class NetworkSyncTest {
             check(observedAssets.contains("player 2 run1.png")
                             && observedAssets.contains("player 2 run2.png"),
                     "沒有可靠事件時，對手 WS 仍顯示 Server 的跑步動畫");
+
+            TeamInput heldServe = new TeamInput();
+            heldServe.servePressed = true;
+            heldServe.backJump = true;
+            heldServe.backDive = true;
+            long serveDeadline = System.nanoTime() + 1_000_000_000L;
+            while (redModel.getServeHandler().getState() != ServeState.IN_PLAY
+                    && System.nanoTime() < serveDeadline) {
+                red.update(heldServe, false, false);
+                blue.update(idle, false, false);
+                Thread.sleep(17);
+            }
+            check(redModel.getServeHandler().getState() == ServeState.IN_PLAY,
+                    "連線 Client 收到直接進入 IN_PLAY 的發球事件");
+            for (int tick = 0; tick < 5; tick++) {
+                red.update(heldServe, false, false);
+                blue.update(idle, false, false);
+                Thread.sleep(17);
+            }
+            check(redModel.redTeam.backPlayer.getAction() != PlayerAction.DIVE,
+                    "連線發球鍵持續按住時後排不誤撲");
+            red.update(idle, false, false);
+            blue.update(idle, false, false);
+            Thread.sleep(17);
+            red.update(heldServe, false, false);
+            blue.update(idle, false, false);
+            check(redModel.redTeam.backPlayer.getAction() == PlayerAction.DIVE,
+                    "連線發球鍵放開後重新按下才撲球");
         } finally {
             server.close();
             serverThread.join(4_000);

@@ -19,7 +19,7 @@ public interface NetworkView extends AutoCloseable {
 
     boolean isSessionEnded();
 
-    /** 非網路模式維持權威球座標；網路模式可只對畫面加入短暫校正偏移。 */
+    /** 球的畫面座標與角度直接使用目前的權威狀態。 */
     default double getRenderedBallX(double authoritativeX) {
         return authoritativeX;
     }
