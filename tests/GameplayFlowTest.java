@@ -1,8 +1,12 @@
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import model.GameConfig;
 import model.GameModel;
 import model.TeamInput;
 import model.player.AttackHitBox;
 import model.player.HitBox;
+import model.player.Player;
 import model.player.PlayerAction;
 import model.player.QuickAttacker;
 import model.player.Team;
@@ -10,21 +14,65 @@ import model.rally.RallyContactHandler;
 import model.serve.ServeState;
 import network.Packet;
 import network.UdpCodec;
+import view.GameRenderer;
 
 /** 以純 Java 執行主要回合規則與同步狀態的回歸檢查。 */
 public class GameplayFlowTest {
     public static void main(String[] args) throws Exception {
+        testBackPlayerDrawnAboveAllOtherPlayers();
         testInitialHitBoxMirrors();
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
+        testAttackNeedsFreshPressWithBallInHitBox();
+        testAttackPressBeforeBallMovesIntoHitBox();
         testSetterQuickSetApex();
         testServeFaults();
+        testNetworkServeKeyMustBeReleasedBeforeDive();
         testNetCollisionAfterPoint();
+        testClientPredictionDoesNotResolveCollisions();
         testScorePhasesAndReleaseGate();
         testPracticeMode();
         testFinalPointStopsBeforeNextServe();
         System.out.println("GameplayFlowTest passed");
+    }
+
+    private static void testBackPlayerDrawnAboveAllOtherPlayers() {
+        GameModel model = new GameModel();
+        for (Player player : model.redTeam.getPlayers()) {
+            player.x = -500;
+            player.assetName = "missing-red-layer-test.png";
+        }
+        for (Player player : model.blueTeam.getPlayers()) {
+            player.x = -500;
+            player.assetName = "missing-blue-layer-test.png";
+        }
+
+        model.redTeam.backPlayer.x = 200;
+        model.redTeam.backPlayer.y = 200;
+        model.blueTeam.wingSpiker.x = 200;
+        model.blueTeam.wingSpiker.y = 200;
+        checkRenderedPlayerColor(model, new Color(220, 90, 90), "紅隊後排應蓋住藍隊 WS");
+
+        model.redTeam.backPlayer.x = -500;
+        model.blueTeam.wingSpiker.x = -500;
+        model.redTeam.setter.x = 200;
+        model.redTeam.setter.y = 200;
+        model.blueTeam.backPlayer.x = 200;
+        model.blueTeam.backPlayer.y = 200;
+        checkRenderedPlayerColor(model, new Color(80, 125, 220), "藍隊後排應蓋住紅隊 S");
+    }
+
+    private static void checkRenderedPlayerColor(GameModel model, Color expected, String message) {
+        BufferedImage canvas = new BufferedImage(
+                GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = canvas.createGraphics();
+        try {
+            new GameRenderer().render(graphics, model);
+        } finally {
+            graphics.dispose();
+        }
+        check(canvas.getRGB(250, 250) == expected.getRGB(), message);
     }
 
     private static void testDiveSelectsSlowFloorBounceSpin() {
@@ -55,8 +103,8 @@ public class GameplayFlowTest {
                 blue.quickAttacker.attackHitBox, "MB 攻擊框");
         checkMirroredAttackHitBox(red.wingSpiker.attackHitBox,
                 blue.wingSpiker.attackHitBox, "WS 攻擊框");
-        check(red.wingSpiker.hitBox.offsetX == 45 && blue.wingSpiker.hitBox.offsetX == 35,
-                "WS 一般框保留原本位置");
+        check(red.wingSpiker.hitBox.offsetX == 40 && blue.wingSpiker.hitBox.offsetX == 35,
+                "WS 一般框採目前紅藍偏移設定");
     }
 
     private static void checkMirroredHitBox(HitBox red, HitBox blue, String name) {
@@ -83,6 +131,7 @@ public class GameplayFlowTest {
         attacker.jumping = true;
         model.ball.x = attacker.attackHitBox.getCenterX();
         model.ball.y = attacker.attackHitBox.getCenterY();
+        attacker.captureAttackAttemptBallOverlap(model.ball);
 
         TeamInput input = new TeamInput();
         input.quickAttack = true;
@@ -234,6 +283,7 @@ public class GameplayFlowTest {
         attacker.jumping = true;
         attackModel.ball.x = attacker.attackHitBox.getCenterX();
         attackModel.ball.y = attacker.attackHitBox.getCenterY();
+        attacker.captureAttackAttemptBallOverlap(attackModel.ball);
         TeamInput attackInput = new TeamInput();
         attackInput.quickAttack = true;
         new RallyContactHandler(attackModel).collideTeam(attackModel.redTeam, true, attackInput);
@@ -247,6 +297,7 @@ public class GameplayFlowTest {
         receivingAttacker.jumping = true;
         receivingAttackModel.ball.x = receivingAttacker.attackHitBox.getCenterX();
         receivingAttackModel.ball.y = receivingAttacker.attackHitBox.getCenterY();
+        receivingAttacker.captureAttackAttemptBallOverlap(receivingAttackModel.ball);
         new RallyContactHandler(receivingAttackModel).collideTeam(
                 receivingAttackModel.blueTeam, false, attackInput);
         check(receivingAttackModel.redScore == 1
@@ -310,9 +361,9 @@ public class GameplayFlowTest {
         GameModel clientModel = new GameModel();
         Packet.CompactState.from(scoreModel).applyTo(clientModel);
         placeBallApproachingNet(clientModel);
-        clientModel.updateForNetworkPrediction(new TeamInput(), new TeamInput());
-        check(clientModel.ball.vx < 0 && clientModel.didBallHitNetThisFrame(),
-                "Client 等待得分結果期間仍會撞網反彈");
+        clientModel.updateForNetworkPrediction(new TeamInput(), true);
+        check(clientModel.ball.vx == 8 && !clientModel.didBallHitNetThisFrame(),
+                "Client 不自行判定撞網，球速等待 Server 快照");
 
         GameModel finalModel = new GameModel();
         finalModel.redScore = 24;
@@ -328,6 +379,163 @@ public class GameplayFlowTest {
         model.ball.y = model.netHitBox.getTop() + 30;
         model.ball.vx = 8;
         model.ball.vy = 0;
+    }
+
+    private static void testAttackNeedsFreshPressWithBallInHitBox() {
+        String[] roles = {"後排", "MB", "WS"};
+        for (int role = 0; role < roles.length; role++) {
+            GameModel early = new GameModel();
+            TeamInput pressed = new TeamInput();
+            Player attacker = prepareAttackReady(early, role, pressed);
+            RallyContactHandler contacts = new RallyContactHandler(early);
+            placeBallInAttackHitBox(early, attacker);
+            early.ball.vx = 0;
+            attacker.captureAttackAttemptBallOverlap(early.ball);
+            contacts.collideTeam(early.redTeam, true, pressed);
+            check(early.getHitCount(true) == 1 && early.ball.vx == 0,
+                    roles[role] + "：起跳鍵持續按住不會自動命中");
+
+            attacker.update(new TeamInput());
+            early.ball.x = -1000;
+            early.ball.y = -1000;
+            attacker.update(pressed);
+            attacker.captureAttackAttemptBallOverlap(early.ball);
+            check(attacker.getAction() == PlayerAction.ATTACK_SWING,
+                    roles[role] + "：球未進框時重新按鍵仍播放空揮");
+            placeBallInAttackHitBox(early, attacker);
+            contacts.collideTeam(early.redTeam, true, pressed);
+            check(early.getHitCount(true) == 1 && early.ball.vx == 0,
+                    roles[role] + "：按下後同幀球才進框也不補算命中");
+            attacker.update(pressed);
+            attacker.captureAttackAttemptBallOverlap(early.ball);
+            contacts.collideTeam(early.redTeam, true, pressed);
+            check(early.getHitCount(true) == 1 && early.ball.vx == 0,
+                    roles[role] + "：空揮後持續按住，球進框也不能補算命中");
+
+            GameModel timed = new GameModel();
+            TeamInput timedPress = new TeamInput();
+            Player timedAttacker = prepareAttackReady(timed, role, timedPress);
+            timedAttacker.update(new TeamInput());
+            placeBallInAttackHitBox(timed, timedAttacker);
+            timedAttacker.update(timedPress);
+            placeBallInAttackHitBox(timed, timedAttacker);
+            timedAttacker.captureAttackAttemptBallOverlap(timed.ball);
+            new RallyContactHandler(timed).collideTeam(timed.redTeam, true, timedPress);
+            check(timed.getHitCount(true) == 2 && timed.ball.vx > 0,
+                    roles[role] + "：球在框內重新按鍵才完成攻擊");
+        }
+    }
+
+    private static void testAttackPressBeforeBallMovesIntoHitBox() {
+        GameModel model = new GameModel();
+        model.getServeHandler().setWaitingForServe(false);
+        model.recordRegularHit(false, model.blueTeam.backPlayer);
+        model.recordRegularHit(true, model.redTeam.setter);
+        model.ball.x = 100;
+        model.ball.y = 300;
+        model.ball.vx = 0;
+        model.ball.vy = 0;
+
+        TeamInput press = new TeamInput();
+        press.quickAttack = true;
+        model.update(press, new TeamInput());
+        model.update(new TeamInput(), new TeamInput());
+        QuickAttacker attacker = model.redTeam.quickAttacker;
+        check(attacker.getAction() == PlayerAction.ATTACK_READY, "MB 已進入攻擊準備");
+
+        model.ball.x = attacker.attackHitBox.getX() - model.ball.radius - 5;
+        model.ball.y = attacker.attackHitBox.getCenterY();
+        model.ball.vx = 12;
+        model.ball.vy = -GameConfig.GRAVITY;
+        model.update(press, new TeamInput());
+        check(attacker.getAction() == PlayerAction.ATTACK_SWING && model.getHitCount(true) == 1,
+                "按鍵時球在框外，即使本幀球移進框仍只空揮");
+    }
+
+    private static Player prepareAttackReady(GameModel model, int role, TeamInput pressed) {
+        model.recordRegularHit(false, model.blueTeam.backPlayer);
+        model.recordRegularHit(true, model.redTeam.setter);
+        pressed.hasFirstRegularTouch = true;
+        Player attacker;
+        if (role == 0) {
+            attacker = model.redTeam.backPlayer;
+            pressed.backJump = true;
+        } else if (role == 1) {
+            attacker = model.redTeam.quickAttacker;
+            pressed.quickAttack = true;
+        } else {
+            attacker = model.redTeam.wingSpiker;
+            pressed.wingAttack = true;
+        }
+        for (int frame = 0; frame < 80 && attacker.getAction() != PlayerAction.ATTACK_READY; frame++) {
+            attacker.update(pressed);
+        }
+        check(attacker.getAction() == PlayerAction.ATTACK_READY, "攻擊者完成助跑或起跳");
+        for (Player other : model.redTeam.getPlayers()) {
+            if (other != attacker) other.x = -500;
+        }
+        return attacker;
+    }
+
+    private static void placeBallInAttackHitBox(GameModel model, Player attacker) {
+        model.ball.x = attacker.attackHitBox.getCenterX();
+        model.ball.y = attacker.attackHitBox.getCenterY();
+    }
+
+    private static void testClientPredictionDoesNotResolveCollisions() {
+        GameModel client = new GameModel();
+        client.getServeHandler().setWaitingForServe(false);
+        placeBallApproachingNet(client);
+        double ballX = client.ball.x;
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.ball.x == ballX && client.ball.vx == 8 && !client.didBallHitNetThisFrame(),
+                "Client 不模擬撞網，也不改變權威球位置或速度");
+
+        client.ball.x = client.redTeam.setter.hitBox.getCenterX();
+        client.ball.y = client.redTeam.setter.hitBox.getCenterY();
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.redHitCount == 0 && client.ball.vx == 8,
+                "Client 不自行判定球員觸球");
+
+        client.ball.y = GameConfig.FLOOR_Y - client.ball.radius + 1;
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        TeamInput action = new TeamInput();
+        action.quickAttack = true;
+        client.updateForNetworkPrediction(action, true);
+        check(client.redScore == 0 && client.blueScore == 0
+                        && !client.isRallyOverForNetwork()
+                        && client.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
+                "Client 預測到落地也不能停止本機操作或自行結束回合");
+    }
+
+    private static void testNetworkServeKeyMustBeReleasedBeforeDive() {
+        GameModel server = new GameModel();
+        TeamInput heldServe = new TeamInput();
+        heldServe.servePressed = true;
+        heldServe.backJump = true;
+        heldServe.backDive = true;
+        server.update(heldServe.copy(), new TeamInput());
+        check(server.getServeHandler().getState() == ServeState.IN_PLAY,
+                "Server 可在發球同幀直接進入 IN_PLAY");
+
+        GameModel client = new GameModel();
+        Packet.CompactState.from(server).applyToForClient(client);
+        client.getServeHandler().lockNetworkPostServeBackAction();
+        for (int frame = 0; frame < 5; frame++) {
+            if (frame == 2) {
+                Packet.CompactState.from(server).applyToForClient(client);
+            }
+            client.updateForNetworkPrediction(heldServe, true);
+        }
+        check(client.redTeam.backPlayer.getAction() != PlayerAction.DIVE,
+                "Client 收到 IN_PLAY 的 SERVE 事件後，按住原發球鍵不會撲球");
+
+        client.updateForNetworkPrediction(new TeamInput(), true);
+        check(client.redTeam.backPlayer.getAction() != PlayerAction.DIVE,
+                "放開發球鍵的當幀也不會撲球");
+        client.updateForNetworkPrediction(heldServe, true);
+        check(client.redTeam.backPlayer.getAction() == PlayerAction.DIVE,
+                "發球鍵放開後重新按下，才允許後排撲球");
     }
 
     private static void testScorePhasesAndReleaseGate() throws Exception {
@@ -385,11 +593,11 @@ public class GameplayFlowTest {
         Packet.CompactState.from(serverModel).applyTo(networkModel);
         TeamInput networkAction = new TeamInput();
         networkAction.quickAttack = true;
-        networkModel.updateForNetworkPrediction(networkAction, new TeamInput());
+        networkModel.updateForNetworkPrediction(networkAction, true);
         check(networkModel.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
                 "網路 Client 在得分後前 60 幀仍能操作角色");
         Packet.CompactState.from(model).applyTo(networkModel);
-        networkModel.updateForNetworkPrediction(networkAction, new TeamInput());
+        networkModel.updateForNetworkPrediction(networkAction, true);
         check(networkModel.redTeam.quickAttacker.getAction() == PlayerAction.IDLE,
                 "網路 Client 在後 30 幀禁止新動作");
 
@@ -529,9 +737,9 @@ public class GameplayFlowTest {
         GameModel networkCopy = new GameModel();
         Packet.CompactState.from(model).applyTo(networkCopy);
         double networkBallX = networkCopy.ball.x;
-        networkCopy.updateForNetworkPrediction(new TeamInput(), new TeamInput());
-        check(networkCopy.matchOver && networkCopy.ball.x != networkBallX,
-                "網路 Client 收到賽末結果後仍更新球與角色");
+        networkCopy.updateForNetworkPrediction(new TeamInput(), true);
+        check(networkCopy.matchOver && networkCopy.ball.x == networkBallX,
+                "網路 Client 賽末只延續本機操作，不自行推進權威球");
 
         model.restart();
         check(!model.matchOver && model.redScore == 0

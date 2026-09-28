@@ -76,7 +76,7 @@ public class RallyContactHandler {
                 continue;
             }
 
-            if (!canSpike(player, input)) {
+            if (!canSpike(player)) {
                 continue;
             }
 
@@ -139,25 +139,8 @@ public class RallyContactHandler {
         return jumpStartX < GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
-    private boolean canSpike(Player player, TeamInput input) {
-        boolean inAttackMode = player.isAttackReady() || player.isAttackSwinging();
-        return inAttackMode && player.jumping && isAttackKeyPressed(player, input);
-    }
-
-    private boolean isAttackKeyPressed(Player player, TeamInput input) {
-        if (player instanceof WingSpiker) {
-            return input.wingAttack;
-        }
-
-        if (player instanceof QuickAttacker) {
-            return input.quickAttack;
-        }
-
-        if (player instanceof BackPlayer) {
-            return input.backJump;
-        }
-
-        return false;
+    private boolean canSpike(Player player) {
+        return player.isAttackSwinging() && player.jumping && player.hasValidAttackAttemptThisFrame();
     }
 
     private void performSpike(AttackContext context, TeamInput input) {
@@ -483,7 +466,7 @@ public class RallyContactHandler {
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y + 15, TO_SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + 10, TO_SETTER_PASS_POWER);
         }
 
         private static BallTarget attackTarget(boolean redSide) {

@@ -36,7 +36,7 @@ public final class GameConfig {
 
     public static final double PLAYER_SPEED = 4.3;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
-    public static final double PLAYER_JUMP_SPEED = -9;
+    public static final double PLAYER_JUMP_SPEED = -9.5;
     public static final double SETTER_JUMP_SPEED = -6.6;
     public static final double QUICK_ATTACKER_JUMP_SPEED = -8.3;
     public static final double WING_SPIKER_JUMP_SPEED = -8.3;
