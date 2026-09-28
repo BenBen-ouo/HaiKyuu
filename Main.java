@@ -24,7 +24,9 @@ public class Main {
         }
 
         SwingUtilities.invokeLater(() -> {
-            if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
+            if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
+                startLocalGame(true);
+            } else if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
                 startClient(args[1]);
             } else if (args.length > 0 && "join".equalsIgnoreCase(args[0])) {
                 String serverIp = JOptionPane.showInputDialog(null, "輸入 Server IPv4 位址：", "加入 UDP Server", JOptionPane.QUESTION_MESSAGE);
@@ -32,7 +34,7 @@ public class Main {
                     startClient(serverIp.trim());
                 }
             } else {
-                startLocalGame();
+                startLocalGame(false);
             }
         });
     }
@@ -58,11 +60,12 @@ public class Main {
         }
     }
 
-    private static void startLocalGame() {
-        GameModel model = new GameModel();
+    private static void startLocalGame(boolean practiceMode) {
+        GameModel model = new GameModel(practiceMode);
         KeyboardController keyboard = new KeyboardController();
         GameController controller = new GameController(model, keyboard);
-        showWindow(model, keyboard, controller, null, "HaiKyuu!! - 單機測試");
+        showWindow(model, keyboard, controller, null,
+                practiceMode ? "HaiKyuu!! - 練習模式" : "HaiKyuu!! - 單機測試");
     }
 
     private static void showWindow(

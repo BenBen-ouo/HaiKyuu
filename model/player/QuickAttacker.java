@@ -24,6 +24,7 @@ public class QuickAttacker extends Player {
 
     @Override
     public void update(TeamInput input) {
+        clearAttackAttempt();
         boolean justPressedQuick = input.quickAttack && !previousQuickAttack;
 
         vx = 0;

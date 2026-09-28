@@ -1,6 +1,6 @@
 /*
 純 UDP Client。
-Client 以 60 tick/s 預測雙方輸入；Server 以 INPUT、BALL_SNAPSHOT、COLLISION_EVENT 三層 UDP 資料校正。
+Client 只預測本機球員；球與對手依 Server 快照，可靠事件依序同步裁決。
 */
 package network;
 
@@ -9,15 +9,24 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import model.GameModel;
 import model.TeamInput;
+import model.player.Player;
+import model.player.QuickAttacker;
+import model.player.Team;
 
 public final class GameClient implements NetworkView {
     private static final long HELLO_INTERVAL_NANOS = 250_000_000L;
-    private static final long CONTROL_RESEND_INTERVAL_NANOS = 250_000_000L;
+    private static final long CONTROL_RESEND_INTERVAL_NANOS = 60_000_000L;
+    private static final long CONTROL_ACK_TIMEOUT_NANOS = 3_000_000_000L;
     private static final long INPUT_HEARTBEAT_NANOS = 40_000_000L; // 25 Hz
     private static final long SERVER_TIMEOUT_NANOS = 3_000_000_000L;
     private static final long TERMINATION_ACK_GRACE_NANOS = 2_000_000_000L;
@@ -28,36 +37,47 @@ public final class GameClient implements NetworkView {
     private final DatagramSocket socket;
     private final long clientNonce = ThreadLocalRandom.current().nextLong();
     private final ConcurrentLinkedQueue<UdpCodec.Decoded> incoming = new ConcurrentLinkedQueue<>();
+    private final AtomicReference<UdpCodec.WorldSnapshotFrame> latestWorldSnapshot = new AtomicReference<>();
     private final AtomicReference<String> receiveFailure = new AtomicReference<>();
     private final Thread receiveThread;
+    private final ScheduledExecutorService controlRetryExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "haikyuu-udp-control-retry");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Object pendingControlsLock = new Object();
+    private final Deque<PendingControl> pendingControls = new ArrayDeque<>();
+    private final ReliableEventInbox reliableEvents = new ReliableEventInbox();
+    private final WorldSnapshotInbox snapshotInbox = new WorldSnapshotInbox();
+    private UdpCodec.WorldSnapshotFrame lastAppliedWorldSnapshot;
 
     private volatile boolean assigned;
     private volatile boolean redSide;
     private volatile long sessionToken;
     private volatile boolean sessionEnded;
     private volatile String endMessage = "";
+    private volatile String pendingAbortMessage;
     private volatile long lastServerPacketNanos;
 
     private int estimatedServerTick;
     private int inputSequence;
+    private int controlSequence;
+    private int lastControlStatusSequence;
     private int lastInputMask = Integer.MIN_VALUE;
-    private int remoteInputMask;
+    private int lastRemoteInputTick = -1;
     private boolean receivedRemoteInput;
-    private int lastAppliedEventId;
-    private int lastBallSnapshotSequence = -1;
     private int lastCollisionRevision;
     private boolean redResetConfirmed;
     private boolean blueResetConfirmed;
     private boolean previousRestartDown;
     private boolean previousCancelDown;
     private long lastHelloNanos;
-    private long lastControlSendNanos;
     private long lastInputSendNanos;
     private long terminationAckUntilNanos;
-    private PendingControl pendingControl;
 
-    // 物理球立即採用 Server 狀態；畫面球則由此校正器短暫平滑追上。
-    private final BallRenderCorrection ballRenderCorrection = new BallRenderCorrection();
+    private static final double SPIKE_TRAIL_CLEAR_DISTANCE = 80.0;
+    private final PlayerRenderCorrection playerRenderCorrection = new PlayerRenderCorrection();
+    private final RemotePlayerInterpolator remotePlayerInterpolator = new RemotePlayerInterpolator();
 
     public GameClient(GameModel renderModel, String hostIp) throws IOException {
         this.renderModel = renderModel;
@@ -68,6 +88,7 @@ public final class GameClient implements NetworkView {
         receiveThread = new Thread(this::receiveLoop, "haikyuu-udp-client-receive");
         receiveThread.setDaemon(true);
         receiveThread.start();
+        controlRetryExecutor.scheduleAtFixedRate(this::retryPendingControls, 10, 10, TimeUnit.MILLISECONDS);
         sendHello();
     }
 
@@ -81,7 +102,7 @@ public final class GameClient implements NetworkView {
 
         String failure = receiveFailure.getAndSet(null);
         if (failure != null) {
-            endLocally();
+            endLocally("網路接收失敗，連線已中止：" + failure);
             return;
         }
 
@@ -91,25 +112,25 @@ public final class GameClient implements NetworkView {
         }
 
         estimatedServerTick++;
-        processControls(restartDown, cancelResetDown);
-        resendPendingControlIfNeeded();
+        if (receivedRemoteInput) {
+            processControls(restartDown, cancelResetDown);
+        } else {
+            previousRestartDown = restartDown;
+            previousCancelDown = cancelResetDown;
+        }
 
         TeamInput localInput = toWorldInput(keyboardInput);
         sendInputIfNeeded(localInput);
 
         if (receivedRemoteInput) {
-            TeamInput remoteInput = Packet.decodeInput(remoteInputMask);
-            if (redSide) {
-                renderModel.updateForNetworkPrediction(localInput, remoteInput);
-            } else {
-                renderModel.updateForNetworkPrediction(remoteInput, localInput);
-            }
+            renderModel.updateForNetworkPrediction(localInput, redSide);
         }
 
-        ballRenderCorrection.advance();
+        playerRenderCorrection.advance();
 
         if (receivedRemoteInput && System.nanoTime() - lastServerPacketNanos > SERVER_TIMEOUT_NANOS) {
-            endLocally();
+            endLocally(pendingAbortMessage != null
+                    ? pendingAbortMessage : GameServer.CLIENT_TIMEOUT_MESSAGE);
         }
     }
 
@@ -124,7 +145,12 @@ public final class GameClient implements NetworkView {
                 }
 
                 UdpCodec.Decoded decoded = UdpCodec.decode(datagram.getData(), datagram.getLength());
-                if (decoded != null) {
+                if (decoded instanceof UdpCodec.WorldSnapshotFrame snapshot) {
+                    // 即時快照只需要最新一份，避免畫面停頓後逐一補跑舊位置。
+                    latestWorldSnapshot.accumulateAndGet(snapshot,
+                            (current, newest) -> current == null
+                                    || newest.snapshotSequence > current.snapshotSequence ? newest : current);
+                } else if (decoded != null) {
                     incoming.offer(decoded);
                 }
             } catch (SocketException ignored) {
@@ -147,35 +173,52 @@ public final class GameClient implements NetworkView {
                 }
             } else if (decoded instanceof UdpCodec.RemoteInputFrame remote) {
                 if (!sessionEnded && isOwnToken(remote.token)) {
-                    remoteInputMask = remote.inputMask;
-                    estimatedServerTick = Math.max(estimatedServerTick, remote.serverTick);
-                    receivedRemoteInput = true;
-                    markServerPacketReceived();
-                }
-            } else if (decoded instanceof UdpCodec.BallSnapshotFrame snapshot) {
-                if (!sessionEnded && isOwnToken(snapshot.token)) {
-                    handleBallSnapshot(snapshot);
+                    if (remote.serverTick > lastRemoteInputTick) {
+                        lastRemoteInputTick = remote.serverTick;
+                        estimatedServerTick = Math.max(estimatedServerTick, remote.serverTick);
+                        receivedRemoteInput = true;
+                    }
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.Event event) {
-                if (!sessionEnded && isOwnToken(event.token)) {
-                    handleEvent(event);
+                if (isOwnToken(event.token)) {
+                    sendEventAck(event.eventId);
+                    if (!sessionEnded) {
+                        reliableEvents.offer(event);
+                        applyReadyEvents();
+                    }
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.ControlStatus status) {
-                if (!sessionEnded && isOwnToken(status.token)) {
+                if (!sessionEnded && isOwnToken(status.token)
+                        && status.statusSequence > lastControlStatusSequence) {
+                    lastControlStatusSequence = status.statusSequence;
                     redResetConfirmed = status.redResetConfirmed;
                     blueResetConfirmed = status.blueResetConfirmed;
-                    if (pendingControl != null && status.acknowledgedSequence >= pendingControl.sequence) {
-                        pendingControl = null;
+                    synchronized (pendingControlsLock) {
+                        while (!pendingControls.isEmpty()
+                                && status.acknowledgedSequence >= pendingControls.peekFirst().sequence) {
+                            pendingControls.removeFirst();
+                        }
                     }
                     markServerPacketReceived();
                 }
             } else if (decoded instanceof UdpCodec.MatchAborted aborted) {
                 if (isOwnToken(aborted.token)) {
-                    handleMatchAborted(aborted);
+                    sendEventAck(aborted.eventId);
+                    if (!sessionEnded) {
+                        pendingAbortMessage = aborted.message;
+                        reliableEvents.offer(aborted);
+                        applyReadyEvents();
+                    }
                 }
             }
+        }
+        UdpCodec.WorldSnapshotFrame snapshot = latestWorldSnapshot.getAndSet(null);
+        if (snapshot != null && !sessionEnded && isOwnToken(snapshot.token)) {
+            handleWorldSnapshot(snapshot);
+            receivedRemoteInput = true;
+            markServerPacketReceived();
         }
     }
 
@@ -186,75 +229,169 @@ public final class GameClient implements NetworkView {
         if (assigned && welcome.sessionToken != sessionToken) {
             return;
         }
+        if (assigned) {
+            // HELLO 重送造成的舊 WELCOME 不得覆蓋較新的事件與快照。
+            return;
+        }
 
         sessionToken = welcome.sessionToken;
         redSide = welcome.redSide;
         assigned = true;
         estimatedServerTick = welcome.serverTick;
         welcome.state.applyTo(renderModel);
-        ballRenderCorrection.reset();
+        playerRenderCorrection.reset();
+        remotePlayerInterpolator.reset();
+        observeRemotePlayers(welcome.state.redTeam, welcome.state.blueTeam, welcome.serverTick);
         markServerPacketReceived();
     }
 
-    private void handleEvent(UdpCodec.Event event) {
-        sendEventAck(event.eventId);
-        if (event.eventId <= lastAppliedEventId) {
-            return;
+    private void applyReadyEvents() {
+        UdpCodec.Decoded next;
+        while ((next = reliableEvents.pollNext()) != null) {
+            if (next instanceof UdpCodec.Event event) {
+                applyOrderedEvent(event);
+            } else if (next instanceof UdpCodec.MatchAborted aborted) {
+                handleMatchAborted(aborted);
+                break;
+            }
         }
+    }
 
-        double visibleX = getRenderedBallX(renderModel.ball.x);
-        double visibleY = getRenderedBallY(renderModel.ball.y);
-        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
+    private void applyOrderedEvent(UdpCodec.Event event) {
+        double previousBallX = renderModel.ball.x;
+        double previousBallY = renderModel.ball.y;
+        PlayerVisualPositions playersBefore = captureVisiblePlayers();
+        String previousMessage = renderModel.transientMessage;
+        int previousMessageTimer = renderModel.transientMessageTimer;
+        Boolean previousMessageColor = renderModel.transientMessageIsRed;
 
-        lastAppliedEventId = event.eventId;
         lastCollisionRevision = Math.max(lastCollisionRevision, event.collisionRevision);
         estimatedServerTick = Math.max(estimatedServerTick, event.serverTick);
-        event.state.applyTo(renderModel);
-        if (event.type == Packet.EventType.SCORE
-                && (renderModel.isLockedScorePhase()
-                || renderModel.getServeHandler().isWaitingForServe())) {
-            // 歸位與重新擺球是階段切換，球不應從上一個位置平滑滑入。
-            ballRenderCorrection.reset();
+        boolean phaseReset = event.type == Packet.EventType.RESET
+                || event.type == Packet.EventType.FLOW;
+        if (phaseReset) {
+            event.state.applyTo(renderModel);
+        } else {
+            event.state.applyToForClient(renderModel);
+        }
+        if (event.type == Packet.EventType.SERVE) {
+            renderModel.getServeHandler().lockNetworkPostServeBackAction();
+        }
+        if (event.type != Packet.EventType.SCORE && event.state.rallyOver) {
+            // LANDING／RULE 不搶先顯示；FLOW 也不能重啟得分原因的顯示時間。
+            renderModel.transientMessage = previousMessage;
+            renderModel.transientMessageTimer = Math.min(previousMessageTimer, event.state.transientMessageTimer);
+            renderModel.transientMessageIsRed = previousMessageColor;
+        }
+        if (event.type == Packet.EventType.LANDING && renderModel.spikeEffect.isSpikeTrailActive()) {
+            renderModel.spikeEffect.spawnSmoke(renderModel.ball.x, model.GameConfig.FLOOR_Y);
+            renderModel.spikeEffect.stopSpikeTrail();
+        }
+        if (phaseReset) {
+            // 歸位與重新擺球是階段切換，球直接採用 Server 狀態。
+            playerRenderCorrection.reset();
+            remotePlayerInterpolator.reset();
+            observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
+            restoreNewerWorldMotion(event.serverTick);
             return;
         }
-        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
+        clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
+        scheduleOwnPlayerCorrections(playersBefore, event.state.redTeam, event.state.blueTeam);
+        observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
+        restoreNewerWorldMotion(event.serverTick);
     }
 
-    private void handleBallSnapshot(UdpCodec.BallSnapshotFrame snapshot) {
-        if (snapshot.snapshotSequence <= lastBallSnapshotSequence
-                || snapshot.collisionRevision < lastCollisionRevision) {
-            return;
+    private void handleWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
+        UdpCodec.WorldSnapshotFrame ready = snapshotInbox.offer(frame, lastCollisionRevision);
+        if (ready != null) {
+            applyWorldSnapshot(ready);
         }
-
-        double visibleX = getRenderedBallX(renderModel.ball.x);
-        double visibleY = getRenderedBallY(renderModel.ball.y);
-        double visibleRotation = getRenderedBallRotation(renderModel.ball.rotationDegrees);
-
-        lastBallSnapshotSequence = snapshot.snapshotSequence;
-        estimatedServerTick = Math.max(estimatedServerTick, snapshot.serverTick);
-        snapshot.ball.applyTo(renderModel.ball);
-        clearSpikeTrailIfLargeCorrection(visibleX, visibleY, visibleRotation);
     }
 
-    private void clearSpikeTrailIfLargeCorrection(double visibleX, double visibleY, double visibleRotation) {
-        boolean largeCorrection = ballRenderCorrection.schedule(
-                renderModel.ball.x,
-                renderModel.ball.y,
-                renderModel.ball.rotationDegrees,
-                visibleX,
-                visibleY,
-                visibleRotation
-        );
-        if (largeCorrection) {
+    private void applyWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
+        double previousBallX = renderModel.ball.x;
+        double previousBallY = renderModel.ball.y;
+        PlayerVisualPositions playersBefore = captureVisiblePlayers();
+
+        estimatedServerTick = Math.max(estimatedServerTick, frame.serverTick);
+        frame.snapshot.ball.applyTo(renderModel.ball);
+        frame.snapshot.redTeam.applyMotionTo(renderModel.redTeam);
+        frame.snapshot.blueTeam.applyMotionTo(renderModel.blueTeam);
+        clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
+        renderModel.syncNetworkVisualEffects(
+                frame.snapshot.spikeTrailActive, frame.snapshot.spikeTrailRedSide);
+        scheduleOwnPlayerCorrections(playersBefore, frame.snapshot.redTeam, frame.snapshot.blueTeam);
+        observeRemotePlayers(frame.snapshot.redTeam, frame.snapshot.blueTeam, frame.serverTick);
+        lastAppliedWorldSnapshot = frame;
+    }
+
+    private void restoreNewerWorldMotion(int eventServerTick) {
+        if (lastAppliedWorldSnapshot != null && lastAppliedWorldSnapshot.serverTick > eventServerTick) {
+            applyWorldSnapshot(lastAppliedWorldSnapshot);
+        }
+    }
+
+    private void clearSpikeTrailIfLargeCorrection(double previousBallX, double previousBallY) {
+        if (Math.hypot(renderModel.ball.x - previousBallX,
+                renderModel.ball.y - previousBallY) > SPIKE_TRAIL_CLEAR_DISTANCE) {
             renderModel.spikeEffect.clearSpikeTrail();
         }
     }
 
+    private PlayerVisualPositions captureVisiblePlayers() {
+        Player[] red = renderModel.redTeam.getPlayers();
+        Player[] blue = renderModel.blueTeam.getPlayers();
+        Player[] players = new Player[red.length + blue.length];
+        System.arraycopy(red, 0, players, 0, red.length);
+        System.arraycopy(blue, 0, players, red.length, blue.length);
+        double[] x = new double[players.length];
+        double[] y = new double[players.length];
+        for (int i = 0; i < players.length; i++) {
+            x[i] = playerRenderCorrection.renderedX(players[i]);
+            y[i] = playerRenderCorrection.renderedY(players[i]);
+        }
+        return new PlayerVisualPositions(players, x, y);
+    }
+
+    private void scheduleOwnPlayerCorrections(PlayerVisualPositions before,
+                                              Packet.TeamState redState, Packet.TeamState blueState) {
+        Packet.TeamState ownState = redSide ? redState : blueState;
+        for (int i = 0; i < ownState.players.length; i++) {
+            int index = redSide ? i : redState.players.length + i;
+            playerRenderCorrection.schedule(
+                    before.players[index], before.x[index], before.y[index]
+            );
+        }
+    }
+
+    private void observeRemotePlayers(Packet.TeamState redState, Packet.TeamState blueState, int tick) {
+        Packet.TeamState state = redSide ? blueState : redState;
+        Team team = redSide ? renderModel.blueTeam : renderModel.redTeam;
+        Player[] players = team.getPlayers();
+        for (int i = 0; i < players.length && i < state.players.length; i++) {
+            players[i].assetName = state.players[i].assetName;
+            remotePlayerInterpolator.observe(players[i], state.players[i], tick);
+        }
+    }
+
+    private static final class PlayerVisualPositions {
+        final Player[] players;
+        final double[] x;
+        final double[] y;
+
+        PlayerVisualPositions(Player[] players, double[] x, double[] y) {
+            this.players = players;
+            this.x = x;
+            this.y = y;
+        }
+    }
+
     private void handleMatchAborted(UdpCodec.MatchAborted aborted) {
-        sendEventAck(aborted.eventId);
         sessionEnded = true;
-        endMessage = GameServer.MATCH_ABORTED_MESSAGE;
+        endMessage = aborted.message;
+        pendingAbortMessage = null;
         terminationAckUntilNanos = System.nanoTime() + TERMINATION_ACK_GRACE_NANOS;
+        controlRetryExecutor.shutdownNow();
     }
 
     private void processControls(boolean restartDown, boolean cancelResetDown) {
@@ -271,24 +408,41 @@ public final class GameClient implements NetworkView {
     }
 
     private void queueControl(UdpCodec.ControlAction action) {
-        pendingControl = new PendingControl(++inputSequence, action);
-        sendPendingControl();
+        PendingControl pending = new PendingControl(++controlSequence, action);
+        synchronized (pendingControlsLock) {
+            pendingControls.addLast(pending);
+        }
+        sendPendingControl(pending);
     }
 
-    private void resendPendingControlIfNeeded() {
-        if (pendingControl != null && System.nanoTime() - lastControlSendNanos >= CONTROL_RESEND_INTERVAL_NANOS) {
-            sendPendingControl();
+    private void retryPendingControls() {
+        if (sessionEnded || !assigned) {
+            return;
+        }
+        PendingControl[] pending;
+        synchronized (pendingControlsLock) {
+            pending = pendingControls.toArray(new PendingControl[0]);
+        }
+        long now = System.nanoTime();
+        for (PendingControl control : pending) {
+            if (now - control.firstSentNanos >= CONTROL_ACK_TIMEOUT_NANOS) {
+                endLocally("重設控制確認逾時，連線已中止。");
+                return;
+            }
+            if (now - control.lastSentNanos >= CONTROL_RESEND_INTERVAL_NANOS) {
+                sendPendingControl(control);
+            }
         }
     }
 
-    private void sendPendingControl() {
-        if (pendingControl == null || !assigned) {
+    private void sendPendingControl(PendingControl pending) {
+        if (!assigned || socket.isClosed()) {
             return;
         }
         try {
-            byte[] data = UdpCodec.control(sessionToken, pendingControl.sequence, pendingControl.action);
+            byte[] data = UdpCodec.control(sessionToken, pending.sequence, pending.action);
             socket.send(new DatagramPacket(data, data.length, hostAddress, GameServer.UDP_PORT));
-            lastControlSendNanos = System.nanoTime();
+            pending.lastSentNanos = System.nanoTime();
         } catch (IOException exception) {
             endLocally();
         }
@@ -361,11 +515,16 @@ public final class GameClient implements NetworkView {
     }
 
     private void endLocally() {
+        endLocally(GameServer.MATCH_ABORTED_MESSAGE);
+    }
+
+    private void endLocally(String message) {
         if (sessionEnded) {
             return;
         }
         sessionEnded = true;
-        endMessage = GameServer.MATCH_ABORTED_MESSAGE;
+        endMessage = message;
+        controlRetryExecutor.shutdownNow();
         socket.close();
     }
 
@@ -420,18 +579,32 @@ public final class GameClient implements NetworkView {
     }
 
     @Override
-    public double getRenderedBallX(double authoritativeX) {
-        return ballRenderCorrection.renderedX(authoritativeX);
+    public double getRenderedPlayerX(Player player) {
+        return assigned && player.redSide != redSide
+                ? remotePlayerInterpolator.renderedX(player)
+                : playerRenderCorrection.renderedX(player);
     }
 
     @Override
-    public double getRenderedBallY(double authoritativeY) {
-        return ballRenderCorrection.renderedY(authoritativeY);
+    public double getRenderedPlayerY(Player player) {
+        return assigned && player.redSide != redSide
+                ? remotePlayerInterpolator.renderedY(player)
+                : playerRenderCorrection.renderedY(player);
     }
 
     @Override
-    public double getRenderedBallRotation(double authoritativeRotationDegrees) {
-        return ballRenderCorrection.renderedRotation(authoritativeRotationDegrees);
+    public String getRenderedPlayerAsset(Player player) {
+        // MB 的圖片不得比 Server 的 BLOCK／ATTACK_READY 判定框落後兩 tick。
+        return assigned && player.redSide != redSide && !(player instanceof QuickAttacker)
+                ? remotePlayerInterpolator.renderedAsset(player)
+                : player.assetName;
+    }
+
+    @Override
+    public boolean getRenderedPlayerMirror(Player player) {
+        return assigned && player.redSide != redSide && !(player instanceof QuickAttacker)
+                ? remotePlayerInterpolator.renderedMirror(player)
+                : player.mirrorImage;
     }
 
     @Override
@@ -443,7 +616,7 @@ public final class GameClient implements NetworkView {
     }
 
     private void sendDisconnectControl() {
-        PendingControl disconnect = new PendingControl(++inputSequence, UdpCodec.ControlAction.DISCONNECT);
+        PendingControl disconnect = new PendingControl(++controlSequence, UdpCodec.ControlAction.DISCONNECT);
         for (int i = 0; i < 3; i++) {
             try {
                 byte[] data = UdpCodec.control(sessionToken, disconnect.sequence, disconnect.action);
@@ -457,6 +630,8 @@ public final class GameClient implements NetworkView {
     private static final class PendingControl {
         final int sequence;
         final UdpCodec.ControlAction action;
+        final long firstSentNanos = System.nanoTime();
+        volatile long lastSentNanos;
 
         PendingControl(int sequence, UdpCodec.ControlAction action) {
             this.sequence = sequence;

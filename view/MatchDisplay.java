@@ -13,12 +13,16 @@ import model.*;
 
 public class MatchDisplay {
     public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
-        // 畫面頂端分數依觀看隊伍排序；P2 畫面先顯示藍隊分數。
-        String scoreText = bluePerspective
-                ? model.blueScore + " : " + model.redScore
-                : model.redScore + " : " + model.blueScore;
+        // 練習模式不顯示比分；一般對局依觀看隊伍排序。
+        String scoreText = model.isPracticeMode()
+                ? "練習模式"
+                : bluePerspective
+                        ? model.blueScore + " : " + model.redScore
+                        : model.redScore + " : " + model.blueScore;
         g.setColor(Color.BLACK);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
+        g.setFont(model.isPracticeMode()
+                ? new Font("Microsoft JhengHei", Font.PLAIN, 22)
+                : new Font("Arial", Font.BOLD, 24));
         FontMetrics scoreMetrics = g.getFontMetrics();
         g.drawString(scoreText, (GameConfig.SCREEN_WIDTH - scoreMetrics.stringWidth(scoreText)) / 2, 44);
 
