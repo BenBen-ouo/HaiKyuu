@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class BackPlayer extends Player {
-    private static final double BACK_ATTACK_AIR_SPEED = 3.0;
+    private static final double BACK_ATTACK_AIR_SPEED = 2.5;
 
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;

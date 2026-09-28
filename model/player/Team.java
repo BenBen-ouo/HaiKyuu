@@ -15,22 +15,23 @@ public class Team {
     private static final int RECEIVE_HITBOX_ARC = 10;
     private static final double RECEIVE_HITBOX_ROTATION = 20;
 
-    private static final double SETTER_HITBOX_X = 45;
+    private static final double SETTER_HITBOX_RED_X = 40;
     private static final double SETTER_HITBOX_Y = 50;
-    private static final double SETTER_HITBOX_SIZE = 10;
+    private static final double SETTER_HITBOX_WIDTH = 20;
+    private static final double SETTER_HITBOX_HEIGHT = 10;
     private static final int SETTER_HITBOX_ARC = 5;
 
     private static final double BLOCK_HITBOX_RED_X = 50;
     private static final double BLOCK_HITBOX_Y = 25;
     private static final double BLOCK_HITBOX_WIDTH = 15;
-    private static final double BLOCK_HITBOX_HEIGHT = 40;
+    private static final double BLOCK_HITBOX_HEIGHT = 50;
     private static final int BLOCK_HITBOX_ARC = 10;
     private static final double BLOCK_HITBOX_ROTATION = 40;
 
-    private static final double ATTACK_HITBOX_RED_X = 50;
-    private static final double ATTACK_HITBOX_Y = 35;
+    private static final double ATTACK_HITBOX_RED_X = 45;
+    private static final double ATTACK_HITBOX_Y = 25;
     private static final double ATTACK_HITBOX_WIDTH = 25;
-    private static final double ATTACK_HITBOX_HEIGHT = 30;
+    private static final double ATTACK_HITBOX_HEIGHT = 40;
 
     public BackPlayer backPlayer;
     public Setter setter;
@@ -86,6 +87,9 @@ public class Team {
         double receiveX = redSide
                 ? RECEIVE_HITBOX_RED_X
                 : mirroredOffsetX(RECEIVE_HITBOX_RED_X, RECEIVE_HITBOX_WIDTH);
+        double setterX = redSide
+                ? SETTER_HITBOX_RED_X
+                : mirroredOffsetX(SETTER_HITBOX_RED_X, SETTER_HITBOX_WIDTH);
         double blockX = redSide
                 ? BLOCK_HITBOX_RED_X
                 : mirroredOffsetX(BLOCK_HITBOX_RED_X, BLOCK_HITBOX_WIDTH);
@@ -99,8 +103,8 @@ public class Team {
                 RECEIVE_HITBOX_WIDTH, RECEIVE_HITBOX_HEIGHT,
                 RECEIVE_HITBOX_ARC, RECEIVE_HITBOX_ARC,
                 rotationDirection * RECEIVE_HITBOX_ROTATION);
-        setter.hitBox.set(SETTER_HITBOX_X, SETTER_HITBOX_Y,
-                SETTER_HITBOX_SIZE, SETTER_HITBOX_SIZE,
+        setter.hitBox.set(setterX, SETTER_HITBOX_Y,
+                SETTER_HITBOX_WIDTH, SETTER_HITBOX_HEIGHT,
                 SETTER_HITBOX_ARC, SETTER_HITBOX_ARC, 0);
         quickAttacker.blockHitBox.set(blockX, BLOCK_HITBOX_Y,
                 BLOCK_HITBOX_WIDTH, BLOCK_HITBOX_HEIGHT,

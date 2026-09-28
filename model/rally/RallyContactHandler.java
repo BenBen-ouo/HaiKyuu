@@ -466,7 +466,7 @@ public class RallyContactHandler {
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y + 15, TO_SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + 10, TO_SETTER_PASS_POWER);
         }
 
         private static BallTarget attackTarget(boolean redSide) {
