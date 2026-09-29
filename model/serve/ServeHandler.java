@@ -75,8 +75,8 @@ public class ServeHandler {
 
     public void reset() {
         state = ServeState.WAITING_FOR_SERVE;
-        redServing = true;
-        ballController.prepareServe(true);
+        redServing = !model.isPracticeMode();
+        ballController.prepareServe(redServing);
         resetFrameFlags();
     }
 
@@ -88,9 +88,36 @@ public class ServeHandler {
         this.state = state == null ? ServeState.WAITING_FOR_SERVE : state;
         this.redServing = redServing;
         lastServePressed = false;
-        // 收到 SERVE 快照後，發球方仍需等 Space 放開，不能立刻撲球或跳躍。
-        waitForPostServeSpaceRelease = this.state == ServeState.SERVE_LAUNCHED;
+        // IN_PLAY 可能與發球同幀出現；不能因此清除仍按住發球鍵的保護。
+        if (this.state == ServeState.WAITING_FOR_SERVE) {
+            waitForPostServeSpaceRelease = false;
+        } else if (this.state == ServeState.SERVE_LAUNCHED) {
+            waitForPostServeSpaceRelease = true;
+        }
         serveLaunchedThisFrame = false;
+    }
+
+    /** 收到可靠 SERVE 事件後，鎖住發球方後排動作直到原本那次按鍵放開。 */
+    public void lockNetworkPostServeBackAction() {
+        waitForPostServeSpaceRelease = true;
+    }
+
+    /** Client 只預測自己的球員動作；不得在此發球或改變球與發球階段。 */
+    public void filterNetworkPredictionInput(TeamInput input, boolean redSide, boolean rawServePressed) {
+        if (redSide != redServing) {
+            return;
+        }
+        if (state == ServeState.WAITING_FOR_SERVE || state == ServeState.SERVE_LAUNCHED) {
+            ServeInputLocker.lockBackPlayer(input);
+            if (state == ServeState.SERVE_LAUNCHED && !rawServePressed) {
+                waitForPostServeSpaceRelease = false;
+            }
+        } else if (waitForPostServeSpaceRelease) {
+            ServeInputLocker.suppressBackActionUntilReleased(input);
+            if (!rawServePressed) {
+                waitForPostServeSpaceRelease = false;
+            }
+        }
     }
 
     public void updateBeforeTeams(TeamInput redInput, TeamInput blueInput) {

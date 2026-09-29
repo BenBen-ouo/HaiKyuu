@@ -1,7 +1,7 @@
 /*
 獨立、無畫面的 UDP 權威 Server。
-固定以 60 tick/s 執行 GameModel。
-INPUT 與 BALL_SNAPSHOT 不可靠傳送；指定 COLLISION_EVENT 以 ACK 重送完整權威狀態。
+固定以 60 tick/s 執行 GameModel，並逐 tick 傳送球與球員即時快照。
+INPUT 與 WORLD_SNAPSHOT 不可靠傳送；指定 COLLISION_EVENT 以 ACK 重送完整權威狀態。
 */
 package network;
 
@@ -12,7 +12,11 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import model.GameConfig;
 import model.GameModel;
 import model.serve.ServeState;
@@ -20,19 +24,27 @@ import model.serve.ServeState;
 public final class GameServer implements AutoCloseable {
     public static final int UDP_PORT = 5001;
     public static final String MATCH_ABORTED_MESSAGE = "對局結束，必須雙方重新開啟遊戲才能重玩。";
+    public static final String SYNC_TIMEOUT_MESSAGE = "網路同步確認逾時，對局已中止。";
+    public static final String CLIENT_TIMEOUT_MESSAGE = "玩家連線逾時，對局已中止。";
 
     private static final long TICK_NANOS = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
     private static final long CLIENT_TIMEOUT_NANOS = 3_000_000_000L;
     private static final long INPUT_RELAY_INTERVAL_NANOS = 40_000_000L; // 25 Hz
-    private static final long BALL_SNAPSHOT_INTERVAL_NANOS = 50_000_000L; // 20 Hz
-    private static final long EVENT_RESEND_INTERVAL_NANOS = 200_000_000L;
-    private static final long TERMINATION_ACK_TIMEOUT_NANOS = 2_000_000_000L;
+    private static final long EVENT_RESEND_INTERVAL_NANOS = 60_000_000L;
+    private static final long RELIABLE_ACK_TIMEOUT_NANOS = 3_000_000_000L;
+    private static final long TERMINATION_ACK_TIMEOUT_NANOS = 3_000_000_000L;
 
     private final GameModel model = new GameModel();
     private final DatagramSocket socket;
     private final String localIp;
     private final Object slotsLock = new Object();
+    private final Object eventOrderLock = new Object();
     private final AtomicBoolean terminationStarted = new AtomicBoolean();
+    private final ScheduledExecutorService retryExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "haikyuu-udp-retry");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private volatile ServerPlayerSlot redPlayer;
     private volatile ServerPlayerSlot bluePlayer;
@@ -41,17 +53,17 @@ public final class GameServer implements AutoCloseable {
     private volatile String endMessage = "";
 
     private int serverTick;
-    private int nextEventId;
+    private final AtomicInteger nextEventId = new AtomicInteger();
+    private final AtomicInteger nextControlStatusId = new AtomicInteger();
     private int lastRedInputMask = Integer.MIN_VALUE;
     private int lastBlueInputMask = Integer.MIN_VALUE;
     private long lastRedInputRelayNanos;
     private long lastBlueInputRelayNanos;
-    private long lastBallSnapshotNanos;
     private long terminationDeadlineNanos;
-    private int nextBallSnapshotSequence;
+    private int nextWorldSnapshotSequence;
     private int collisionRevision;
-    private boolean redResetConfirmed;
-    private boolean blueResetConfirmed;
+    private volatile boolean redResetConfirmed;
+    private volatile boolean blueResetConfirmed;
 
     public GameServer() throws SocketException {
         socket = new DatagramSocket(UDP_PORT);
@@ -62,16 +74,21 @@ public final class GameServer implements AutoCloseable {
         Thread receiveThread = new Thread(this::receiveLoop, "haikyuu-udp-server-receive");
         receiveThread.setDaemon(true);
         receiveThread.start();
+        retryExecutor.scheduleAtFixedRate(this::retryReliablePackets, 10, 10, TimeUnit.MILLISECONDS);
 
         System.out.println("HaiKyuu UDP Server 已啟動（無畫面）");
         System.out.println("UDP 5001: " + localIp);
         System.out.println("Player 1 與 Player 2 都使用：java -cp build Main join <Server-IP>");
 
-        long nextTick = System.nanoTime();
-        while (running) {
-            updateOneTick();
-            nextTick += TICK_NANOS;
-            sleepUntil(nextTick);
+        try {
+            long nextTick = System.nanoTime();
+            while (running) {
+                updateOneTick();
+                nextTick += TICK_NANOS;
+                sleepUntil(nextTick);
+            }
+        } finally {
+            retryExecutor.shutdownNow();
         }
 
         if (!endMessage.isBlank()) {
@@ -89,12 +106,9 @@ public final class GameServer implements AutoCloseable {
         ServerPlayerSlot red = redPlayer;
         ServerPlayerSlot blue = bluePlayer;
         if (hasTimedOut(red) || hasTimedOut(blue)) {
-            beginTermination();
+            beginTermination(CLIENT_TIMEOUT_MESSAGE);
             return;
         }
-
-        resendPendingEvents(red);
-        resendPendingEvents(blue);
 
         if (serverTick % GameConfig.TICKS_PER_SECOND == 0) {
             if (red != null) sendControlStatus(red, red.getLastControlSequence());
@@ -105,6 +119,8 @@ public final class GameServer implements AutoCloseable {
             return;
         }
 
+        int previousRedControlSequence = red.getLastControlSequence();
+        int previousBlueControlSequence = blue.getLastControlSequence();
         ControlResult controlResult = processControls(red, blue);
         if (terminating) {
             return;
@@ -112,7 +128,9 @@ public final class GameServer implements AutoCloseable {
         if (controlResult.resetApplied) {
             sendReliableEvent(Packet.EventType.RESET, Packet.CompactState.from(model));
         }
-        if (controlResult.statusChanged) {
+        if (controlResult.statusChanged
+                || red.getLastControlSequence() != previousRedControlSequence
+                || blue.getLastControlSequence() != previousBlueControlSequence) {
             broadcastControlStatus();
         }
 
@@ -121,12 +139,16 @@ public final class GameServer implements AutoCloseable {
         int blueMask = blue.takeInputMaskForTick();
         model.update(Packet.decodeInput(redMask), Packet.decodeInput(blueMask));
 
+        if (terminating) {
+            return;
+        }
+
         relayRemoteInputs(red, blue, redMask, blueMask);
 
         for (Packet.EventType eventType : detectSyncEvents(before)) {
             sendReliableEvent(eventType, Packet.CompactState.from(model));
         }
-        sendBallSnapshotIfNeeded();
+        sendWorldSnapshot();
     }
 
     private ControlResult processControls(ServerPlayerSlot red, ServerPlayerSlot blue) {
@@ -194,10 +216,13 @@ public final class GameServer implements AutoCloseable {
         if (scoreChanged && isRuleMessage(model.transientMessage)) {
             events.add(Packet.EventType.RULE);
         }
-        if (scoreChanged || (before.rallyOver && !model.isRallyOverForNetwork())
-                || (!before.lockedScorePhase && model.isLockedScorePhase())) {
-            // SCORE 同步得分、歸位鎖定與下一次發球準備。
+        if (scoreChanged) {
             events.add(Packet.EventType.SCORE);
+        }
+        if ((before.rallyOver && !model.isRallyOverForNetwork())
+                || (!before.lockedScorePhase && model.isLockedScorePhase())) {
+            // 階段切換必須可靠同步，但不能再觸發一次得分原因顯示。
+            events.add(Packet.EventType.FLOW);
         }
 
         return events;
@@ -233,23 +258,31 @@ public final class GameServer implements AutoCloseable {
     }
 
     private void sendReliableEvent(Packet.EventType type, Packet.CompactState state) {
-        ReliableEvent event = new ReliableEvent(
-                ++nextEventId,
-                serverTick,
-                type,
-                ++collisionRevision,
-                state
-        );
-        queueReliableEvent(redPlayer, event);
-        queueReliableEvent(bluePlayer, event);
+        PendingEvent redPending;
+        PendingEvent bluePending;
+        synchronized (eventOrderLock) {
+            if (terminating) {
+                return;
+            }
+            ReliableEvent event = new ReliableEvent(
+                    nextEventId.incrementAndGet(),
+                    serverTick,
+                    type,
+                    ++collisionRevision,
+                    state
+            );
+            redPending = queueReliableEvent(redPlayer, event);
+            bluePending = queueReliableEvent(bluePlayer, event);
+        }
+        if (redPending != null) sendEvent(redPlayer, redPending);
+        if (bluePending != null) sendEvent(bluePlayer, bluePending);
     }
 
-    private void queueReliableEvent(ServerPlayerSlot target, ReliableEvent event) {
+    private PendingEvent queueReliableEvent(ServerPlayerSlot target, ReliableEvent event) {
         if (target == null || !target.isGameplayReady()) {
-            return;
+            return null;
         }
-        PendingEvent pending = target.addPendingEvent(event);
-        sendEvent(target, pending);
+        return target.addPendingEvent(event);
     }
 
     private void resendPendingEvents(ServerPlayerSlot target) {
@@ -261,6 +294,27 @@ public final class GameServer implements AutoCloseable {
             if (now - pending.lastSentNanos >= EVENT_RESEND_INTERVAL_NANOS) {
                 sendEvent(target, pending);
             }
+        }
+    }
+
+    private void retryReliablePackets() {
+        if (!running) {
+            return;
+        }
+
+        ServerPlayerSlot red = redPlayer;
+        ServerPlayerSlot blue = bluePlayer;
+        long now = System.nanoTime();
+        if (!terminating && ((red != null && red.hasExpiredEvent(now, RELIABLE_ACK_TIMEOUT_NANOS))
+                || (blue != null && blue.hasExpiredEvent(now, RELIABLE_ACK_TIMEOUT_NANOS)))) {
+            beginTermination(SYNC_TIMEOUT_MESSAGE);
+        }
+
+        resendPendingEvents(red);
+        resendPendingEvents(blue);
+        if (terminating) {
+            resendMatchAborted(red);
+            resendMatchAborted(blue);
         }
     }
 
@@ -285,31 +339,21 @@ public final class GameServer implements AutoCloseable {
         }
     }
 
-    /** 回合中每秒 20 次送出球專用快照；不含完整 GameModel。 */
-    private void sendBallSnapshotIfNeeded() {
-        if (!model.getServeHandler().shouldUpdateBall()) {
-            return;
-        }
-
-        long now = System.nanoTime();
-        if (now - lastBallSnapshotNanos < BALL_SNAPSHOT_INTERVAL_NANOS) {
-            return;
-        }
-
-        lastBallSnapshotNanos = now;
-        Packet.BallSnapshot snapshot = Packet.BallSnapshot.from(model, collisionRevision);
-        int sequence = ++nextBallSnapshotSequence;
-        sendBallSnapshot(redPlayer, sequence, snapshot);
-        sendBallSnapshot(bluePlayer, sequence, snapshot);
+    /** 每個物理 tick 傳送最新球及球員；舊快照遺失時不重送。 */
+    private void sendWorldSnapshot() {
+        Packet.WorldSnapshot snapshot = Packet.WorldSnapshot.from(model, collisionRevision);
+        int sequence = ++nextWorldSnapshotSequence;
+        sendWorldSnapshot(redPlayer, sequence, snapshot);
+        sendWorldSnapshot(bluePlayer, sequence, snapshot);
     }
 
-    private void sendBallSnapshot(ServerPlayerSlot target, int sequence, Packet.BallSnapshot snapshot) {
+    private void sendWorldSnapshot(ServerPlayerSlot target, int sequence, Packet.WorldSnapshot snapshot) {
         if (target == null || !target.isGameplayReady()) {
             return;
         }
         try {
             sendUdp(
-                    UdpCodec.ballSnapshot(target.sessionToken, serverTick, sequence, snapshot),
+                    UdpCodec.worldSnapshot(target.sessionToken, serverTick, sequence, snapshot),
                     target.address,
                     target.port
             );
@@ -355,10 +399,9 @@ public final class GameServer implements AutoCloseable {
         } else if (decoded instanceof UdpCodec.EventAck ack) {
             slot.acknowledgeEvent(ack.eventId);
         } else if (decoded instanceof UdpCodec.ControlFrame control) {
-            if (slot.acceptControl(control)) {
-                sendControlStatus(slot, control.sequence);
-            } else if (control.token == slot.sessionToken) {
-                sendControlStatus(slot, control.sequence);
+            if (!slot.acceptControl(control)) {
+                // 收到亂序指令只能確認已真正處理的連續序號，不能誤認後面的指令已執行。
+                sendControlStatus(slot, slot.getLastControlSequence());
             }
         }
     }
@@ -432,11 +475,12 @@ public final class GameServer implements AutoCloseable {
         return blue != null && blue.clientNonce == nonce ? blue : null;
     }
 
-    private void sendControlStatus(ServerPlayerSlot target, int acknowledgedSequence) {
+    private synchronized void sendControlStatus(ServerPlayerSlot target, int acknowledgedSequence) {
         try {
             sendUdp(
                     UdpCodec.controlStatus(
                             target.sessionToken,
+                            nextControlStatusId.incrementAndGet(),
                             acknowledgedSequence,
                             redResetConfirmed,
                             blueResetConfirmed
@@ -475,29 +519,36 @@ public final class GameServer implements AutoCloseable {
     }
 
     private void beginTermination() {
-        if (!terminationStarted.compareAndSet(false, true)) {
-            return;
-        }
-
-        terminating = true;
-        endMessage = MATCH_ABORTED_MESSAGE;
-        terminationDeadlineNanos = System.nanoTime() + TERMINATION_ACK_TIMEOUT_NANOS;
-        queueMatchAborted(redPlayer);
-        queueMatchAborted(bluePlayer);
+        beginTermination(MATCH_ABORTED_MESSAGE);
     }
 
-    private void queueMatchAborted(ServerPlayerSlot target) {
+    private void beginTermination(String reason) {
+        int abortEventId;
+        synchronized (eventOrderLock) {
+            if (!terminationStarted.compareAndSet(false, true)) {
+                return;
+            }
+
+            terminating = true;
+            endMessage = reason;
+            terminationDeadlineNanos = System.nanoTime() + TERMINATION_ACK_TIMEOUT_NANOS;
+            abortEventId = nextEventId.incrementAndGet();
+            if (redPlayer != null) redPlayer.beginMatchAbort(abortEventId);
+            if (bluePlayer != null) bluePlayer.beginMatchAbort(abortEventId);
+        }
+        sendQueuedMatchAborted(redPlayer);
+        sendQueuedMatchAborted(bluePlayer);
+    }
+
+    private void sendQueuedMatchAborted(ServerPlayerSlot target) {
         if (target == null) {
             return;
         }
-        PendingMatchAbort pending = target.beginMatchAbort(++nextEventId);
-        sendMatchAborted(target, pending);
+        PendingMatchAbort pending = target.getPendingMatchAbort();
+        if (pending != null) sendMatchAborted(target, pending);
     }
 
     private void updateTermination() {
-        resendMatchAborted(redPlayer);
-        resendMatchAborted(bluePlayer);
-
         boolean allAcknowledged = isMatchAbortAcknowledged(redPlayer) && isMatchAbortAcknowledged(bluePlayer);
         if (allAcknowledged || System.nanoTime() >= terminationDeadlineNanos) {
             running = false;
@@ -517,7 +568,7 @@ public final class GameServer implements AutoCloseable {
 
     private void sendMatchAborted(ServerPlayerSlot target, PendingMatchAbort pending) {
         try {
-            sendUdp(UdpCodec.matchAborted(target.sessionToken, pending.eventId), target.address, target.port);
+            sendUdp(UdpCodec.matchAborted(target.sessionToken, pending.eventId, endMessage), target.address, target.port);
             pending.markSent();
         } catch (IOException ignored) {
             // 對方已離線時，等待終止 ACK 期限結束即可。
@@ -525,7 +576,8 @@ public final class GameServer implements AutoCloseable {
     }
 
     private boolean isMatchAbortAcknowledged(ServerPlayerSlot target) {
-        return target == null || target.getPendingMatchAbort() == null;
+        return target == null
+                || (target.getPendingMatchAbort() == null && !target.hasPendingEvents());
     }
 
     private static void sleepUntil(long deadlineNanos) {

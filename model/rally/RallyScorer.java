@@ -164,20 +164,27 @@ public class RallyScorer {
         rallyOver = true;
         deadBallTimer = SCORE_FRAMES;
 
-        if (redWins) {
-            model.redScore++;
-            model.getServeHandler().setRedServing(true);
-        } else {
-            model.blueScore++;
+        if (model.isPracticeMode()) {
+            // 練習模式仍裁決回合，但不計分；每球都由藍隊發球。
             model.getServeHandler().setRedServing(false);
+        } else {
+            if (redWins) {
+                model.redScore++;
+                model.getServeHandler().setRedServing(true);
+            } else {
+                model.blueScore++;
+                model.getServeHandler().setRedServing(false);
+            }
+
+            // 檢查比賽勝利（25 分制，需領先 2 分）
+            if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
+                model.matchOver = true;
+                model.matchWinnerRed = model.redScore > model.blueScore;
+                deadBallTimer = 0;
+            }
         }
 
-        // 檢查比賽勝利（25 分制，需領先 2 分）
-        if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
-            model.matchOver = true;
-            model.matchWinnerRed = model.redScore > model.blueScore;
-            deadBallTimer = 0;
-        } else if (model.transientMessage != null) {
+        if (!model.matchOver && model.transientMessage != null) {
             model.transientMessageTimer = SCORE_FRAMES;
         }
     }

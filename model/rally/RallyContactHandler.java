@@ -59,7 +59,7 @@ public class RallyContactHandler {
                 continue;
             }
 
-            if (collidePlayer(player, target, redSide, hitCount)) {
+            if (collidePlayer(player, target, redSide, hitCount, input)) {
                 // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
 
@@ -76,7 +76,7 @@ public class RallyContactHandler {
                 continue;
             }
 
-            if (!canSpike(player, input)) {
+            if (!canSpike(player)) {
                 continue;
             }
 
@@ -131,33 +131,16 @@ public class RallyContactHandler {
         }
 
         if (redSide) {
-            // 紅隊在左側：起跳位置越過左側三米線、靠近網子時違規。
-            return jumpStartX > GameConfig.NET_X - GameConfig.THREE_METER_PX;
+            // 紅隊在左側：起跳中心在線上或更靠近網子時違規。
+            return jumpStartX >= GameConfig.NET_X - GameConfig.THREE_METER_PX;
         }
 
-        // 藍隊在右側：起跳位置越過右側三米線、靠近網子時違規。
-        return jumpStartX < GameConfig.NET_X + GameConfig.THREE_METER_PX;
+        // 藍隊在右側：起跳中心在線上或更靠近網子時違規。
+        return jumpStartX <= GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
-    private boolean canSpike(Player player, TeamInput input) {
-        boolean inAttackMode = player.isAttackReady() || player.isAttackSwinging();
-        return inAttackMode && player.jumping && isAttackKeyPressed(player, input);
-    }
-
-    private boolean isAttackKeyPressed(Player player, TeamInput input) {
-        if (player instanceof WingSpiker) {
-            return input.wingAttack;
-        }
-
-        if (player instanceof QuickAttacker) {
-            return input.quickAttack;
-        }
-
-        if (player instanceof BackPlayer) {
-            return input.backJump;
-        }
-
-        return false;
+    private boolean canSpike(Player player) {
+        return player.isAttackSwinging() && player.jumping && player.hasValidAttackAttemptThisFrame();
     }
 
     private void performSpike(AttackContext context, TeamInput input) {
@@ -259,13 +242,16 @@ public class RallyContactHandler {
         return true;
     }
 
-    private boolean collidePlayer(Player player, BallTarget target, boolean redSide, int hitCountBeforeTouch) {
+    private boolean collidePlayer(Player player, BallTarget target, boolean redSide,
+                                  int hitCountBeforeTouch, TeamInput input) {
         if (!player.intersectsBall(model.ball)) {
             return false;
         }
 
         pushBallOutsidePlayer(player);
-        if (player instanceof Setter && hitCountBeforeTouch < 2) {
+        if (player instanceof Setter && hitCountBeforeTouch == 1 && input.spikeShort) {
+            setQuickAttackBallVelocity(redSide);
+        } else if (player instanceof Setter && hitCountBeforeTouch < 2) {
             setSetterBallVelocity(target);
         } else {
             setBallVelocity(target);
@@ -415,15 +401,8 @@ public class RallyContactHandler {
 
     private void setSetterBallVelocity(BallTarget target) {
         double gravity = GameConfig.GRAVITY;
-        double heightToApex = model.ball.y - GameConfig.SETTER_SET_APEX_Y;
-
-        // Ball.update() 會先加重力再移動；以整數幀計算，確保畫面上的最高點到達設定值。
-        int framesToApex = Math.max(1, (int) Math.ceil(
-                (-1.0 + Math.sqrt(1.0 + 8.0 * heightToApex / gravity)) / 2.0
-        ));
-
-        double initialVy = (GameConfig.SETTER_SET_APEX_Y - model.ball.y) / framesToApex
-                - gravity * (framesToApex + 1) / 2.0;
+        int framesToApex = framesToApex(GameConfig.SETTER_SET_APEX_Y);
+        double initialVy = initialVyForApex(GameConfig.SETTER_SET_APEX_Y, framesToApex);
 
         // 依新的飛行時間重算 vx，使球下降時仍通過原本的預定目標點。
         double verticalLinearTerm = initialVy + gravity / 2.0;
@@ -433,6 +412,32 @@ public class RallyContactHandler {
 
         model.ball.vx = (target.x - model.ball.x) / Math.max(1.0, timeToTarget);
         model.ball.vy = initialVy;
+    }
+
+    private void setQuickAttackBallVelocity(boolean redSide) {
+        double apexX = redSide
+                ? GameConfig.RED_QUICK_SET_APEX_X
+                : GameConfig.BLUE_QUICK_SET_APEX_X;
+        int framesToApex = framesToApex(GameConfig.QUICK_SET_APEX_Y);
+
+        // 以當次 Setter 觸球後的球心位置重算，令整數幀的最高點通過指定座標。
+        model.ball.vx = (apexX - model.ball.x) / framesToApex;
+        model.ball.vy = initialVyForApex(GameConfig.QUICK_SET_APEX_Y, framesToApex);
+    }
+
+    private int framesToApex(double apexY) {
+        double heightToApex = model.ball.y - apexY;
+        double gravity = GameConfig.GRAVITY;
+
+        // Ball.update() 先加重力再移動；取最高點所在的整數幀。
+        return Math.max(1, (int) Math.ceil(
+                (-1.0 + Math.sqrt(1.0 + 8.0 * heightToApex / gravity)) / 2.0
+        ));
+    }
+
+    private double initialVyForApex(double apexY, int framesToApex) {
+        return (apexY - model.ball.y) / framesToApex
+                - GameConfig.GRAVITY * (framesToApex + 1) / 2.0;
     }
 
     private static class BallTarget {
@@ -461,7 +466,7 @@ public class RallyContactHandler {
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y + 15, TO_SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + 10, TO_SETTER_PASS_POWER);
         }
 
         private static BallTarget attackTarget(boolean redSide) {

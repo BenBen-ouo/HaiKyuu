@@ -19,6 +19,8 @@ import model.rally.RallyState;
 import model.serve.ServeHandler;
 
 public class GameModel {
+    private final boolean practiceMode;
+
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public final NetHitBox netHitBox = new NetHitBox();
 
@@ -56,6 +58,7 @@ public class GameModel {
     // Client 本地預測時不可自行裁決得分或下一次發球位置。
     private boolean resolvingRallyOutcomes = true;
     private boolean predictionAwaitingAuthority;
+    private boolean networkSmokeShownOnFloor;
 
     // 短暫訊息（例如違規提示），每幀遞減
     public String transientMessage = null;
@@ -68,7 +71,19 @@ public class GameModel {
     public Boolean pendingTouchOutWinner = null;
 
     public GameModel() {
+        this(false);
+    }
+
+    public GameModel(boolean practiceMode) {
+        this.practiceMode = practiceMode;
+        if (practiceMode) {
+            serveHandler.setRedServing(false);
+        }
         serveHandler.setWaitingForServe(true);
+    }
+
+    public boolean isPracticeMode() {
+        return practiceMode;
     }
 
     public ServeHandler getServeHandler() {
@@ -91,6 +106,7 @@ public class GameModel {
         effects.clear();
         spikeEffect.clear();
         predictionAwaitingAuthority = false;
+        networkSmokeShownOnFloor = false;
         serveReceptionComplete = false;
         redActionReleaseGate.reset();
         blueActionReleaseGate.reset();
@@ -119,12 +135,47 @@ public class GameModel {
         updateFrame(redInput, blueInput, true);
     }
 
-    /**
-     * Client 專用的本地預測更新。
-     * 角色與球仍可預測，但得分、違規結束與下一次發球準備只接受 Server 快照。
-     */
-    public void updateForNetworkPrediction(TeamInput redInput, TeamInput blueInput) {
-        updateFrame(redInput, blueInput, false);
+    /** Client 只預測本機球員；球、對手與一切碰撞／裁決都等 Server。 */
+    public void updateForNetworkPrediction(TeamInput localInput, boolean localRedSide) {
+        TeamInput input = localInput.copy();
+        ActionReleaseGate releaseGate = localRedSide ? redActionReleaseGate : blueActionReleaseGate;
+        if (!matchOver && scorer.isLockedPhase()) {
+            releaseGate.observeLocked(input);
+            return;
+        }
+
+        releaseGate.filter(input);
+        if (scorer.isRallyOver() || matchOver || serveHandler.shouldUseGameBackPlayerAction(localRedSide)) {
+            BackActionResolver.apply(input, getHitCount(localRedSide));
+        }
+        serveHandler.filterNetworkPredictionInput(input, localRedSide, localInput.servePressed);
+        input.hasFirstRegularTouch = getHitCount(localRedSide) > 0;
+        (localRedSide ? redTeam : blueTeam).update(input);
+        effects.update();
+        if (spikeEffect.isSpikeTrailActive()) {
+            spikeEffect.addTrailPoint(ball.x, ball.y);
+        }
+        spikeEffect.update();
+    }
+
+    /** 快照只同步視覺特效的開關，不讓 Client 自行判定扣球或落地。 */
+    public void syncNetworkVisualEffects(boolean trailActive, boolean trailRedSide) {
+        boolean wasActive = spikeEffect.isSpikeTrailActive();
+        boolean onFloor = ball.y + ball.radius >= GameConfig.FLOOR_Y;
+        if (!onFloor) {
+            networkSmokeShownOnFloor = false;
+        }
+        if (trailActive) {
+            if (!wasActive || spikeEffect.getCurrentSpikeIsRed() != trailRedSide) {
+                spikeEffect.startSpikeTrail(trailRedSide);
+            }
+        } else if (wasActive) {
+            if (onFloor && !networkSmokeShownOnFloor) {
+                spikeEffect.spawnSmoke(ball.x, GameConfig.FLOOR_Y);
+                networkSmokeShownOnFloor = true;
+            }
+            spikeEffect.stopSpikeTrail();
+        }
     }
 
     private void updateFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
@@ -238,6 +289,12 @@ public class GameModel {
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
         updateTeams(redInput, blueInput);
+        for (Player player : redTeam.getPlayers()) {
+            player.captureAttackAttemptBallOverlap(ball);
+        }
+        for (Player player : blueTeam.getPlayers()) {
+            player.captureAttackAttemptBallOverlap(ball);
+        }
         serveHandler.updateAfterTeams();
 
         updateBallIfNeeded(resolveRallyOutcomes);

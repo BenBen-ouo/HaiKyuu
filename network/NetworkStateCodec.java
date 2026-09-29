@@ -102,14 +102,14 @@ final class NetworkStateCodec {
         );
     }
 
-    private static void writeTeam(DataOutputStream out, Packet.TeamState team) throws IOException {
+    static void writeTeam(DataOutputStream out, Packet.TeamState team) throws IOException {
         out.writeByte(team.players.length);
         for (Packet.PlayerState player : team.players) {
             writePlayer(out, player);
         }
     }
 
-    private static Packet.TeamState readTeam(DataInputStream in) throws IOException {
+    static Packet.TeamState readTeam(DataInputStream in) throws IOException {
         int count = Byte.toUnsignedInt(in.readByte());
         if (count > MAX_PLAYERS_PER_TEAM) {
             throw new IOException("Invalid player count");

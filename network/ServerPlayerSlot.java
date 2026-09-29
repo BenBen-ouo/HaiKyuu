@@ -8,14 +8,12 @@ import java.net.InetAddress;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class ServerPlayerSlot {
-    private static final int MAX_PENDING_EVENTS = 8;
-
     final boolean redSide;
     final long clientNonce;
     final long sessionToken = ThreadLocalRandom.current().nextLong();
@@ -23,9 +21,9 @@ final class ServerPlayerSlot {
     final AtomicInteger pendingPressedMask = new AtomicInteger();
     final AtomicInteger lastInputSequence = new AtomicInteger(-1);
     final AtomicInteger latestScheduledServerTick = new AtomicInteger();
-    final AtomicInteger lastControlSequence = new AtomicInteger(-1);
+    final AtomicInteger lastControlSequence = new AtomicInteger();
     final AtomicLong lastHeardNanos = new AtomicLong(System.nanoTime());
-    final ConcurrentLinkedQueue<ServerControlCommand> pendingControls = new ConcurrentLinkedQueue<>();
+    private final TreeMap<Integer, ServerControlCommand> pendingControls = new TreeMap<>();
     final Deque<PendingEvent> pendingEvents = new ArrayDeque<>();
 
     volatile InetAddress address;
@@ -74,15 +72,16 @@ final class ServerPlayerSlot {
         gameplayReady = true;
     }
 
-    boolean acceptControl(UdpCodec.ControlFrame control) {
+    synchronized boolean acceptControl(UdpCodec.ControlFrame control) {
         markHeard();
         if (control.sequence <= lastControlSequence.get()) {
             return false;
         }
 
-        lastControlSequence.set(control.sequence);
-        pendingControls.offer(new ServerControlCommand(control.sequence, control.action));
-        return true;
+        return pendingControls.putIfAbsent(
+                control.sequence,
+                new ServerControlCommand(control.sequence, control.action)
+        ) == null;
     }
 
     int takeInputMaskForTick() {
@@ -97,23 +96,26 @@ final class ServerPlayerSlot {
         return gameplayReady;
     }
 
-    ServerControlCommand pollControl() {
-        return pendingControls.poll();
+    synchronized ServerControlCommand pollControl() {
+        int nextSequence = lastControlSequence.get() + 1;
+        ServerControlCommand command = pendingControls.remove(nextSequence);
+        if (command != null) {
+            lastControlSequence.set(nextSequence);
+        }
+        return command;
     }
 
     synchronized PendingEvent addPendingEvent(ReliableEvent event) {
         PendingEvent pending = new PendingEvent(event);
         pendingEvents.addLast(pending);
-        while (pendingEvents.size() > MAX_PENDING_EVENTS) {
-            pendingEvents.removeFirst();
-        }
         return pending;
     }
 
     synchronized void acknowledgeEvent(int eventId) {
         for (Iterator<PendingEvent> iterator = pendingEvents.iterator(); iterator.hasNext();) {
-            if (iterator.next().event.id <= eventId) {
+            if (iterator.next().event.id == eventId) {
                 iterator.remove();
+                break;
             }
         }
         if (pendingMatchAbort != null && pendingMatchAbort.eventId == eventId) {
@@ -124,6 +126,15 @@ final class ServerPlayerSlot {
 
     synchronized PendingEvent[] pendingEventsSnapshot() {
         return pendingEvents.toArray(new PendingEvent[0]);
+    }
+
+    synchronized boolean hasExpiredEvent(long nowNanos, long timeoutNanos) {
+        return !pendingEvents.isEmpty()
+                && nowNanos - pendingEvents.peekFirst().firstSentNanos >= timeoutNanos;
+    }
+
+    synchronized boolean hasPendingEvents() {
+        return !pendingEvents.isEmpty();
     }
 
     synchronized PendingMatchAbort beginMatchAbort(int eventId) {
