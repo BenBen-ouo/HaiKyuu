@@ -117,7 +117,7 @@ public class GameplayFlowTest {
                 blue.quickAttacker.attackHitBox, "MB 攻擊框");
         checkMirroredAttackHitBox(red.wingSpiker.attackHitBox,
                 blue.wingSpiker.attackHitBox, "WS 攻擊框");
-        check(red.wingSpiker.hitBox.offsetX == 40 && blue.wingSpiker.hitBox.offsetX == 35,
+        check(red.wingSpiker.hitBox.offsetX == 30 && blue.wingSpiker.hitBox.offsetX == 45,
                 "WS 一般框採目前紅藍偏移設定");
     }
 

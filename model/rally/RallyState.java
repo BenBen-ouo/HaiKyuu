@@ -86,6 +86,12 @@ public class RallyState {
             boolean lastTouchWasBlock,
             int redLastHitterIndex,
             int blueLastHitterIndex,
+            boolean redSetterTouched,
+            boolean blueSetterTouched,
+            boolean redSetterTouchedFirst,
+            boolean blueSetterTouchedFirst,
+            boolean redBlockUsed,
+            boolean blueBlockUsed,
             Team redTeam,
             Team blueTeam
     ) {
@@ -95,6 +101,12 @@ public class RallyState {
         this.lastTouchWasBlock = lastTouchWasBlock;
         this.redLastHitter = playerAt(redTeam, redLastHitterIndex);
         this.blueLastHitter = playerAt(blueTeam, blueLastHitterIndex);
+        this.redSetterTouched = redSetterTouched;
+        this.blueSetterTouched = blueSetterTouched;
+        this.redSetterTouchedFirst = redSetterTouchedFirst;
+        this.blueSetterTouchedFirst = blueSetterTouchedFirst;
+        this.redBlockUsed = redBlockUsed;
+        this.blueBlockUsed = blueBlockUsed;
     }
 
     private Player playerAt(Team team, int index) {
@@ -142,6 +154,10 @@ public class RallyState {
 
     public boolean hasSetterTouched(boolean redSide) {
         return redSide ? redSetterTouched : blueSetterTouched;
+    }
+
+    public boolean wasSetterTouchedFirst(boolean redSide) {
+        return redSide ? redSetterTouchedFirst : blueSetterTouchedFirst;
     }
 
     public boolean canSetterTouch(boolean redSide) {

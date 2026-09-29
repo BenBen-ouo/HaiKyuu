@@ -118,6 +118,10 @@ public class GameModel {
         return rallyState.hasSetterTouched(redSide);
     }
 
+    public boolean wasSetterTouchedFirst(boolean redSide) {
+        return rallyState.wasSetterTouchedFirst(redSide);
+    }
+
     public boolean canSetterTouch(boolean redSide) {
         return rallyState.canSetterTouch(redSide);
     }
@@ -508,7 +512,7 @@ public class GameModel {
         return rallyState.wasLastTouchBlock();
     }
 
-    public void applyNetworkRallyState(
+    public void applyNetworkRallyContactState(
             int redHitCount,
             int blueHitCount,
             Boolean lastHitTeam,
@@ -516,8 +520,12 @@ public class GameModel {
             boolean serveReceptionComplete,
             int redLastHitterIndex,
             int blueLastHitterIndex,
-            boolean rallyOver,
-            int deadBallTimer
+            boolean redSetterTouched,
+            boolean blueSetterTouched,
+            boolean redSetterTouchedFirst,
+            boolean blueSetterTouchedFirst,
+            boolean redBlockUsed,
+            boolean blueBlockUsed
     ) {
         rallyState.applyNetworkState(
                 redHitCount,
@@ -526,11 +534,20 @@ public class GameModel {
                 lastTouchWasBlock,
                 redLastHitterIndex,
                 blueLastHitterIndex,
+                redSetterTouched,
+                blueSetterTouched,
+                redSetterTouchedFirst,
+                blueSetterTouchedFirst,
+                redBlockUsed,
+                blueBlockUsed,
                 redTeam,
                 blueTeam
         );
         syncPublicHitCounters();
         this.serveReceptionComplete = serveReceptionComplete;
+    }
+
+    public void applyNetworkRallyPhase(boolean rallyOver, int deadBallTimer) {
         scorer.applyNetworkState(rallyOver, deadBallTimer);
         if (scorer.isLockedPhase()) {
             effects.clear();

@@ -332,6 +332,7 @@ public final class GameClient implements NetworkView {
         frame.snapshot.ball.applyTo(renderModel.ball);
         frame.snapshot.redTeam.applyMotionTo(renderModel.redTeam);
         frame.snapshot.blueTeam.applyMotionTo(renderModel.blueTeam);
+        frame.snapshot.rallyContacts.applyTo(renderModel);
         clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         renderModel.syncNetworkVisualEffects(
                 frame.snapshot.spikeTrailActive, frame.snapshot.spikeTrailRedSide);
