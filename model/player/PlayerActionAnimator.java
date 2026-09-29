@@ -34,6 +34,17 @@ public class PlayerActionAnimator {
         );
     }
 
+    public void playAirSetting() {
+        player.action = PlayerAction.AIR_SETTING;
+        player.attacking = false;
+        player.blocking = false;
+        player.attackHitBox.disable();
+        animation.play(
+                AnimationSequences.frames(player, "setting1", "setting2"),
+                AnimationSequences.durations(5, AnimationSequences.HOLD)
+        );
+    }
+
     public void playDive() {
         player.attackHitBox.disable();
         player.action = PlayerAction.DIVE;
@@ -131,7 +142,8 @@ public class PlayerActionAnimator {
         return player.action == PlayerAction.DIVE
                 || player.action == PlayerAction.ATTACK_READY
                 || player.action == PlayerAction.ATTACK_SWING
-                || player.action == PlayerAction.BLOCK;
+                || player.action == PlayerAction.BLOCK
+                || player.action == PlayerAction.AIR_SETTING;
     }
 
     private void startGroundAction(PlayerAction action) {
@@ -155,10 +167,13 @@ public class PlayerActionAnimator {
     private boolean shouldFinishAirAction() {
         boolean airAction = player.action == PlayerAction.ATTACK_READY
                 || player.action == PlayerAction.ATTACK_SWING
-                || player.action == PlayerAction.BLOCK;
+                || player.action == PlayerAction.BLOCK
+                || player.action == PlayerAction.AIR_SETTING;
 
         return airAction && !player.jumping
-                && (player.action == PlayerAction.ATTACK_READY || animation.isHoldingFrame());
+                && (player.action == PlayerAction.ATTACK_READY
+                    || player.action == PlayerAction.AIR_SETTING
+                    || animation.isHoldingFrame());
     }
 
     private boolean shouldFinishHeldDive() {

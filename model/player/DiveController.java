@@ -15,15 +15,16 @@ public class DiveController {
     private static final double HITBOX_OFFSET_Y = GameConfig.PLAYER_IMAGE_HEIGHT - HITBOX_HEIGHT - 2;
     private static final double HITBOX_FORWARD_OFFSET_X = 30;
 
-    private final BackPlayer player;
+    private final Player player;
 
     private int elapsedFrames = 0;
     private int diveDirection = 1;
     private boolean previousDiveInput = false;
     private HitBoxSnapshot standingHitBox;
 
-    public DiveController(BackPlayer player) {
+    public DiveController(Player player) {
         this.player = player;
+        this.diveDirection = (int) player.directionTowardNet();
     }
 
     public boolean isActive() {
@@ -36,6 +37,14 @@ public class DiveController {
         }
 
         startDive(SideRules.horizontalDirectionFromBackInput(input, player.redSide));
+        return true;
+    }
+
+    public boolean tryStartTowardNet(boolean justPressed) {
+        if (!justPressed || player.jumping) {
+            return false;
+        }
+        startDive((int) player.directionTowardNet());
         return true;
     }
 
@@ -109,8 +118,8 @@ public class DiveController {
         if (standingHitBox != null) {
             standingHitBox.restoreTo(player.hitBox);
             standingHitBox = null;
-        } else {
-            player.restoreDefaultHitBox();
+        } else if (player instanceof BackPlayer backPlayer) {
+            backPlayer.restoreDefaultHitBox();
         }
     }
 

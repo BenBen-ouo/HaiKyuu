@@ -10,7 +10,8 @@ public class Ball {
     private enum NetCollisionSide {
         LEFT,
         RIGHT,
-        TOP
+        TOP,
+        CAP
     }
 
     public double x;
@@ -132,11 +133,15 @@ public class Ball {
             case LEFT -> bounceFromNetLeft(netHitBox);
             case RIGHT -> bounceFromNetRight(netHitBox);
             case TOP -> bounceFromNetTop(netHitBox);
+            case CAP -> bounceFromNetCap(netHitBox);
         }
         return true;
     }
 
     private NetCollisionSide findNetCollisionSide(NetHitBox netHitBox) {
+        if (y < netHitBox.getTop() + netHitBox.getTopRadius()) {
+            return NetCollisionSide.CAP;
+        }
         NetCollisionSide entrySide = findEntrySide(netHitBox);
         return entrySide != null ? entrySide : findClosestCollisionSide(netHitBox);
     }
@@ -214,6 +219,45 @@ public class Ball {
     private void bounceFromNetTop(NetHitBox netHitBox) {
         y = netHitBox.getTop() - radius;
         vy = -reboundSpeed(vy, GameConfig.NET_TOP_BOUNCE);
+    }
+
+    private void bounceFromNetCap(NetHitBox netHitBox) {
+        double dx = x - netHitBox.getCenterX();
+        double dy = y - (netHitBox.getTop() + netHitBox.getTopRadius());
+        double length = Math.hypot(dx, dy);
+        if (length < 0.001) {
+            dx = 0;
+            dy = -1;
+            length = 1;
+        }
+        double nx = dx / length;
+        double ny = dy / length;
+        double dot = vx * nx + vy * ny;
+        double reflectedVx = vx;
+        double reflectedVy = vy;
+        if (dot < 0) {
+            reflectedVx -= 2 * dot * nx;
+            reflectedVy -= 2 * dot * ny;
+        } else {
+            double speed = Math.hypot(vx, vy);
+            reflectedVx = nx * speed;
+            reflectedVy = ny * speed;
+        }
+        double bounceFactor = Math.abs(nx) * GameConfig.NET_SIDE_BOUNCE
+                + Math.abs(ny) * GameConfig.NET_TOP_BOUNCE;
+        reflectedVx *= bounceFactor;
+        reflectedVy *= bounceFactor;
+        double reflectedSpeed = Math.hypot(reflectedVx, reflectedVy);
+        if (reflectedSpeed < GameConfig.NET_MIN_REBOUND_SPEED) {
+            double scale = GameConfig.NET_MIN_REBOUND_SPEED / Math.max(0.001, reflectedSpeed);
+            reflectedVx *= scale;
+            reflectedVy *= scale;
+        }
+        vx = reflectedVx;
+        vy = reflectedVy;
+        double separation = radius + netHitBox.getTopRadius();
+        x = netHitBox.getCenterX() + nx * separation;
+        y = netHitBox.getTop() + netHitBox.getTopRadius() + ny * separation;
     }
 
     private double reboundSpeed(double incomingSpeed, double bounceFactor) {

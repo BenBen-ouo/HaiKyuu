@@ -6,7 +6,7 @@ package model;
 
 public final class SideRules {
     // Setter 第三球嗆司球的目標：越過球網後位於對方大砲的位置。
-    private static final double SETTER_THIRD_TOUCH_DISTANCE_FROM_NET = GameConfig.SCREEN_WIDTH * 0.12;
+    private static final double SETTER_THIRD_TOUCH_DISTANCE_FROM_NET = GameConfig.SCREEN_WIDTH * 0.05;
 
     private SideRules() {}
 

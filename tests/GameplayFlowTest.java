@@ -1,9 +1,14 @@
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.awt.event.KeyEvent;
+import javax.swing.JPanel;
+import controller.KeyboardController;
 import model.GameConfig;
 import model.GameModel;
 import model.TeamInput;
+import model.ball.Ball;
+import model.ball.NetHitBox;
 import model.player.AttackHitBox;
 import model.player.HitBox;
 import model.player.Player;
@@ -24,13 +29,21 @@ public class GameplayFlowTest {
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
-        testAttackNeedsFreshPressWithBallInHitBox();
+        testWingDiveBeforeFirstReception();
+        testBlueControlsRetainNumpadMappings();
+        testAirSetRequiresBothDirectionKeys();
+        testBlockOnlyOnceAndSetterThirdTouch();
+        testAttackCanHoldSecondPressUntilBallArrives();
         testAttackPressBeforeBallMovesIntoHitBox();
+        testAirSetAfterTakeoff();
+        testWingAirSetMirrors();
         testSetterQuickSetApex();
         testServeFaults();
         testBackRowAttackOnThreeMeterLine();
+        testBackRowAirSetOnThreeMeterLine();
         testNetworkServeKeyMustBeReleasedBeforeDive();
         testNetCollisionAfterPoint();
+        testNetRoundedTopCollision();
         testClientPredictionDoesNotResolveCollisions();
         testScorePhasesAndReleaseGate();
         testPracticeMode();
@@ -185,6 +198,7 @@ public class GameplayFlowTest {
         TeamInput wingInput = new TeamInput();
         wingInput.wingAttack = true;
         wingInput.ballOnOwnSide = false;
+        wingInput.hasFirstRegularTouch = true;
         model.blueTeam.wingSpiker.update(wingInput);
         check(model.blueTeam.wingSpiker.getAction() == PlayerAction.RUN_APPROACH,
                 "接發方 WS 在等待發球時也可助跑");
@@ -410,7 +424,7 @@ public class GameplayFlowTest {
         model.ball.vy = 0;
     }
 
-    private static void testAttackNeedsFreshPressWithBallInHitBox() {
+    private static void testAttackCanHoldSecondPressUntilBallArrives() {
         String[] roles = {"後排", "MB", "WS"};
         for (int role = 0; role < roles.length; role++) {
             GameModel early = new GameModel();
@@ -429,17 +443,17 @@ public class GameplayFlowTest {
             early.ball.y = -1000;
             attacker.update(pressed);
             attacker.captureAttackAttemptBallOverlap(early.ball);
-            check(attacker.getAction() == PlayerAction.ATTACK_SWING,
-                    roles[role] + "：球未進框時重新按鍵仍播放空揮");
+            check(attacker.getAction() == PlayerAction.ATTACK_READY,
+                    roles[role] + "：第二次按鍵時球未進框，不空揮並保持準備狀態");
             placeBallInAttackHitBox(early, attacker);
             contacts.collideTeam(early.redTeam, true, pressed);
             check(early.getHitCount(true) == 1 && early.ball.vx == 0,
-                    roles[role] + "：按下後同幀球才進框也不補算命中");
+                    roles[role] + "：本幀角色更新後球才進框，不補算命中");
             attacker.update(pressed);
             attacker.captureAttackAttemptBallOverlap(early.ball);
             contacts.collideTeam(early.redTeam, true, pressed);
-            check(early.getHitCount(true) == 1 && early.ball.vx == 0,
-                    roles[role] + "：空揮後持續按住，球進框也不能補算命中");
+            check(early.getHitCount(true) == 2 && early.ball.vx > 0,
+                    roles[role] + "：第二次按鍵持續按住，球進框後自動攻擊");
 
             GameModel timed = new GameModel();
             TeamInput timedPress = new TeamInput();
@@ -451,7 +465,21 @@ public class GameplayFlowTest {
             timedAttacker.captureAttackAttemptBallOverlap(timed.ball);
             new RallyContactHandler(timed).collideTeam(timed.redTeam, true, timedPress);
             check(timed.getHitCount(true) == 2 && timed.ball.vx > 0,
-                    roles[role] + "：球在框內重新按鍵才完成攻擊");
+                    roles[role] + "：球已在框內時第二次按鍵立即完成攻擊");
+
+            GameModel cancelled = new GameModel();
+            TeamInput cancelledPress = new TeamInput();
+            Player cancelledAttacker = prepareAttackReady(cancelled, role, cancelledPress);
+            cancelledAttacker.update(new TeamInput());
+            cancelled.ball.x = -1000;
+            cancelled.ball.y = -1000;
+            cancelledAttacker.update(cancelledPress);
+            cancelledAttacker.update(new TeamInput());
+            placeBallInAttackHitBox(cancelled, cancelledAttacker);
+            cancelledAttacker.update(new TeamInput());
+            check(cancelledAttacker.getAction() == PlayerAction.ATTACK_READY
+                            && !cancelledAttacker.hasValidAttackAttemptThisFrame(),
+                    roles[role] + "：提早按攻擊後放開，不會繼續預約命中");
         }
     }
 
@@ -477,14 +505,359 @@ public class GameplayFlowTest {
         model.ball.vx = 12;
         model.ball.vy = -GameConfig.GRAVITY;
         model.update(press, new TeamInput());
-        check(attacker.getAction() == PlayerAction.ATTACK_SWING && model.getHitCount(true) == 1,
-                "按鍵時球在框外，即使本幀球移進框仍只空揮");
+        check(attacker.getAction() == PlayerAction.ATTACK_READY && model.getHitCount(true) == 1,
+                 "按鍵時球在框外，即使本幀球移進框仍不揮臂");
+        model.update(press, new TeamInput());
+        check(model.getHitCount(true) == 2 && model.ball.vx > 0,
+                "第二次按鍵持續按住，下一幀球已進框即可攻擊");
+    }
+
+    private static void testBackRowAirSetOnThreeMeterLine() throws Exception {
+        double redLine = GameConfig.NET_X - GameConfig.THREE_METER_PX;
+        double blueLine = GameConfig.NET_X + GameConfig.THREE_METER_PX;
+        checkBackRowAirSetFault(true, redLine, true);
+        checkBackRowAirSetFault(false, blueLine, true);
+        checkBackRowAirSetFault(true, Math.nextDown(redLine), false);
+        checkBackRowAirSetFault(false, Math.nextUp(blueLine), false);
+    }
+
+    private static void testWingAirSetMirrors() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel model = new GameModel();
+            model.getServeHandler().setRedServing(!redSide);
+            model.getServeHandler().setWaitingForServe(false);
+            Team team = redSide ? model.redTeam : model.blueTeam;
+            model.recordRegularHit(redSide, team.setter);
+            model.ball.x = GameConfig.NET_X;
+            model.ball.y = 130;
+            model.ball.vx = 0;
+            model.ball.vy = 0;
+
+            TeamInput approach = new TeamInput();
+            approach.wingAttack = true;
+            for (int frame = 0; frame < 50 && !team.wingSpiker.isAttackReady(); frame++) {
+                updateOnlySide(model, redSide, approach);
+            }
+            check(team.wingSpiker.isAttackReady() && team.wingSpiker.jumping,
+                    "紅藍 WS 都能進入空中攻擊準備狀態");
+            updateOnlySide(model, redSide, new TeamInput());
+            TeamInput modifier = new TeamInput();
+            modifier.airSetModifier = true;
+            updateOnlySide(model, redSide, modifier);
+            model.ball.x = team.wingSpiker.attackHitBox.getCenterX();
+            model.ball.y = team.wingSpiker.attackHitBox.getCenterY();
+            model.ball.vx = 0;
+            model.ball.vy = 0;
+            TeamInput press = modifier.copy();
+            press.wingAttack = true;
+            updateOnlySide(model, redSide, press);
+            check(team.wingSpiker.getAction() == PlayerAction.AIR_SETTING
+                            && model.getHitCount(redSide) == 2
+                            && model.didAirSetContactThisFrame()
+                            && model.ball.vx == 0
+                            && model.redScore == 0 && model.blueScore == 0,
+                    "紅藍 WS 第二球空中舉球都由 Server 計次並送出可靠事件");
+        }
+    }
+
+    private static void checkBackRowAirSetFault(boolean redSide, double jumpStartX,
+                                                 boolean expectedFault) throws Exception {
+        GameModel model = new GameModel();
+        model.getServeHandler().setRedServing(!redSide);
+        model.getServeHandler().setWaitingForServe(false);
+        Team team = redSide ? model.redTeam : model.blueTeam;
+        model.recordRegularHit(redSide, team.setter);
+        model.ball.x = GameConfig.NET_X;
+        model.ball.y = 130;
+        model.ball.vx = 0;
+        model.ball.vy = 0;
+        team.backPlayer.x = jumpStartX - team.backPlayer.imageWidth / 2.0;
+
+        TeamInput jump = new TeamInput();
+        jump.backJump = true;
+        updateOnlySide(model, redSide, jump);
+        check(team.backPlayer.jumping && team.backPlayer.isAttackReady(),
+                "後排已起跳，準備空中舉球");
+        team.backPlayer.jumpStartX = jumpStartX;
+        updateOnlySide(model, redSide, new TeamInput());
+
+        TeamInput modifier = new TeamInput();
+        modifier.airSetModifier = true;
+        modifier.backLeft = true;
+        updateOnlySide(model, redSide, modifier);
+        model.ball.x = team.backPlayer.attackHitBox.getCenterX();
+        model.ball.y = team.backPlayer.attackHitBox.getCenterY();
+        model.ball.vx = 0;
+        model.ball.vy = 0;
+        TeamInput press = modifier.copy();
+        press.backJump = true;
+        updateOnlySide(model, redSide, press);
+
+        check(team.backPlayer.getAction() == PlayerAction.AIR_SETTING
+                        && model.getHitCount(redSide) == 2 && model.ball.vx == 0
+                        && model.didAirSetContactThisFrame(),
+                "紅藍後排第二球均完成垂直空中舉球");
+        check((model.redScore + model.blueScore == 1) == expectedFault
+                        && ("後排三米線".equals(model.transientMessage)) == expectedFault,
+                (redSide ? "紅隊" : "藍隊") + "空中舉球的三米線裁決");
+        if (expectedFault) {
+            check(redSide ? model.blueScore == 1 : model.redScore == 1,
+                    "後排空中舉球違規由對手得分");
+        }
+        Packet.EventType eventType = expectedFault
+                ? Packet.EventType.RULE : Packet.EventType.AIR_SET_CONTACT;
+        byte[] bytes = UdpCodec.event(7, 1, 1, eventType, 1,
+                Packet.CompactState.from(model));
+        UdpCodec.Event event = (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
+        GameModel client = new GameModel();
+        event.state.applyToForClient(client);
+        Team clientTeam = redSide ? client.redTeam : client.blueTeam;
+        check(event.type == eventType
+                        && client.getHitCount(redSide) == 2
+                        && client.getLastHitter(redSide) == clientTeam.backPlayer
+                        && clientTeam.backPlayer.getAction() == PlayerAction.AIR_SETTING
+                        && clientTeam.backPlayer.jumpStartX == jumpStartX
+                        && client.redScore == model.redScore
+                        && client.blueScore == model.blueScore
+                        && ("後排三米線".equals(client.transientMessage)) == expectedFault,
+                "紅藍空中舉球次數、角色狀態及違規結果可由可靠事件同步");
+
+        if (!expectedFault) {
+            double highestY = model.ball.y;
+            for (int frame = 0; frame < 80 && model.ball.vy < 0; frame++) {
+                model.ball.update();
+                highestY = Math.min(highestY, model.ball.y);
+            }
+            check(Math.abs(highestY - GameConfig.SETTER_SET_APEX_Y) < 1,
+                    "紅藍合法後排空中舉球共用同一最高點");
+        }
+
+        double xAtSet = team.backPlayer.x;
+        for (int frame = 0; frame < 120 && team.backPlayer.jumping; frame++) {
+            team.backPlayer.update(new TeamInput());
+        }
+        check(!team.backPlayer.jumping
+                        && (redSide ? team.backPlayer.x > xAtSet : team.backPlayer.x < xAtSet)
+                        && team.backPlayer.getAction() == PlayerAction.IDLE
+                        && team.backPlayer.assetName.equals(
+                                redSide ? "player 1 back.png" : "player 2 back.png"),
+                "紅藍後排空中舉球都沿本隊方向落地並恢復原圖");
+    }
+
+    private static void updateOnlySide(GameModel model, boolean redSide, TeamInput input) {
+        model.update(redSide ? input : new TeamInput(), redSide ? new TeamInput() : input);
+    }
+
+    private static void testNetRoundedTopCollision() {
+        NetHitBox net = new NetHitBox();
+        Ball top = new Ball(net.getCenterX(), net.getTop() - GameConfig.BALL_RADIUS);
+        top.vx = 0;
+        top.vy = 5;
+        check(top.collideWithNet(net) && top.vy < 0,
+                "網子圓頂中心仍用原本反彈係數回彈");
+        Ball corner = new Ball(net.getLeft() - GameConfig.BALL_RADIUS,
+                net.getTop() - GameConfig.BALL_RADIUS);
+        check(!net.intersectsBall(corner), "網子上方矩形直角已移除");
+        check(Math.abs(net.getBottom() - GameConfig.FLOOR_Y) < 0.01,
+                "網子底部仍貼地並維持直角");
+    }
+
+    private static void testAirSetAfterTakeoff() {
+        for (int role : new int[]{0, 2}) {
+            GameModel model = new GameModel();
+            TeamInput attack = new TeamInput();
+            Player player = prepareAttackReady(model, role, attack);
+            attack.canBackAirSet = role == 0;
+            attack.canWingAirSet = role == 2;
+            attackerRelease(player, model.ball);
+
+            TeamInput modifier = new TeamInput();
+            modifier.ball = model.ball;
+            modifier.airSetModifier = true;
+            modifier.hasFirstRegularTouch = true;
+            modifier.canBackAirSet = role == 0;
+            modifier.canWingAirSet = role == 2;
+            model.ball.x = -1000;
+            model.ball.y = -1000;
+            player.update(modifier);
+            for (int frame = 0; frame < 5; frame++) {
+                player.update(modifier);
+            }
+            check(player.getAction() == PlayerAction.ATTACK_READY,
+                    "起跳後按住舉球組合鍵等待球，不提前舉球");
+
+            TeamInput setPress = modifier.copy();
+            setPress.backJump = role == 0;
+            setPress.wingAttack = role == 2;
+            player.update(setPress);
+            check(player.getAction() == PlayerAction.ATTACK_READY
+                            && !player.hasAirSetAttemptThisFrame(),
+                    "球未進框時按攻擊鍵不播放舉球動畫，也不立即觸球");
+            placeBallInAttackHitBox(model, player);
+            player.update(setPress);
+            check(player.getAction() == PlayerAction.AIR_SETTING,
+                    "空中第二次攻擊鍵持續按住，球進框後切換舉球動畫");
+            check(new RallyContactHandler(model).tryAirSetContact(model.redTeam, true),
+                    "空中舉球於按鍵當幀完成碰球");
+            check(model.redHitCount == 2 && model.ball.vx == 0,
+                    "空中舉球計第二球且垂直飛行");
+            double highestY = model.ball.y;
+            for (int frame = 0; frame < 80 && model.ball.vy < 0; frame++) {
+                model.ball.update();
+                highestY = Math.min(highestY, model.ball.y);
+            }
+            check(Math.abs(highestY - GameConfig.SETTER_SET_APEX_Y) < 1,
+                    "空中舉球沿用舉球最高點");
+
+            double xAtSet = player.x;
+            if (role == 0) {
+                player.updateWhileAwaitingAuthority();
+                check(player.x > xAtSet && player.getAction() == PlayerAction.AIR_SETTING,
+                        "等待 Server 狀態時，後排空中舉球仍沿原方向移動");
+            }
+            for (int frame = 0; frame < 120 && player.jumping; frame++) {
+                player.update(new TeamInput());
+            }
+            check(!player.jumping, "空中舉球後角色會落地");
+            if (role == 0) {
+                check(player.x > xAtSet + 5,
+                        "後排舉球後保持原本的空中橫向軌跡直到落地");
+                check(player.getAction() == PlayerAction.IDLE
+                                && player.assetName.equals("player 1 back.png"),
+                        "後排落地立即恢復原本狀態與圖片");
+                player.update(new TeamInput());
+                check(player.getAction() == PlayerAction.IDLE,
+                        "後排落地後不會卡在空中舉球動作");
+            }
+        }
+
+        for (int role : new int[]{0, 2}) {
+            GameModel preheld = new GameModel();
+            TeamInput attack = new TeamInput();
+            attack.airSetModifier = true;
+            Player player = prepareAttackReady(preheld, role, attack);
+            TeamInput release = attack.copy();
+            release.backJump = false;
+            release.wingAttack = false;
+            player.update(release);
+            TeamInput press = attack.copy();
+            press.canBackAirSet = role == 0;
+            press.canWingAirSet = role == 2;
+            placeBallInAttackHitBox(preheld, player);
+            player.update(press);
+            check(player.getAction() == PlayerAction.AIR_SETTING
+                            && player.hasAirSetAttemptThisFrame(),
+                    "後排與 WS 起跳前預先按住舉球組合鍵，球進框後第二次按攻擊鍵可空中舉球");
+            check(new RallyContactHandler(preheld).tryAirSetContact(preheld.redTeam, true)
+                            && preheld.redHitCount == 2 && preheld.ball.vx == 0,
+                    "起跳前預按方向鍵的空中舉球也會於觸球當幀計第二球並垂直送出");
+        }
+    }
+
+    private static void testWingDiveBeforeFirstReception() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel model = new GameModel();
+            Team team = redSide ? model.redTeam : model.blueTeam;
+            TeamInput input = new TeamInput();
+            input.wingAttack = true;
+            team.wingSpiker.update(input);
+            check(team.wingSpiker.getAction() == PlayerAction.DIVE
+                            && team.wingSpiker.diving
+                            && (redSide ? team.wingSpiker.vx > 0 : team.wingSpiker.vx < 0),
+                    "紅藍 WS 第一球前只向網子撲球");
+            check(team.wingSpiker.isDefaultHitBoxActive(),
+                    "紅藍 WS 撲球期間一般碰撞框可接球");
+        }
+    }
+
+    private static void testBlueControlsRetainNumpadMappings() {
+        KeyboardController keyboard = new KeyboardController();
+        JPanel source = new JPanel();
+        for (int key : new int[]{KeyEvent.VK_NUMPAD0, KeyEvent.VK_NUMPAD4,
+                KeyEvent.VK_NUMPAD5, KeyEvent.VK_NUMPAD6,
+                KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT}) {
+            keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                    key, KeyEvent.CHAR_UNDEFINED));
+        }
+        TeamInput blue = keyboard.getBlueInput();
+        check(blue.backJump && blue.backDive && blue.servePressed
+                        && blue.wingAttack && blue.setterJump && blue.quickAttack
+                        && blue.airSetModifier,
+                "測試數字列按鍵不會蓋掉藍隊 NumPad 操作與雙方向鍵空中舉球");
+    }
+
+    private static void testAirSetRequiresBothDirectionKeys() {
+        JPanel source = new JPanel();
+        KeyboardController keyboard = new KeyboardController();
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_A, KeyEvent.CHAR_UNDEFINED));
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED));
+        check(!keyboard.getRedInput().airSetModifier && !keyboard.getBlueInput().airSetModifier,
+                "紅藍單按往左方向鍵不觸發空中舉球修正鍵");
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_D, KeyEvent.CHAR_UNDEFINED));
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED));
+        check(keyboard.getRedInput().airSetModifier && keyboard.getBlueInput().airSetModifier,
+                "紅隊 A+D、藍隊左+右同按才啟用空中舉球");
+        keyboard.keyReleased(new KeyEvent(source, KeyEvent.KEY_RELEASED, 0, 0,
+                KeyEvent.VK_A, KeyEvent.CHAR_UNDEFINED));
+        keyboard.keyReleased(new KeyEvent(source, KeyEvent.KEY_RELEASED, 0, 0,
+                KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED));
+        check(!keyboard.getRedInput().airSetModifier && !keyboard.getBlueInput().airSetModifier,
+                "放開任一方向鍵就取消空中舉球修正鍵");
+    }
+
+    private static void testBlockOnlyOnceAndSetterThirdTouch() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel model = new GameModel();
+            model.getServeHandler().setRedServing(!redSide);
+            Team team = redSide ? model.redTeam : model.blueTeam;
+            QuickAttacker blocker = team.quickAttacker;
+            TeamInput block = new TeamInput();
+            block.quickAttack = true;
+            for (int frame = 0; frame < 15; frame++) blocker.update(block);
+            model.ball.x = blocker.blockHitBox.getCenterX();
+            model.ball.y = blocker.blockHitBox.getCenterY();
+            double incomingVx = redSide ? -8 : 8;
+            model.ball.vx = incomingVx;
+            model.recordRegularHit(redSide, team.setter);
+            RallyContactHandler contacts = new RallyContactHandler(model);
+            contacts.collideTeam(team, redSide, block);
+            check(model.hasBlocked(redSide) && model.getHitCount(redSide) == 1,
+                    "紅藍首次攔網反彈但不計次");
+            model.ball.x = blocker.blockHitBox.getCenterX();
+            model.ball.y = blocker.blockHitBox.getCenterY();
+            model.ball.vx = incomingVx;
+            contacts.collideTeam(team, redSide, block);
+            check(model.ball.vx == incomingVx && model.getHitCount(redSide) == 1,
+                    "紅藍同隊第二次碰到攔網框直接穿過");
+            model.resetTeamContacts(redSide);
+            check(model.hasBlocked(redSide), "單純重算觸球次數不能重新開放攔網框");
+            model.recordRegularHit(redSide, team.setter);
+
+            model.recordRegularHit(redSide, team.backPlayer);
+            model.ball.x = team.setter.hitBox.getCenterX();
+            model.ball.y = team.setter.hitBox.getCenterY();
+            contacts.collideTeam(team, redSide, new TeamInput());
+            check(model.getHitCount(redSide) == 3 && model.getLastHitter(redSide) == team.setter,
+                    "紅藍 Setter 接第一球後可再接第三球");
+        }
+    }
+
+    private static void attackerRelease(Player player, model.ball.Ball ball) {
+        TeamInput release = new TeamInput();
+        release.ball = ball;
+        release.hasFirstRegularTouch = true;
+        player.update(release);
     }
 
     private static Player prepareAttackReady(GameModel model, int role, TeamInput pressed) {
         model.recordRegularHit(false, model.blueTeam.backPlayer);
         model.recordRegularHit(true, model.redTeam.setter);
         pressed.hasFirstRegularTouch = true;
+        pressed.ball = model.ball;
         Player attacker;
         if (role == 0) {
             attacker = model.redTeam.backPlayer;

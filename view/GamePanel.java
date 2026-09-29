@@ -13,6 +13,7 @@ import javax.swing.JPanel;
 import model.GameConfig;
 import model.GameModel;
 import network.NetworkView;
+import network.TimingDiagnostics;
 
 public class GamePanel extends JPanel {
     private final GameModel model;
@@ -39,7 +40,16 @@ public class GamePanel extends JPanel {
             long nextTickNanos = System.nanoTime();
 
             while (!Thread.currentThread().isInterrupted()) {
+                long lateNanos = System.nanoTime() - nextTickNanos;
+                if (networkView != null && lateNanos >= 25_000_000L) {
+                    TimingDiagnostics.record("client game loop late "
+                            + String.format("%.2f", lateNanos / 1_000_000.0) + " ms");
+                }
+                long updateStarted = System.nanoTime();
                 controller.update();
+                if (networkView != null) {
+                    TimingDiagnostics.recordIfSlow("client update", updateStarted, 25);
+                }
                 repaint();
 
                 nextTickNanos += tickNanos;
@@ -64,6 +74,7 @@ public class GamePanel extends JPanel {
 
     @Override
     protected void paintComponent(Graphics graphics) {
+        long paintStarted = System.nanoTime();
         super.paintComponent(graphics);
         Graphics2D g = (Graphics2D) graphics.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -71,5 +82,8 @@ public class GamePanel extends JPanel {
         renderer.render(g, model, mirrorWorld, networkView);
         networkStatusRenderer.draw(g, networkView);
         g.dispose();
+        if (networkView != null) {
+            TimingDiagnostics.recordIfSlow("client paint", paintStarted, 25);
+        }
     }
 }

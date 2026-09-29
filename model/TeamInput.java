@@ -6,6 +6,7 @@ GameModel 會依球的位置填入球場側別資訊。
 package model;
 
 import model.serve.ServeType;
+import model.ball.Ball;
 
 public class TeamInput {
     public boolean backLeft;
@@ -20,6 +21,12 @@ public class TeamInput {
     public boolean hasFirstRegularTouch;
 
     public boolean wingAttack;
+    public boolean airSetModifier;
+
+    // 僅供本機每幀角色判定，不進入網路輸入封包。
+    public Ball ball;
+    public boolean canBackAirSet;
+    public boolean canWingAirSet;
 
     // 扣球命中當下的球路修正鍵。
     public boolean spikeFlat;
@@ -46,6 +53,10 @@ public class TeamInput {
         copy.quickAttack = quickAttack;
         copy.hasFirstRegularTouch = hasFirstRegularTouch;
         copy.wingAttack = wingAttack;
+        copy.airSetModifier = airSetModifier;
+        copy.ball = ball;
+        copy.canBackAirSet = canBackAirSet;
+        copy.canWingAirSet = canWingAirSet;
         copy.spikeFlat = spikeFlat;
         copy.spikeShort = spikeShort;
         copy.spikeLob = spikeLob;

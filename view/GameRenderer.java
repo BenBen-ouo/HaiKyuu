@@ -89,19 +89,14 @@ public class GameRenderer {
             return;
         }
 
-        int x = (int) Math.round(box.getLeft());
-        int y = (int) Math.round(box.getTop());
-        int width = (int) Math.round(box.getRight() - box.getLeft());
-        int height = (int) Math.round(box.getBottom() - box.getTop());
-
         Graphics2D debugGraphics = (Graphics2D) g.create();
         try {
             debugGraphics.setColor(NET_HITBOX_FILL);
-            debugGraphics.fillRect(x, y, width, height);
+            debugGraphics.fill(box.getShape());
 
             debugGraphics.setColor(NET_HITBOX_STROKE);
             debugGraphics.setStroke(new BasicStroke(2));
-            debugGraphics.drawRect(x, y, width, height);
+            debugGraphics.draw(box.getShape());
         } finally {
             debugGraphics.dispose();
         }

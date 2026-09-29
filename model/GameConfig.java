@@ -27,7 +27,7 @@ public final class GameConfig {
     public static final double GRAVITY = 0.25;
 
     // Setter 未選快攻時，舉球球心固定到達的最高世界座標。
-    public static final double SETTER_SET_APEX_Y = 350;
+    public static final double SETTER_SET_APEX_Y = 300;
 
     // Setter 第二球按住 S／↓ 時，快攻舉球的球心最高點世界座標。
     public static final double RED_QUICK_SET_APEX_X = 591;
@@ -36,10 +36,10 @@ public final class GameConfig {
 
     public static final double PLAYER_SPEED = 4.3;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
-    public static final double PLAYER_JUMP_SPEED = -9.5;
+    public static final double PLAYER_JUMP_SPEED = -9.0;
     public static final double SETTER_JUMP_SPEED = -6.6;
-    public static final double QUICK_ATTACKER_JUMP_SPEED = -8.3;
-    public static final double WING_SPIKER_JUMP_SPEED = -8.3;
+    public static final double QUICK_ATTACKER_JUMP_SPEED = -7.8;
+    public static final double WING_SPIKER_JUMP_SPEED = -7.8;
     public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
@@ -147,7 +147,7 @@ public final class GameConfig {
     public static final double SERVE_JUMP_VX = 11.5;
     public static final double SERVE_JUMP_VY = -9.5;
 
-    // 三米線距離（像素），後排球員不得在此線內起跳攻擊
+    // 三米線距離（像素）；後排起跳扣球或空中舉球都以起跳中心判定，踩線也違規。
     public static final double THREE_METER_PX = 167.0;
 
     // 預留給之後啟用的跳發第一段拋球位置與力量（目前未使用）。

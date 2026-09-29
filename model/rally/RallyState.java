@@ -19,6 +19,10 @@ public class RallyState {
     // 記錄本回合是否有舉球接觸（用於限制舉球只能碰一次）
     private boolean redSetterTouched = false;
     private boolean blueSetterTouched = false;
+    private boolean redSetterTouchedFirst = false;
+    private boolean blueSetterTouchedFirst = false;
+    private boolean redBlockUsed = false;
+    private boolean blueBlockUsed = false;
 
     public void resetCounters() {
         redHitCount = 0;
@@ -28,6 +32,10 @@ public class RallyState {
         lastTouchWasBlock = false;
         redSetterTouched = false;
         blueSetterTouched = false;
+        redSetterTouchedFirst = false;
+        blueSetterTouchedFirst = false;
+        redBlockUsed = false;
+        blueBlockUsed = false;
     }
 
     public void resetAll() {
@@ -100,12 +108,18 @@ public class RallyState {
 
         if (redSide) {
             redLastHitter = hitter;
+            if (hitter instanceof Setter && !redSetterTouched) {
+                redSetterTouchedFirst = redHitCount == 0;
+            }
             if (counts) redHitCount++;
             if (hitter instanceof Setter) {
                 redSetterTouched = true;
             }
         } else {
             blueLastHitter = hitter;
+            if (hitter instanceof Setter && !blueSetterTouched) {
+                blueSetterTouchedFirst = blueHitCount == 0;
+            }
             if (counts) blueHitCount++;
             if (hitter instanceof Setter) {
                 blueSetterTouched = true;
@@ -119,8 +133,10 @@ public class RallyState {
 
         if (redSide) {
             redLastHitter = blocker;
+            redBlockUsed = true;
         } else {
             blueLastHitter = blocker;
+            blueBlockUsed = true;
         }
     }
 
@@ -128,13 +144,28 @@ public class RallyState {
         return redSide ? redSetterTouched : blueSetterTouched;
     }
 
+    public boolean canSetterTouch(boolean redSide) {
+        if (!hasSetterTouched(redSide)) {
+            return true;
+        }
+        return redSide
+                ? redSetterTouchedFirst && redHitCount == 2
+                : blueSetterTouchedFirst && blueHitCount == 2;
+    }
+
+    public boolean hasBlocked(boolean redSide) {
+        return redSide ? redBlockUsed : blueBlockUsed;
+    }
+
     public void resetHitCount(boolean redSide) {
         if (redSide) {
             redHitCount = 0;
             redSetterTouched = false;
+            redSetterTouchedFirst = false;
         } else {
             blueHitCount = 0;
             blueSetterTouched = false;
+            blueSetterTouchedFirst = false;
         }
     }
 }

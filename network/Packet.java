@@ -21,7 +21,7 @@ public final class Packet {
     public static final int INPUT_BACK_DIVE = 1 << 3;
     public static final int INPUT_SETTER_JUMP = 1 << 4;
     public static final int INPUT_QUICK_ATTACK = 1 << 5;
-    // bit 6 保留，不移動既有輸入位元位置。
+    public static final int INPUT_AIR_SET_MODIFIER = 1 << 6;
     public static final int INPUT_WING_ATTACK = 1 << 7;
     public static final int INPUT_SPIKE_FLAT = 1 << 8;
     public static final int INPUT_SPIKE_SHORT = 1 << 9;
@@ -45,7 +45,8 @@ public final class Packet {
         SCORE,
         RULE,
         RESET,
-        FLOW
+        FLOW,
+        AIR_SET_CONTACT
     }
 
     public static int encodeInput(TeamInput input) {
@@ -56,6 +57,7 @@ public final class Packet {
         if (input.backDive) mask |= INPUT_BACK_DIVE;
         if (input.setterJump) mask |= INPUT_SETTER_JUMP;
         if (input.quickAttack) mask |= INPUT_QUICK_ATTACK;
+        if (input.airSetModifier) mask |= INPUT_AIR_SET_MODIFIER;
         if (input.wingAttack) mask |= INPUT_WING_ATTACK;
         if (input.spikeFlat) mask |= INPUT_SPIKE_FLAT;
         if (input.spikeShort) mask |= INPUT_SPIKE_SHORT;
@@ -74,6 +76,7 @@ public final class Packet {
         input.backDive = (mask & INPUT_BACK_DIVE) != 0;
         input.setterJump = (mask & INPUT_SETTER_JUMP) != 0;
         input.quickAttack = (mask & INPUT_QUICK_ATTACK) != 0;
+        input.airSetModifier = (mask & INPUT_AIR_SET_MODIFIER) != 0;
         input.wingAttack = (mask & INPUT_WING_ATTACK) != 0;
         input.spikeFlat = (mask & INPUT_SPIKE_FLAT) != 0;
         input.spikeShort = (mask & INPUT_SPIKE_SHORT) != 0;
@@ -493,7 +496,9 @@ public final class Packet {
             PlayerAction serverAction = actionOrdinal >= 0 && actionOrdinal < actions.length
                     ? actions[actionOrdinal]
                     : PlayerAction.IDLE;
-            if (player instanceof QuickAttacker) {
+            if (player instanceof QuickAttacker || player.getAction() != serverAction
+                    || !player.isAssetCompatibleWith(serverAction)
+                    || (!player.isAnimationPlaying() && !player.assetName.equals(assetName))) {
                 player.applyNetworkAction(serverAction, assetName);
             } else {
                 player.setActionForNetwork(serverAction);

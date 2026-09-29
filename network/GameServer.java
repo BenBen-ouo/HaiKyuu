@@ -83,7 +83,14 @@ public final class GameServer implements AutoCloseable {
         try {
             long nextTick = System.nanoTime();
             while (running) {
+                long lateNanos = System.nanoTime() - nextTick;
+                if (lateNanos >= 25_000_000L) {
+                    TimingDiagnostics.record("server tick late "
+                            + String.format("%.2f", lateNanos / 1_000_000.0) + " ms");
+                }
+                long tickStarted = System.nanoTime();
                 updateOneTick();
+                TimingDiagnostics.recordIfSlow("server full tick", tickStarted, 25);
                 nextTick += TICK_NANOS;
                 sleepUntil(nextTick);
             }
@@ -137,7 +144,9 @@ public final class GameServer implements AutoCloseable {
         FrameState before = FrameState.capture(model);
         int redMask = red.takeInputMaskForTick();
         int blueMask = blue.takeInputMaskForTick();
+        long updateStarted = System.nanoTime();
         model.update(Packet.decodeInput(redMask), Packet.decodeInput(blueMask));
+        TimingDiagnostics.recordIfSlow("server model update", updateStarted, 25);
 
         if (terminating) {
             return;
@@ -191,7 +200,7 @@ public final class GameServer implements AutoCloseable {
     }
 
     private List<Packet.EventType> detectSyncEvents(FrameState before) {
-        List<Packet.EventType> events = new ArrayList<>(3);
+        List<Packet.EventType> events = new ArrayList<>(5);
 
         ServeState currentServeState = model.getServeHandler().getState();
         if (before.serveState == ServeState.WAITING_FOR_SERVE
@@ -202,6 +211,10 @@ public final class GameServer implements AutoCloseable {
 
         if (model.didSetterContactThisFrame()) {
             events.add(Packet.EventType.SETTER_CONTACT);
+        }
+
+        if (model.didAirSetContactThisFrame()) {
+            events.add(Packet.EventType.AIR_SET_CONTACT);
         }
 
         if (model.didFirstServeReceptionThisFrame() && !model.didSetterContactThisFrame()) {
