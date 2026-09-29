@@ -52,12 +52,12 @@ public class KeyboardController implements KeyListener {
         input.servePressed = isPressed(KeyEvent.VK_NUMPAD0);
 
         // 沒有獨立數字鍵時的測試替代鍵（鍵盤上方數字列；之後會註解掉）。
-        input.backJump = input.backJump || isPressed(KeyEvent.VK_0);
-        input.backDive = input.backDive || isPressed(KeyEvent.VK_0);
-        input.setterJump = input.setterJump || isPressed(KeyEvent.VK_8);
-        input.quickAttack = input.quickAttack || isPressed(KeyEvent.VK_9);
-        input.wingAttack = input.wingAttack || isPressed(KeyEvent.VK_7);
-        input.servePressed = input.servePressed || isPressed(KeyEvent.VK_0);
+        // input.backJump = input.backJump || isPressed(KeyEvent.VK_0);
+        // input.backDive = input.backDive || isPressed(KeyEvent.VK_0);
+        // input.setterJump = input.setterJump || isPressed(KeyEvent.VK_8);
+        // input.quickAttack = input.quickAttack || isPressed(KeyEvent.VK_9);
+        // input.wingAttack = input.wingAttack || isPressed(KeyEvent.VK_7);
+        // input.servePressed = input.servePressed || isPressed(KeyEvent.VK_0);
 
         input.serveType = getBlueServeType(input);
 
