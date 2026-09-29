@@ -40,7 +40,9 @@ public abstract class Player {
     protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
     private boolean attackAttemptThisFrame;
-    private boolean ballInAttackHitBoxWhenPressed;
+    private boolean ballInAttackHitBoxWhenSwingStarted;
+    private boolean heldAttackQueued;
+    private boolean airSetAttemptThisFrame;
 
     public double minX = GameConfig.WORLD_LEFT;
     public double maxX = GameConfig.WORLD_RIGHT;
@@ -62,7 +64,9 @@ public abstract class Player {
 
     public void resetToInitial() {
         attackAttemptThisFrame = false;
-        ballInAttackHitBoxWhenPressed = false;
+        ballInAttackHitBoxWhenSwingStarted = false;
+        heldAttackQueued = false;
+        airSetAttemptThisFrame = false;
         PlayerPhysics.resetToInitial(this);
         finishAction();
         attackHitBox.disable();
@@ -129,26 +133,57 @@ public abstract class Player {
     }
 
     protected void startAttackReady(double horizontalSpeed) {
+        heldAttackQueued = false;
         actionAnimator.startAttackReady(horizontalSpeed);
     }
 
     public void startAttackSwingAnimation() {
+        heldAttackQueued = false;
         attackAttemptThisFrame = true;
         actionAnimator.startAttackSwing();
     }
 
-    public boolean hasValidAttackAttemptThisFrame() {
-        return attackAttemptThisFrame && ballInAttackHitBoxWhenPressed;
+    public boolean hasAirSetAttemptThisFrame() {
+        return airSetAttemptThisFrame;
     }
 
-    /** 球移動前記錄按下攻擊鍵當下是否已碰到攻擊框；提早空揮不會預約命中。 */
+    protected void startAirSettingAnimation() {
+        heldAttackQueued = false;
+        airSetAttemptThisFrame = true;
+        actionAnimator.playAirSetting();
+    }
+
+    protected boolean isBallInAttackBox(TeamInput input) {
+        return input.ball != null && attackHitBox.intersectsBall(input.ball);
+    }
+
+    protected boolean canAirSetWith(TeamInput input) {
+        return input.airSetModifier;
+    }
+
+    /** 起跳後第二次按攻擊鍵可先等球；放開按鍵就取消等待。 */
+    protected boolean isHeldAttackReady(boolean attackPressed, boolean justPressed) {
+        if (!attackPressed) {
+            heldAttackQueued = false;
+        } else if (justPressed && jumping && action == PlayerAction.ATTACK_READY) {
+            heldAttackQueued = true;
+        }
+        return attackPressed && heldAttackQueued && jumping && action == PlayerAction.ATTACK_READY;
+    }
+
+    public boolean hasValidAttackAttemptThisFrame() {
+        return attackAttemptThisFrame && ballInAttackHitBoxWhenSwingStarted;
+    }
+
+    /** 球移動前確認本幀開始揮臂時已與攻擊框重疊，不以球移動後的位置補判。 */
     public void captureAttackAttemptBallOverlap(Ball ball) {
-        ballInAttackHitBoxWhenPressed = attackAttemptThisFrame && attackHitBox.intersectsBall(ball);
+        ballInAttackHitBoxWhenSwingStarted = attackAttemptThisFrame && attackHitBox.intersectsBall(ball);
     }
 
     protected void clearAttackAttempt() {
         attackAttemptThisFrame = false;
-        ballInAttackHitBoxWhenPressed = false;
+        ballInAttackHitBoxWhenSwingStarted = false;
+        airSetAttemptThisFrame = false;
     }
 
     protected void startBlockAnimation() {
@@ -208,5 +243,25 @@ public abstract class Player {
         if (assetName != null && !assetName.isBlank()) {
             animation.applyNetworkAsset(assetName);
         }
+    }
+
+    public boolean isAssetCompatibleWith(PlayerAction serverAction) {
+        String name = assetName;
+        return switch (serverAction) {
+            case IDLE -> !name.contains(" run") && !name.contains(" dive")
+                    && !name.contains(" attack") && !name.contains(" block")
+                    && !name.contains(" setting") && !name.contains(" receive");
+            case RUN_APPROACH, RUN_LOOP, RUN_RETURN -> name.contains(" run");
+            case ATTACK_READY -> name.contains(" attack1");
+            case ATTACK_SWING -> name.contains(" attack2") || name.contains(" attack3");
+            case BLOCK -> name.contains(" block");
+            case DIVE -> name.contains(" dive");
+            case SETTING, AIR_SETTING -> name.contains(" setting");
+            case RECEIVING -> name.contains(" receive");
+        };
+    }
+
+    public boolean isAnimationPlaying() {
+        return animation.isPlaying();
     }
 }

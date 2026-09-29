@@ -14,5 +14,6 @@ public enum PlayerAction {
     BLOCK,
     DIVE,
     SETTING,
-    RECEIVING
+    RECEIVING,
+    AIR_SETTING
 }

@@ -39,3 +39,5 @@ java -cp .\build Main join <Server-IP>
 ```
 
 Server 與兩位 Client 必須在同一區域網路中。任一方離線後，Server 會結束該局；下一局需重新啟動 Server 與兩個 Client。
+
+連線卡頓診斷會自動啟用，不需按任何鍵。Server 與兩個 Client 啟動時都會在主控台印出「卡頓紀錄檔」的完整路徑，檔案位於專案的 `diagnostics` 資料夾。開發測試過程若再次出現卡頓，請記下發生時間並提供三台程式各自的 `timing-*.log`；紀錄包含更新、繪圖、接球事件的超時及快照中斷，不包含玩家按鍵或 IP。

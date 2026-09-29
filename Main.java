@@ -14,6 +14,7 @@ import model.GameModel;
 import network.GameClient;
 import network.GameServer;
 import network.NetworkView;
+import network.TimingDiagnostics;
 import view.GamePanel;
 
 public class Main {
@@ -40,6 +41,7 @@ public class Main {
     }
 
     private static void startDedicatedServer() {
+        TimingDiagnostics.start("server");
         try (GameServer server = new GameServer()) {
             Runtime.getRuntime().addShutdownHook(new Thread(server::close, "haikyuu-server-shutdown"));
             server.run();
@@ -49,6 +51,7 @@ public class Main {
     }
 
     private static void startClient(String hostIp) {
+        TimingDiagnostics.start("client");
         try {
             GameModel model = new GameModel();
             KeyboardController keyboard = new KeyboardController();
