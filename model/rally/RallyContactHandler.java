@@ -20,13 +20,37 @@ import model.player.WingSpiker;
 public class RallyContactHandler {
     private static final double TO_SETTER_PASS_POWER = 13;
     private static final double THIRD_TOUCH_PASS_POWER = 16;
-    private static final double Setter_THIRD_TOUCH_PASS_POWER = 10;
+    private static final double Setter_THIRD_TOUCH_PASS_POWER = 13;
     private static final double BALL_UNSTUCK_DISTANCE = 6.0;
 
     private final GameModel model;
 
     public RallyContactHandler(GameModel model) {
         this.model = model;
+    }
+
+    /** 攻擊鍵按下的當幀處理空中舉球，避免球在本幀移動後才碰撞造成漏接。 */
+    public boolean tryAirSetContact(Team team, boolean redSide) {
+        if (model.getHitCount(redSide) != 1 || !model.isServeReceptionComplete()) {
+            return false;
+        }
+        for (Player player : new Player[]{team.backPlayer, team.wingSpiker}) {
+            if (!player.hasAirSetAttemptThisFrame() || player == model.getLastHitter(redSide)) {
+                continue;
+            }
+            int framesToApex = framesToApex(GameConfig.SETTER_SET_APEX_Y);
+            model.ball.vx = 0;
+            model.ball.vy = initialVyForApex(GameConfig.SETTER_SET_APEX_Y, framesToApex);
+            model.ball.stopRotation();
+            model.ball.useSlowFloorBounceSpin();
+            model.spikeEffect.stopSpikeTrail();
+            model.recordRegularHit(redSide, player);
+            if (isBackRowThreeMeterFault(player, redSide)) {
+                model.awardPointWithMessage(!redSide, "後排三米線");
+            }
+            return true;
+        }
+        return false;
     }
 
     public void collideTeam(Team team, boolean redSide, TeamInput input) {
@@ -54,8 +78,8 @@ public class RallyContactHandler {
                 break;
             }
 
-            // 如果是舉球員且本回合已經碰過一次舉球，第二次不應干預球（passed through）
-            if (player instanceof Setter && model.hasSetterTouched(redSide)) {
+            // Setter 接第一球後可再接第三球；接第二球後不可緊接第三球。
+            if (player instanceof Setter && !model.canSetterTouch(redSide)) {
                 continue;
             }
 
@@ -80,10 +104,6 @@ public class RallyContactHandler {
                 continue;
             }
 
-            if (!player.attackHitBox.intersectsBall(model.ball)) {
-                continue;
-            }
-
             // 接發方第一次一般觸球前，任一方用攻擊框碰到發球都屬發球犯規。
             if (!model.isServeReceptionComplete()) {
                 performSpike(createAttackContext(player, redSide), input);
@@ -92,7 +112,7 @@ public class RallyContactHandler {
             }
 
             // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
-            if (isBackRowAttackFault(player, redSide)) {
+            if (isBackRowThreeMeterFault(player, redSide)) {
                 AttackContext ctx = createAttackContext(player, redSide);
                 performSpike(ctx, input);
                 model.recordHit(redSide, player);
@@ -120,7 +140,7 @@ public class RallyContactHandler {
         return false;
     }
 
-    private boolean isBackRowAttackFault(Player player, boolean redSide) {
+    private boolean isBackRowThreeMeterFault(Player player, boolean redSide) {
         if (!(player instanceof BackPlayer)) {
             return false;
         }
@@ -198,6 +218,10 @@ public class RallyContactHandler {
             return false;
         }
 
+        if (model.hasBlocked(blocker.redSide)) {
+            return false;
+        }
+
         if (!blocker.blockHitBox.intersectsBall(model.ball)) {
             return false;
         }
@@ -210,6 +234,7 @@ public class RallyContactHandler {
 
         // 發球犯規也要先產生與正常攔網相同的球體反彈，再結束這一球。
         if (!model.isServeReceptionComplete()) {
+            model.recordBlock(blocker.redSide, blocker);
             model.awardPointWithMessage(!blocker.redSide, "發球犯規");
             return true;
         }

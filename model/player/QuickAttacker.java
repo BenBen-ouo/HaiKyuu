@@ -30,7 +30,8 @@ public class QuickAttacker extends Player {
         vx = 0;
 
         if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
-            if (action == PlayerAction.ATTACK_READY && justPressedQuick && jumping) {
+            if (isHeldAttackReady(input.quickAttack, justPressedQuick)
+                    && isBallInAttackBox(input)) {
                 startAttackSwingAnimation();
             }
 

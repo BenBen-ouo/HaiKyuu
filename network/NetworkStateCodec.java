@@ -21,13 +21,7 @@ final class NetworkStateCodec {
 
         out.writeInt(state.redScore);
         out.writeInt(state.blueScore);
-        out.writeInt(state.redHitCount);
-        out.writeInt(state.blueHitCount);
-        out.writeInt(state.redLastHitterIndex);
-        out.writeInt(state.blueLastHitterIndex);
-        out.writeByte(state.lastHitTeamCode);
-        out.writeBoolean(state.lastTouchWasBlock);
-        out.writeBoolean(state.serveReceptionComplete);
+        writeRallyContacts(out, state.rallyContacts);
 
         out.writeByte(state.serveStateOrdinal);
         out.writeBoolean(state.redServing);
@@ -50,13 +44,7 @@ final class NetworkStateCodec {
 
         int redScore = in.readInt();
         int blueScore = in.readInt();
-        int redHitCount = in.readInt();
-        int blueHitCount = in.readInt();
-        int redLastHitterIndex = in.readInt();
-        int blueLastHitterIndex = in.readInt();
-        int lastHitTeamCode = in.readByte();
-        boolean lastTouchWasBlock = in.readBoolean();
-        boolean serveReceptionComplete = in.readBoolean();
+        Packet.RallyContactState rallyContacts = readRallyContacts(in);
 
         int serveStateOrdinal = in.readByte();
         boolean redServing = in.readBoolean();
@@ -74,13 +62,36 @@ final class NetworkStateCodec {
         return new Packet.CompactState(
                 ball, redTeam, blueTeam,
                 redScore, blueScore,
-                redHitCount, blueHitCount,
-                redLastHitterIndex, blueLastHitterIndex,
-                lastHitTeamCode, lastTouchWasBlock, serveReceptionComplete,
+                rallyContacts,
                 serveStateOrdinal, redServing, rallyOver, deadBallTimer,
                 matchOver, matchWinnerCode,
                 transientMessage, transientMessageTimer, transientMessageColorCode,
                 pendingTouchOut, pendingTouchOutWinnerCode
+        );
+    }
+
+    static void writeRallyContacts(DataOutputStream out, Packet.RallyContactState state) throws IOException {
+        out.writeInt(state.redHitCount);
+        out.writeInt(state.blueHitCount);
+        out.writeInt(state.redLastHitterIndex);
+        out.writeInt(state.blueLastHitterIndex);
+        out.writeByte(state.lastHitTeamCode);
+        out.writeBoolean(state.lastTouchWasBlock);
+        out.writeBoolean(state.serveReceptionComplete);
+        out.writeBoolean(state.redSetterTouched);
+        out.writeBoolean(state.blueSetterTouched);
+        out.writeBoolean(state.redSetterTouchedFirst);
+        out.writeBoolean(state.blueSetterTouchedFirst);
+        out.writeBoolean(state.redBlockUsed);
+        out.writeBoolean(state.blueBlockUsed);
+    }
+
+    static Packet.RallyContactState readRallyContacts(DataInputStream in) throws IOException {
+        return new Packet.RallyContactState(
+                in.readInt(), in.readInt(), in.readInt(), in.readInt(),
+                in.readByte(), in.readBoolean(), in.readBoolean(),
+                in.readBoolean(), in.readBoolean(), in.readBoolean(),
+                in.readBoolean(), in.readBoolean(), in.readBoolean()
         );
     }
 

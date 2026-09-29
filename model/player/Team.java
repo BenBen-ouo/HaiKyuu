@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class Team {
-    private static final double RECEIVE_HITBOX_RED_X = 40;
+    private static final double RECEIVE_HITBOX_RED_X = 30;
     private static final double RECEIVE_HITBOX_Y = 60;
     private static final double RECEIVE_HITBOX_WIDTH = 25;
     private static final double RECEIVE_HITBOX_HEIGHT = 10;
@@ -20,17 +20,18 @@ public class Team {
     private static final double SETTER_HITBOX_WIDTH = 20;
     private static final double SETTER_HITBOX_HEIGHT = 10;
     private static final int SETTER_HITBOX_ARC = 5;
+    private static final double SETTER_HITBOX_ROTATION = 0; ///之後再看有沒有需要讓貼網球早點接觸
 
     private static final double BLOCK_HITBOX_RED_X = 50;
-    private static final double BLOCK_HITBOX_Y = 25;
+    private static final double BLOCK_HITBOX_Y = 10;
     private static final double BLOCK_HITBOX_WIDTH = 15;
     private static final double BLOCK_HITBOX_HEIGHT = 50;
     private static final int BLOCK_HITBOX_ARC = 10;
     private static final double BLOCK_HITBOX_ROTATION = 40;
 
-    private static final double ATTACK_HITBOX_RED_X = 45;
-    private static final double ATTACK_HITBOX_Y = 25;
-    private static final double ATTACK_HITBOX_WIDTH = 25;
+    private static final double ATTACK_HITBOX_RED_X = 40;
+    private static final double ATTACK_HITBOX_Y = 10;
+    private static final double ATTACK_HITBOX_WIDTH = 30;
     private static final double ATTACK_HITBOX_HEIGHT = 40;
 
     public BackPlayer backPlayer;

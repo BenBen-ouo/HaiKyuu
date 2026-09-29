@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class BackPlayer extends Player {
-    private static final double BACK_ATTACK_AIR_SPEED = 2.5;
+    private static final double BACK_ATTACK_AIR_SPEED = 2.8;
 
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;
@@ -41,8 +41,9 @@ public class BackPlayer extends Player {
             return;
         }
 
-        if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
-            updateBackAttack(justPressedAction);
+        if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING
+                || action == PlayerAction.AIR_SETTING) {
+            updateBackAttack(justPressedAction, input);
             previousBackAction = actionPressed;
             return;
         }
@@ -88,6 +89,13 @@ public class BackPlayer extends Player {
             return;
         }
 
+        if (action == PlayerAction.AIR_SETTING && jumping) {
+            vx = directionTowardNet() * BACK_ATTACK_AIR_SPEED;
+            applyGravity();
+            updateActionAnimation();
+            return;
+        }
+
         super.updateWhileAwaitingAuthority();
     }
 
@@ -121,9 +129,14 @@ public class BackPlayer extends Player {
         return false;
     }
 
-    private void updateBackAttack(boolean justPressedAction) {
-        if (action == PlayerAction.ATTACK_READY && justPressedAction && jumping) {
-            startAttackSwingAnimation();
+    private void updateBackAttack(boolean justPressedAction, TeamInput input) {
+        if (isHeldAttackReady(input.backJump || input.backDive, justPressedAction)
+                && isBallInAttackBox(input)) {
+            if (input.canBackAirSet && canAirSetWith(input)) {
+                startAirSettingAnimation();
+            } else {
+                startAttackSwingAnimation();
+            }
         }
 
         if (jumping) {

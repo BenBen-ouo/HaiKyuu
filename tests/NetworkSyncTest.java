@@ -12,11 +12,14 @@ import model.serve.ServeState;
 public final class NetworkSyncTest {
     public static void main(String[] args) throws Exception {
         testWorldSnapshotRoundTripAndOrdering();
+        testRallyContactsWithoutReliableEvent();
+        testReliableEventRestoresContactHistory();
         testReliableEventsStayInOrder();
         testServerKeepsUnacknowledgedEvents();
         testControlsStayInOrder();
         testMotionSnapshotKeepsAnimationAlive();
         testMbSnapshotReconcilesActionAndAsset();
+        testAirSetInputAndSnapshotAnimation();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
         if (args.length > 0 && "loopback".equals(args[0])) {
@@ -59,20 +62,87 @@ public final class NetworkSyncTest {
         return decoded;
     }
 
+    private static void testRallyContactsWithoutReliableEvent() throws Exception {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel server = new GameModel();
+            GameModel client = new GameModel();
+            server.getServeHandler().setRedServing(!redSide);
+            model.player.Team team = redSide ? server.redTeam : server.blueTeam;
+            server.recordRegularHit(redSide, team.backPlayer);
+            server.recordRegularHit(redSide, team.wingSpiker);
+            Packet.WorldSnapshot secondTouch = snapshot(10, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
+            secondTouch.rallyContacts.applyTo(client);
+            check(client.getHitCount(redSide) == 2
+                            && client.getLastHitter(redSide) == (redSide
+                            ? client.redTeam.wingSpiker : client.blueTeam.wingSpiker)
+                            && client.isServeReceptionComplete(),
+                    "一般第二球即使沒有可靠事件，Client 仍校正觸球次數、上一觸球者與接發狀態");
+
+            server.recordRegularHit(redSide, team.quickAttacker);
+            snapshot(11, 0, Packet.WorldSnapshot.from(server, 0))
+                    .snapshot.rallyContacts.applyTo(client);
+            check(client.getHitCount(redSide) == 3, "一般第三球也由即時快照校正");
+
+            server.resetCounters();
+            snapshot(12, 0, Packet.WorldSnapshot.from(server, 0))
+                    .snapshot.rallyContacts.applyTo(client);
+            check(client.getHitCount(redSide) == 0 && client.getLastHitter(redSide) == null,
+                    "過網清零即使沒有可靠事件，Client 仍同步歸零");
+        }
+    }
+
+    private static void testReliableEventRestoresContactHistory() throws Exception {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel firstSetter = new GameModel();
+            model.player.Team firstTeam = redSide ? firstSetter.redTeam : firstSetter.blueTeam;
+            firstSetter.recordHit(redSide, firstTeam.setter);
+            firstSetter.recordHit(redSide, firstTeam.backPlayer);
+            GameModel firstClient = new GameModel();
+            event(1, Packet.EventType.SETTER_CONTACT, Packet.CompactState.from(firstSetter))
+                    .state.applyTo(firstClient);
+            check(firstClient.hasSetterTouched(redSide) && firstClient.canSetterTouch(redSide),
+                    "Setter 接第一球後，可靠事件保留第三球可再碰的歷史");
+
+            GameModel secondSetter = new GameModel();
+            model.player.Team secondTeam = redSide ? secondSetter.redTeam : secondSetter.blueTeam;
+            secondSetter.recordHit(redSide, secondTeam.backPlayer);
+            secondSetter.recordHit(redSide, secondTeam.setter);
+            GameModel secondClient = new GameModel();
+            event(2, Packet.EventType.SETTER_CONTACT, Packet.CompactState.from(secondSetter))
+                    .state.applyTo(secondClient);
+            check(secondClient.hasSetterTouched(redSide) && !secondClient.canSetterTouch(redSide),
+                    "Setter 接第二球後，可靠事件不誤開第三球觸球資格");
+
+            secondSetter.recordBlock(redSide, secondTeam.quickAttacker);
+            snapshot(13, 0, Packet.WorldSnapshot.from(secondSetter, 0))
+                    .snapshot.rallyContacts.applyTo(secondClient);
+            check(secondClient.hasBlocked(redSide) && secondClient.getHitCount(redSide) == 2,
+                    "攔網使用記錄也隨即時快照校正，且攔網不加觸球次數");
+            secondSetter.resetCounters();
+            event(3, Packet.EventType.FLOW, Packet.CompactState.from(secondSetter))
+                    .state.applyTo(secondClient);
+            check(!secondClient.hasBlocked(redSide) && !secondClient.hasSetterTouched(redSide),
+                    "可靠事件可完整還原重置後的攔網與 Setter 歷史");
+        }
+    }
+
     private static void testReliableEventsStayInOrder() throws Exception {
         Packet.CompactState state = Packet.CompactState.from(new GameModel());
         ReliableEventInbox inbox = new ReliableEventInbox();
-        UdpCodec.Event first = event(1, state);
-        UdpCodec.Event second = event(2, state);
+        UdpCodec.Event first = event(1, Packet.EventType.AIR_SET_CONTACT, state);
+        UdpCodec.Event second = event(2, Packet.EventType.RULE, state);
+        UdpCodec.Event third = event(3, Packet.EventType.SCORE, state);
         inbox.offer(second);
+        inbox.offer(third);
         check(inbox.pollNext() == null, "第二件先到時不跳過第一件");
         inbox.offer(first);
-        check(inbox.pollNext() == first && inbox.pollNext() == second,
-                "亂序事件按 ID 逐件處理");
+        check(inbox.pollNext() == first && inbox.pollNext() == second
+                        && inbox.pollNext() == third,
+                "空中舉球、違規、得分事件亂序到達仍按 ID 逐件處理");
         inbox.offer(first);
         check(inbox.pollNext() == null, "重送的事件不重複處理");
 
-        byte[] abortBytes = UdpCodec.matchAborted(7, 3, GameServer.SYNC_TIMEOUT_MESSAGE);
+        byte[] abortBytes = UdpCodec.matchAborted(7, 4, GameServer.SYNC_TIMEOUT_MESSAGE);
         UdpCodec.MatchAborted aborted = (UdpCodec.MatchAborted) UdpCodec.decode(abortBytes, abortBytes.length);
         inbox.offer(aborted);
         check(inbox.pollNext() == aborted
@@ -80,8 +150,9 @@ public final class NetworkSyncTest {
                 "中止通知延續事件順序並攜帶原因");
     }
 
-    private static UdpCodec.Event event(int id, Packet.CompactState state) throws Exception {
-        byte[] bytes = UdpCodec.event(7, id, id, Packet.EventType.SCORE, id, state);
+    private static UdpCodec.Event event(int id, Packet.EventType type,
+                                         Packet.CompactState state) throws Exception {
+        byte[] bytes = UdpCodec.event(7, id, id, type, id, state);
         return (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
     }
 
@@ -161,6 +232,39 @@ public final class NetworkSyncTest {
                 "舊攔網動畫不會在下一幀覆蓋攻擊圖片");
     }
 
+    private static void testAirSetInputAndSnapshotAnimation() {
+        TeamInput input = new TeamInput();
+        input.airSetModifier = true;
+        check(Packet.decodeInput(Packet.encodeInput(input)).airSetModifier,
+                "空中舉球方向修正鍵會傳到 Server");
+        input.backLeft = true;
+        input.backJump = true;
+        TeamInput blueWorldInput = input.mirroredHorizontally();
+        TeamInput decodedBlueInput = Packet.decodeInput(Packet.encodeInput(blueWorldInput));
+        check(decodedBlueInput.airSetModifier && decodedBlueInput.backJump
+                        && decodedBlueInput.backRight && !decodedBlueInput.backLeft,
+                "藍方網路視角只翻轉水平移動，保留空中舉球與攻擊鍵");
+
+        GameModel local = new GameModel();
+        GameModel server = new GameModel();
+        local.redTeam.backPlayer.assetName = "player 1 back.png";
+        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive2.png");
+        Packet.PlayerState.from(server.redTeam.backPlayer).applyMotionTo(local.redTeam.backPlayer);
+        check(local.redTeam.backPlayer.getAction() == PlayerAction.DIVE
+                        && local.redTeam.backPlayer.assetName.contains("dive"),
+                "本機後排快照進入撲球時同步圖片");
+        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive3.png");
+        Packet.PlayerState.from(server.redTeam.backPlayer).applyMotionTo(local.redTeam.backPlayer);
+        check(local.redTeam.backPlayer.assetName.equals("player 1 dive3.png"),
+                "本機撲球動畫被校正後仍跟隨 Server 後續圖片");
+
+        local.redTeam.wingSpiker.applyNetworkAction(PlayerAction.RUN_LOOP, "player 1 run1.png");
+        Packet.PlayerState.from(server.redTeam.wingSpiker).applyMotionTo(local.redTeam.wingSpiker);
+        check(local.redTeam.wingSpiker.getAction() == PlayerAction.IDLE
+                        && local.redTeam.wingSpiker.assetName.equals(server.redTeam.wingSpiker.assetName),
+                "本機 WS 站定時不保留舊跑步圖片");
+    }
+
     private static void testRemoteInterpolationStopsAfterBoundedExtrapolation() {
         GameModel model = new GameModel();
         model.blueTeam.wingSpiker.x = 700;
@@ -229,6 +333,18 @@ public final class NetworkSyncTest {
             check(Math.abs(redModel.ball.x - serverBallX) < 0.01,
                     "沒有可靠事件時，球仍逐 tick 接受 Server 快照");
 
+            redModel.recordHit(true, redModel.redTeam.backPlayer);
+            redModel.recordBlock(true, redModel.redTeam.quickAttacker);
+            check(redModel.getHitCount(true) == 1 && redModel.hasBlocked(true),
+                    "先製造 Client 本地觸球歷史偏差");
+            for (int tick = 0; tick < 5; tick++) {
+                red.update(idle, false, false);
+                blue.update(idle, false, false);
+                Thread.sleep(17);
+            }
+            check(redModel.getHitCount(true) == 0 && !redModel.hasBlocked(true),
+                    "沒有可靠事件時，Client 的觸球次數與攔網歷史仍由 Server 快照校正");
+
             double serverBallY = blueModel.ball.y;
             double serverBallRotation = blueModel.ball.rotationDegrees;
             redModel.ball.x += 10;
@@ -277,10 +393,10 @@ public final class NetworkSyncTest {
                 Thread.sleep(17);
             }
             check(Math.abs(redModel.blueTeam.wingSpiker.x - wingStart) > 20,
-                    "沒有可靠事件時，對手 WS 助跑位置仍由快照更新");
-            check(observedAssets.contains("player 2 run1.png")
-                            && observedAssets.contains("player 2 run2.png"),
-                    "沒有可靠事件時，對手 WS 仍顯示 Server 的跑步動畫");
+                    "沒有可靠事件時，對手 WS 撲球位置仍由快照更新");
+            check(observedAssets.contains("player 2 dive1.png")
+                            && observedAssets.contains("player 2 dive2.png"),
+                    "第一球前對手 WS 仍顯示 Server 的撲球動畫");
 
             TeamInput heldServe = new TeamInput();
             heldServe.servePressed = true;

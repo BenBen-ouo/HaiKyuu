@@ -74,6 +74,7 @@ public final class GameClient implements NetworkView {
     private long lastHelloNanos;
     private long lastInputSendNanos;
     private long terminationAckUntilNanos;
+    private long lastWorldSnapshotAtNanos;
 
     private static final double SPIKE_TRAIL_CLEAR_DISTANCE = 80.0;
     private final PlayerRenderCorrection playerRenderCorrection = new PlayerRenderCorrection();
@@ -258,6 +259,7 @@ public final class GameClient implements NetworkView {
     }
 
     private void applyOrderedEvent(UdpCodec.Event event) {
+        long eventStarted = System.nanoTime();
         double previousBallX = renderModel.ball.x;
         double previousBallY = renderModel.ball.y;
         PlayerVisualPositions playersBefore = captureVisiblePlayers();
@@ -293,12 +295,18 @@ public final class GameClient implements NetworkView {
             remotePlayerInterpolator.reset();
             observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
             restoreNewerWorldMotion(event.serverTick);
+            if (event.type == Packet.EventType.RECEPTION) {
+                TimingDiagnostics.recordIfSlow("reception event", eventStarted, 10);
+            }
             return;
         }
         clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         scheduleOwnPlayerCorrections(playersBefore, event.state.redTeam, event.state.blueTeam);
         observeRemotePlayers(event.state.redTeam, event.state.blueTeam, event.serverTick);
         restoreNewerWorldMotion(event.serverTick);
+        if (event.type == Packet.EventType.RECEPTION) {
+            TimingDiagnostics.recordIfSlow("reception event", eventStarted, 10);
+        }
     }
 
     private void handleWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
@@ -309,6 +317,13 @@ public final class GameClient implements NetworkView {
     }
 
     private void applyWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
+        long now = System.nanoTime();
+        if (lastWorldSnapshotAtNanos != 0 && now - lastWorldSnapshotAtNanos >= 50_000_000L) {
+            TimingDiagnostics.record("world snapshot gap "
+                    + String.format("%.2f", (now - lastWorldSnapshotAtNanos) / 1_000_000.0)
+                    + " ms, serverTick=" + frame.serverTick);
+        }
+        lastWorldSnapshotAtNanos = now;
         double previousBallX = renderModel.ball.x;
         double previousBallY = renderModel.ball.y;
         PlayerVisualPositions playersBefore = captureVisiblePlayers();
@@ -317,6 +332,7 @@ public final class GameClient implements NetworkView {
         frame.snapshot.ball.applyTo(renderModel.ball);
         frame.snapshot.redTeam.applyMotionTo(renderModel.redTeam);
         frame.snapshot.blueTeam.applyMotionTo(renderModel.blueTeam);
+        frame.snapshot.rallyContacts.applyTo(renderModel);
         clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         renderModel.syncNetworkVisualEffects(
                 frame.snapshot.spikeTrailActive, frame.snapshot.spikeTrailRedSide);

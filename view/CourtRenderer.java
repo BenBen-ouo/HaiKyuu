@@ -6,13 +6,15 @@ package view;
 
 import java.awt.*;
 import model.GameConfig;
+import model.ball.NetHitBox;
 
 public class CourtRenderer {
     private static final Color BACKGROUND_COLOR = new Color(225, 238, 248);
-    private static final Color FLOOR_COLOR = new Color(243, 146, 10);
+    private static final Color FLOOR_COLOR = new Color(255,178,101);
     private static final Color OUTSIDE_COURT_COLOR = new Color(106, 200, 243);
     private static final Color NET_COLOR = new Color(70, 70, 80);
     private static final Color GUIDE_COLOR = new Color(180, 180, 180);
+    private static final Shape NET_SHAPE = new NetHitBox().getShape();
 
     public void draw(Graphics2D g) {
         draw(g, true);
@@ -73,9 +75,7 @@ public class CourtRenderer {
     }
 
     private void drawNet(Graphics2D g) {
-        int netX = (int) (GameConfig.NET_X - GameConfig.NET_WIDTH / 2.0);
-
         g.setColor(NET_COLOR);
-        g.fillRect(netX, (int) GameConfig.NET_TOP_Y, (int) GameConfig.NET_WIDTH, (int) GameConfig.NET_HEIGHT);
+        g.fill(NET_SHAPE);
     }
 }

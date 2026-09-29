@@ -50,6 +50,7 @@ public class GameModel {
     private boolean ballHitNetThisFrame;
     private boolean ballLandedThisFrame;
     private boolean setterContactThisFrame;
+    private boolean airSetContactThisFrame;
     private boolean firstServeReceptionThisFrame;
     private boolean serveReceptionComplete;
     private final ActionReleaseGate redActionReleaseGate = new ActionReleaseGate();
@@ -117,6 +118,18 @@ public class GameModel {
         return rallyState.hasSetterTouched(redSide);
     }
 
+    public boolean wasSetterTouchedFirst(boolean redSide) {
+        return rallyState.wasSetterTouchedFirst(redSide);
+    }
+
+    public boolean canSetterTouch(boolean redSide) {
+        return rallyState.canSetterTouch(redSide);
+    }
+
+    public boolean hasBlocked(boolean redSide) {
+        return rallyState.hasBlocked(redSide);
+    }
+
     public void resetTeamContacts(boolean redSide) {
         rallyState.resetHitCount(redSide);
         syncPublicHitCounters();
@@ -150,6 +163,7 @@ public class GameModel {
         }
         serveHandler.filterNetworkPredictionInput(input, localRedSide, localInput.servePressed);
         input.hasFirstRegularTouch = getHitCount(localRedSide) > 0;
+        configureAttackInput(input, localRedSide ? redTeam : blueTeam, localRedSide);
         (localRedSide ? redTeam : blueTeam).update(input);
         effects.update();
         if (spikeEffect.isSpikeTrailActive()) {
@@ -182,6 +196,7 @@ public class GameModel {
         ballHitNetThisFrame = false;
         ballLandedThisFrame = false;
         setterContactThisFrame = false;
+        airSetContactThisFrame = false;
         firstServeReceptionThisFrame = false;
         resolvingRallyOutcomes = resolveRallyOutcomes;
 
@@ -288,7 +303,12 @@ public class GameModel {
         configureBackActions(redInput, blueInput);
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
+        configureAttackInput(redInput, redTeam, true);
+        configureAttackInput(blueInput, blueTeam, false);
         updateTeams(redInput, blueInput);
+        boolean airSetContact = contactHandler.tryAirSetContact(redTeam, true)
+                || contactHandler.tryAirSetContact(blueTeam, false);
+        airSetContactThisFrame = airSetContact;
         for (Player player : redTeam.getPlayers()) {
             player.captureAttackAttemptBallOverlap(ball);
         }
@@ -298,7 +318,9 @@ public class GameModel {
         serveHandler.updateAfterTeams();
 
         updateBallIfNeeded(resolveRallyOutcomes);
-        collideTeamsIfAllowed(redInput, blueInput);
+        if (!airSetContact) {
+            collideTeamsIfAllowed(redInput, blueInput);
+        }
 
         serveHandler.finishFrame();
         effects.update();
@@ -314,6 +336,8 @@ public class GameModel {
         BackActionResolver.apply(blueInput, blueHitCount);
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
+        configureAttackInput(redInput, redTeam, true);
+        configureAttackInput(blueInput, blueTeam, false);
         updateTeams(redInput, blueInput);
     }
 
@@ -373,6 +397,14 @@ public class GameModel {
         if (serveHandler.shouldUseGameBackPlayerAction(false)) {
             BackActionResolver.apply(blueInput, blueHitCount);
         }
+    }
+
+    private void configureAttackInput(TeamInput input, Team team, boolean redSide) {
+        input.ball = ball;
+        boolean secondTouch = getHitCount(redSide) == 1 && serveReceptionComplete;
+        Player lastHitter = getLastHitter(redSide);
+        input.canBackAirSet = secondTouch && lastHitter != team.backPlayer;
+        input.canWingAirSet = secondTouch && lastHitter != team.wingSpiker;
     }
 
     private void updateTeams(TeamInput redInput, TeamInput blueInput) {
@@ -452,6 +484,10 @@ public class GameModel {
         return setterContactThisFrame;
     }
 
+    public boolean didAirSetContactThisFrame() {
+        return airSetContactThisFrame;
+    }
+
     public boolean didFirstServeReceptionThisFrame() {
         return firstServeReceptionThisFrame;
     }
@@ -476,7 +512,7 @@ public class GameModel {
         return rallyState.wasLastTouchBlock();
     }
 
-    public void applyNetworkRallyState(
+    public void applyNetworkRallyContactState(
             int redHitCount,
             int blueHitCount,
             Boolean lastHitTeam,
@@ -484,8 +520,12 @@ public class GameModel {
             boolean serveReceptionComplete,
             int redLastHitterIndex,
             int blueLastHitterIndex,
-            boolean rallyOver,
-            int deadBallTimer
+            boolean redSetterTouched,
+            boolean blueSetterTouched,
+            boolean redSetterTouchedFirst,
+            boolean blueSetterTouchedFirst,
+            boolean redBlockUsed,
+            boolean blueBlockUsed
     ) {
         rallyState.applyNetworkState(
                 redHitCount,
@@ -494,11 +534,20 @@ public class GameModel {
                 lastTouchWasBlock,
                 redLastHitterIndex,
                 blueLastHitterIndex,
+                redSetterTouched,
+                blueSetterTouched,
+                redSetterTouchedFirst,
+                blueSetterTouchedFirst,
+                redBlockUsed,
+                blueBlockUsed,
                 redTeam,
                 blueTeam
         );
         syncPublicHitCounters();
         this.serveReceptionComplete = serveReceptionComplete;
+    }
+
+    public void applyNetworkRallyPhase(boolean rallyOver, int deadBallTimer) {
         scorer.applyNetworkState(rallyOver, deadBallTimer);
         if (scorer.isLockedPhase()) {
             effects.clear();
