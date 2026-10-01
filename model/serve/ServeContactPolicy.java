@@ -7,14 +7,11 @@ package model.serve;
 public class ServeContactPolicy {
     public boolean canTeamCollide(ServeState state, boolean redSide, boolean redServing,
                                   boolean serveLaunchedThisFrame) {
-        if (state == ServeState.WAITING_FOR_SERVE) {
+        if (state == ServeState.WAITING_FOR_SERVE || state == ServeState.JUMP_TOSS) {
             return false;
         }
 
-        if (state == ServeState.SERVE_LAUNCHED) {
-            return redSide != redServing;
-        }
-
+        // 出手當幀忽略發球員與球的殘留重疊；從下一幀起，發球方碰球也要能裁決犯規。
         return !(serveLaunchedThisFrame && redSide == redServing);
     }
 }

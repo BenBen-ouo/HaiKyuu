@@ -5,22 +5,29 @@
 package model.rally;
 
 import model.GameConfig;
+import model.ball.Ball;
 
 public class ScoringLogic {
+    /** 球體壓到 x=100／1100 的白線外緣也算界內，左右兩端使用同一規則。 */
+    public static boolean isBallInCourt(double ballX, double ballRadius) {
+        double halfLineWidth = GameConfig.COURT_LINE_WIDTH / 2.0;
+        return ballX + ballRadius >= GameConfig.COURT_LEFT_X - halfLineWidth
+                && ballX - ballRadius <= GameConfig.COURT_RIGHT_X + halfLineWidth;
+    }
+
     /**
      * 判斷哪一隊得分
-     * @param ballX 球落地的 X 座標
+     * @param ball 落地的球，包含球心與半徑
      * @param lastHitTeam 最後觸球隊伍 (true: 紅隊, false: 藍隊, null: 無人觸球)
      * @param redServing 當前發球方 (處理發球直接落地的情況)
      * @return true 代表紅隊得分，false 代表藍隊得分
      */
-    public static boolean determineWinner(double ballX, Boolean lastHitTeam, boolean redServing) {
-        // 判斷是否在球場左右邊界內 (界內線)
-        boolean isIn = ballX >= GameConfig.COURT_LEFT_X && ballX <= GameConfig.COURT_RIGHT_X;
+    public static boolean determineWinner(Ball ball, Boolean lastHitTeam, boolean redServing) {
+        boolean isIn = isBallInCourt(ball.x, ball.radius);
 
         if (isIn) {
             // 界內：落在紅隊半場 (網子左邊) 則藍隊得分，反之紅隊得分
-            return ballX > GameConfig.NET_X;
+            return ball.x > GameConfig.NET_X;
         } else {
             // 界外：最後一個碰球的隊伍輸了 (對方得分)
             if (lastHitTeam != null) {

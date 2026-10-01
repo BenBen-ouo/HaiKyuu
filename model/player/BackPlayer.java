@@ -13,6 +13,7 @@ public class BackPlayer extends Player {
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;
     private boolean previousBackAction = false;
+    private double jumpAirSpeed;
 
     public BackPlayer(String assetName, double x, double y, boolean redSide) {
         super(assetName, x, y, redSide);
@@ -64,7 +65,7 @@ public class BackPlayer extends Player {
         attacking = false;
 
         if (input.backJump && justPressedAction && !jumping) {
-            startAttackReady(directionTowardNet() * BACK_ATTACK_AIR_SPEED);
+            startBackAttack();
         } else if (diveController.tryStartForBackPlayer(input)) {
             diveController.update(input.backDive);
             updateActionAnimation();
@@ -90,7 +91,7 @@ public class BackPlayer extends Player {
         }
 
         if (action == PlayerAction.AIR_SETTING && jumping) {
-            vx = directionTowardNet() * BACK_ATTACK_AIR_SPEED;
+            vx = jumpAirSpeed;
             applyGravity();
             updateActionAnimation();
             return;
@@ -113,7 +114,7 @@ public class BackPlayer extends Player {
 
     private boolean tryStartPriorityAction(TeamInput input, boolean justPressedAction) {
         if (input.backJump && justPressedAction && !jumping) {
-            startAttackReady(directionTowardNet() * BACK_ATTACK_AIR_SPEED);
+            startBackAttack();
             diveController.rememberInput(input.backDive);
             applyGravity();
             updateActionAnimation();
@@ -140,7 +141,7 @@ public class BackPlayer extends Player {
         }
 
         if (jumping) {
-            vx = directionTowardNet() * BACK_ATTACK_AIR_SPEED;
+            vx = jumpAirSpeed;
         } else {
             vx = 0;
         }
@@ -181,6 +182,45 @@ public class BackPlayer extends Player {
             vx += GameConfig.PLAYER_SPEED;
         }
     }
+
+    private void startBackAttack() {
+        jumpAirSpeed = plannedJumpAirSpeed();
+        startAttackReady(jumpAirSpeed);
+    }
+
+    /** 發球拋球也使用同一份起跳預測，避免漏算攻擊框相對圖片中心的位移。 */
+    public double plannedAttackHitBoxCenterAtApex() {
+        return attackHitBox.getCenterX() + plannedJumpAirSpeed() * framesToApex();
+    }
+
+    private double plannedJumpAirSpeed() {
+        // 起跳中心若已在線上或靠網側，讓攻擊框的前緣在最高點對齊 Setter 中心。
+        // 線後方維持原上限；速度只在起跳時決定，空中不重新計算。
+        double center = x + imageWidth / 2.0;
+        double line = GameConfig.NET_X + (redSide ? -1 : 1) * GameConfig.THREE_METER_PX;
+        double speed = BACK_ATTACK_AIR_SPEED;
+        if (redSide ? center >= line : center <= line) {
+            double setterCenter = redSide
+                    ? GameConfig.NET_X + GameConfig.RED_SETTER_OFFSET_X + imageWidth / 2.0
+                    : GameConfig.NET_X + GameConfig.BLUE_SETTER_OFFSET_X + imageWidth / 2.0;
+            double attackFront = redSide
+                    ? center + (attackHitBox.offsetX + attackHitBox.width - imageWidth / 2.0)
+                    : center + (attackHitBox.offsetX - imageWidth / 2.0);
+            speed = Math.max(0, Math.min(BACK_ATTACK_AIR_SPEED,
+                    (redSide ? setterCenter - attackFront : attackFront - setterCenter)
+                            / framesToApex()));
+        }
+        return directionTowardNet() * speed;
+    }
+
+    private int framesToApex() {
+        return Math.max(1, (int) Math.ceil(-GameConfig.PLAYER_JUMP_SPEED / GameConfig.GRAVITY) - 1);
+    }
+
+    /** 快照還原時保留本次起跳速度，避免 Client 下一幀改回舊速度。 */
+    public void syncJumpAirSpeed(double serverVx) {
+        jumpAirSpeed = serverVx;
+    }
     /**
      * 發球準備時清除舊的撲球／攻擊動作，避免發球鍵沿用上一個 Space 狀態。
      */
@@ -188,6 +228,7 @@ public class BackPlayer extends Player {
         diveController.cancel();
         restoreDefaultHitBox();
         previousBackAction = false;
+        jumpAirSpeed = 0;
         PlayerPhysics.clearMotionAndActions(this);
         finishAction();
         attackHitBox.disable();
@@ -199,6 +240,7 @@ public class BackPlayer extends Player {
         super.resetToInitial();
         restoreDefaultHitBox();
         previousBackAction = false;
+        jumpAirSpeed = 0;
     }
 
     @Override

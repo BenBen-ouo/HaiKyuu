@@ -10,15 +10,18 @@ import model.TeamInput;
 import model.ball.Ball;
 import model.ball.NetHitBox;
 import model.player.AttackHitBox;
+import model.player.BackPlayer;
 import model.player.HitBox;
 import model.player.Player;
 import model.player.PlayerAction;
 import model.player.QuickAttacker;
 import model.player.Team;
 import model.rally.RallyContactHandler;
+import model.rally.ScoringLogic;
 import model.serve.ServeState;
 import network.Packet;
 import network.UdpCodec;
+import view.CourtRenderer;
 import view.GameRenderer;
 
 /** 以純 Java 執行主要回合規則與同步狀態的回歸檢查。 */
@@ -26,11 +29,13 @@ public class GameplayFlowTest {
     public static void main(String[] args) throws Exception {
         testBackPlayerDrawnAboveAllOtherPlayers();
         testInitialHitBoxMirrors();
+        testEndLineBallContact();
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
         testWingDiveBeforeFirstReception();
         testBlueControlsRetainNumpadMappings();
+        testBlueDirectionMirrors();
         testAirSetRequiresBothDirectionKeys();
         testBlockOnlyOnceAndSetterThirdTouch();
         testAttackCanHoldSecondPressUntilBallArrives();
@@ -39,8 +44,12 @@ public class GameplayFlowTest {
         testWingAirSetMirrors();
         testSetterQuickSetApex();
         testServeFaults();
+        testServeLandingAndServingTeamContacts();
         testBackRowAttackOnThreeMeterLine();
-        testBackRowAirSetOnThreeMeterLine();
+        testBackRowAirSetIgnoresThreeMeterLine();
+        testBackJumpSpeedChosenAtTakeoff();
+        testJumpServeFlow();
+        testServePlayerCenters();
         testNetworkServeKeyMustBeReleasedBeforeDive();
         testNetCollisionAfterPoint();
         testNetRoundedTopCollision();
@@ -393,6 +402,121 @@ public class GameplayFlowTest {
         check(legalBlockModel.getHitCount(false) == 1, "攔網接觸完全不計次");
     }
 
+    private static void testServeLandingAndServingTeamContacts() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            double ownCourtX = redSide ? GameConfig.COURT_LEFT_X + 40
+                    : GameConfig.COURT_RIGHT_X - 40;
+            double opponentCourtX = redSide ? GameConfig.COURT_RIGHT_X - 40
+                    : GameConfig.COURT_LEFT_X + 40;
+            for (double landingX : new double[]{ownCourtX, opponentCourtX,
+                    GameConfig.COURT_LEFT_X - 20, GameConfig.COURT_RIGHT_X + 20}) {
+                GameModel model = launchedNormalServeModel(redSide);
+                model.ball.x = landingX;
+                model.ball.y = GameConfig.FLOOR_Y - model.ball.radius - 1;
+                model.ball.vx = 0;
+                model.ball.vy = 2;
+                updateOnlySide(model, redSide, new TeamInput());
+                String expected = landingX == ownCourtX ? "發球犯規"
+                        : landingX == opponentCourtX ? "IN" : "OUT";
+                check(expected.equals(model.transientMessage)
+                                && (redSide ? model.blueScore : model.redScore)
+                                        == (landingX == opponentCourtX ? 0 : 1),
+                        "一般發球落地依本場、對場與界外分類: red=" + redSide
+                                + " x=" + landingX);
+            }
+
+            double leftTouch = GameConfig.COURT_LEFT_X
+                    - GameConfig.COURT_LINE_WIDTH / 2.0 - GameConfig.BALL_RADIUS;
+            double rightTouch = GameConfig.COURT_RIGHT_X
+                    + GameConfig.COURT_LINE_WIDTH / 2.0 + GameConfig.BALL_RADIUS;
+            for (double landingX : new double[]{leftTouch, rightTouch,
+                    leftTouch - 0.25, rightTouch + 0.25}) {
+                GameModel model = launchedNormalServeModel(redSide);
+                model.ball.x = landingX;
+                model.ball.y = GameConfig.FLOOR_Y - model.ball.radius - 1;
+                model.ball.vx = 0;
+                model.ball.vy = 2;
+                updateOnlySide(model, redSide, new TeamInput());
+                boolean lineTouch = landingX == leftTouch || landingX == rightTouch;
+                boolean ownLine = redSide ? landingX == leftTouch : landingX == rightTouch;
+                String expected = !lineTouch ? "OUT" : ownLine ? "發球犯規" : "IN";
+                check(expected.equals(model.transientMessage),
+                        "發球壓到底線外緣仍算界內，完全離線才是 OUT: red=" + redSide
+                                + " x=" + landingX);
+            }
+
+            for (int playerIndex : new int[]{0, 1, 3}) {
+                GameModel model = launchedNormalServeModel(redSide);
+                Team team = redSide ? model.redTeam : model.blueTeam;
+                Player player = team.getPlayers()[playerIndex];
+                for (Player other : team.getPlayers()) {
+                    if (other != player) other.x = -1000;
+                }
+                model.ball.x = player.hitBox.getCenterX();
+                model.ball.y = player.hitBox.getCenterY();
+                new RallyContactHandler(model).collideTeam(team, redSide, new TeamInput());
+                check("發球犯規".equals(model.transientMessage)
+                                && (redSide ? model.blueScore : model.redScore) == 1
+                                && model.getHitCount(redSide) == 0,
+                        "接發前發球方一般碰撞立即犯規: red=" + redSide
+                                + " player=" + playerIndex);
+            }
+
+            GameModel afterReception = launchedNormalServeModel(redSide);
+            Team servingTeam = redSide ? afterReception.redTeam : afterReception.blueTeam;
+            Team receivingTeam = redSide ? afterReception.blueTeam : afterReception.redTeam;
+            afterReception.recordRegularHit(!redSide, receivingTeam.backPlayer);
+            afterReception.ball.x = servingTeam.setter.hitBox.getCenterX();
+            afterReception.ball.y = servingTeam.setter.hitBox.getCenterY();
+            new RallyContactHandler(afterReception).collideTeam(
+                    servingTeam, redSide, new TeamInput());
+            check(afterReception.redScore == 0 && afterReception.blueScore == 0
+                            && afterReception.getHitCount(redSide) == 1,
+                    "接發方完成第一次一般接球後，發球方恢復正常觸球");
+        }
+    }
+
+    private static GameModel launchedNormalServeModel(boolean redSide) {
+        GameModel model = jumpServeModel(redSide);
+        TeamInput input = new TeamInput();
+        input.servePressed = true;
+        updateOnlySide(model, redSide, input);
+        check(model.getServeHandler().hasLaunchedServe() && !model.isRallyOverForNetwork()
+                        && model.getServeHandler().canTeamCollideWithBall(redSide),
+                "出手當幀不誤判自己碰球，後續開放發球方碰撞以裁決犯規");
+        return model;
+    }
+
+    private static void testEndLineBallContact() {
+        check(GameConfig.COURT_LEFT_X == 100 && GameConfig.COURT_RIGHT_X == 1100
+                        && GameConfig.COURT_LINE_WIDTH == 3,
+                "底線座標與 3 像素線寬固定為目前繪製規格");
+        double leftTouch = GameConfig.COURT_LEFT_X
+                - GameConfig.COURT_LINE_WIDTH / 2.0 - GameConfig.BALL_RADIUS;
+        double rightTouch = GameConfig.COURT_RIGHT_X
+                + GameConfig.COURT_LINE_WIDTH / 2.0 + GameConfig.BALL_RADIUS;
+        check(ScoringLogic.isBallInCourt(leftTouch, GameConfig.BALL_RADIUS)
+                        && ScoringLogic.isBallInCourt(rightTouch, GameConfig.BALL_RADIUS)
+                        && !ScoringLogic.isBallInCourt(leftTouch - 0.25, GameConfig.BALL_RADIUS)
+                        && !ScoringLogic.isBallInCourt(rightTouch + 0.25, GameConfig.BALL_RADIUS),
+                "球體剛碰到白線外緣算界內，左右判定完全鏡像");
+
+        BufferedImage frame = new BufferedImage(
+                GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = frame.createGraphics();
+        try {
+            new CourtRenderer().draw(graphics, false);
+        } finally {
+            graphics.dispose();
+        }
+        for (int lineX : new int[]{100, 1100}) {
+            for (int x = lineX - 1; x <= lineX + 1; x++) {
+                check(frame.getRGB(x, GameConfig.FLOOR_Y_PX + 20) == Color.WHITE.getRGB(),
+                        "底線 x=" + lineX + " 實際繪製為 3 像素白線");
+            }
+        }
+    }
+
     private static void testNetCollisionAfterPoint() {
         GameModel scoreModel = new GameModel();
         scoreModel.awardPointWithMessage(true, "IN");
@@ -512,13 +636,13 @@ public class GameplayFlowTest {
                 "第二次按鍵持續按住，下一幀球已進框即可攻擊");
     }
 
-    private static void testBackRowAirSetOnThreeMeterLine() throws Exception {
+    private static void testBackRowAirSetIgnoresThreeMeterLine() throws Exception {
         double redLine = GameConfig.NET_X - GameConfig.THREE_METER_PX;
         double blueLine = GameConfig.NET_X + GameConfig.THREE_METER_PX;
-        checkBackRowAirSetFault(true, redLine, true);
-        checkBackRowAirSetFault(false, blueLine, true);
-        checkBackRowAirSetFault(true, Math.nextDown(redLine), false);
-        checkBackRowAirSetFault(false, Math.nextUp(blueLine), false);
+        checkBackRowAirSetLegal(true, redLine);
+        checkBackRowAirSetLegal(false, blueLine);
+        checkBackRowAirSetLegal(true, Math.nextDown(redLine));
+        checkBackRowAirSetLegal(false, Math.nextUp(blueLine));
     }
 
     private static void testWingAirSetMirrors() {
@@ -560,8 +684,7 @@ public class GameplayFlowTest {
         }
     }
 
-    private static void checkBackRowAirSetFault(boolean redSide, double jumpStartX,
-                                                 boolean expectedFault) throws Exception {
+    private static void checkBackRowAirSetLegal(boolean redSide, double jumpStartX) throws Exception {
         GameModel model = new GameModel();
         model.getServeHandler().setRedServing(!redSide);
         model.getServeHandler().setWaitingForServe(false);
@@ -597,15 +720,9 @@ public class GameplayFlowTest {
                         && model.getHitCount(redSide) == 2 && model.ball.vx == 0
                         && model.didAirSetContactThisFrame(),
                 "紅藍後排第二球均完成垂直空中舉球");
-        check((model.redScore + model.blueScore == 1) == expectedFault
-                        && ("後排三米線".equals(model.transientMessage)) == expectedFault,
-                (redSide ? "紅隊" : "藍隊") + "空中舉球的三米線裁決");
-        if (expectedFault) {
-            check(redSide ? model.blueScore == 1 : model.redScore == 1,
-                    "後排空中舉球違規由對手得分");
-        }
-        Packet.EventType eventType = expectedFault
-                ? Packet.EventType.RULE : Packet.EventType.AIR_SET_CONTACT;
+        check(model.redScore + model.blueScore == 0 && model.transientMessage == null,
+                "後排空中舉球不論踩線與否均不判三米線違規");
+        Packet.EventType eventType = Packet.EventType.AIR_SET_CONTACT;
         byte[] bytes = UdpCodec.event(7, 1, 1, eventType, 1,
                 Packet.CompactState.from(model));
         UdpCodec.Event event = (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
@@ -619,18 +736,16 @@ public class GameplayFlowTest {
                         && clientTeam.backPlayer.jumpStartX == jumpStartX
                         && client.redScore == model.redScore
                         && client.blueScore == model.blueScore
-                        && ("後排三米線".equals(client.transientMessage)) == expectedFault,
-                "紅藍空中舉球次數、角色狀態及違規結果可由可靠事件同步");
+                        && client.transientMessage == null,
+                "紅藍空中舉球次數及角色狀態可由可靠事件同步");
 
-        if (!expectedFault) {
-            double highestY = model.ball.y;
-            for (int frame = 0; frame < 80 && model.ball.vy < 0; frame++) {
-                model.ball.update();
-                highestY = Math.min(highestY, model.ball.y);
-            }
-            check(Math.abs(highestY - GameConfig.SETTER_SET_APEX_Y) < 1,
-                    "紅藍合法後排空中舉球共用同一最高點");
+        double highestY = model.ball.y;
+        for (int frame = 0; frame < 80 && model.ball.vy < 0; frame++) {
+            model.ball.update();
+            highestY = Math.min(highestY, model.ball.y);
         }
+        check(Math.abs(highestY - GameConfig.SETTER_SET_APEX_Y) < 1,
+                "紅藍合法後排空中舉球共用同一最高點");
 
         double xAtSet = team.backPlayer.x;
         for (int frame = 0; frame < 120 && team.backPlayer.jumping; frame++) {
@@ -784,6 +899,237 @@ public class GameplayFlowTest {
                         && blue.wingAttack && blue.setterJump && blue.quickAttack
                         && blue.airSetModifier,
                 "測試數字列按鍵不會蓋掉藍隊 NumPad 操作與雙方向鍵空中舉球");
+    }
+
+    private static void testBlueDirectionMirrors() {
+        KeyboardController keyboard = new KeyboardController();
+        JPanel source = new JPanel();
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED));
+        check(keyboard.getBlueInput().spikeFlat && keyboard.getBlueInput().backLeft
+                        && keyboard.getBlueInput().serveType == model.serve.ServeType.NORMAL,
+                "藍隊朝網的左鍵選平打，不再誤選短發球");
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_UP, KeyEvent.CHAR_UNDEFINED));
+        check(keyboard.getBlueInput().spikeFlat && keyboard.getBlueInput().spikeLob,
+                "藍隊上加左選長吊球");
+        keyboard.keyReleased(new KeyEvent(source, KeyEvent.KEY_RELEASED, 0, 0,
+                KeyEvent.VK_LEFT, KeyEvent.CHAR_UNDEFINED));
+        keyboard.keyReleased(new KeyEvent(source, KeyEvent.KEY_RELEASED, 0, 0,
+                KeyEvent.VK_UP, KeyEvent.CHAR_UNDEFINED));
+        keyboard.keyPressed(new KeyEvent(source, KeyEvent.KEY_PRESSED, 0, 0,
+                KeyEvent.VK_RIGHT, KeyEvent.CHAR_UNDEFINED));
+        check(!keyboard.getBlueInput().spikeFlat
+                        && keyboard.getBlueInput().serveType == model.serve.ServeType.SHORT,
+                "藍隊遠網的右鍵只選短發球，不選平打");
+    }
+
+    private static void testBackJumpSpeedChosenAtTakeoff() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            Team team = new Team(redSide);
+            double line = GameConfig.NET_X + (redSide ? -1 : 1) * GameConfig.THREE_METER_PX;
+            team.backPlayer.x = (redSide ? line + 20 : line - 20) - 50;
+            TeamInput jump = new TeamInput();
+            jump.backJump = true;
+            team.backPlayer.update(jump);
+            double chosen = team.backPlayer.vx;
+            check(Math.abs(chosen) < 2.8 && Math.abs(chosen) > 0,
+                    "靠網側起跳依攻擊框前緣降低橫速，左右對稱");
+            for (int frame = 0; frame < 34; frame++) team.backPlayer.update(new TeamInput());
+            check(Math.abs(team.backPlayer.vx - chosen) < 1e-9,
+                    "後排起跳後橫速不因當下位置改變");
+            double front = redSide
+                    ? team.backPlayer.attackHitBox.getX() + team.backPlayer.attackHitBox.width
+                    : team.backPlayer.attackHitBox.getX();
+            check(Math.abs(front - (team.setter.x + team.setter.imageWidth / 2.0)) < 1e-6,
+                    "靠網側起跳的攻擊框前緣在最高點對齊 Setter 圖片中心");
+            Team behind = new Team(redSide);
+            behind.backPlayer.x = (redSide ? line - 20 : line + 20) - 50;
+            behind.backPlayer.update(jump);
+            check(Math.abs(behind.backPlayer.vx) == 2.8,
+                    "三米線後方仍以 2.8 為橫速上限");
+        }
+    }
+
+    private static void testJumpServeFlow() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel miss = jumpServeModel(redSide);
+            TeamInput toss = jumpServeInput(true);
+            updateOnlySide(miss, redSide, toss);
+            check(miss.getServeHandler().getState() == ServeState.JUMP_TOSS,
+                    "朝網方向加發球鍵先拋球，不算已發球");
+            BackPlayer server = (redSide ? miss.redTeam : miss.blueTeam).backPlayer;
+            double apexCenterX = server.x + server.imageWidth / 2.0
+                    + (redSide ? 1 : -1) * 2.8 * 35;
+            double attackBoxOffset = server.attackHitBox.getCenterX()
+                    - (server.x + server.imageWidth / 2.0);
+            double tossTargetX = server.plannedAttackHitBoxCenterAtApex();
+            check(Math.abs(tossTargetX - (apexCenterX + attackBoxOffset)) < 1e-9
+                            && Math.abs(attackBoxOffset) > 0,
+                    "跳發拋球目標包含後排攻擊框相對圖片中心的偏移");
+            Ball tossFlight = new Ball(miss.ball.x, miss.ball.y);
+            tossFlight.vx = miss.ball.vx;
+            tossFlight.vy = miss.ball.vy;
+            for (int frame = 0; frame < 140
+                    && tossFlight.y + tossFlight.radius < GameConfig.FLOOR_Y; frame++) {
+                tossFlight.update();
+            }
+            check(Math.abs(tossFlight.x - tossTargetX) <= Math.abs(tossFlight.vx) + 1e-9,
+                    "紅藍跳發拋球的預定落點對準起跳最高點攻擊框中心");
+            double serverStartX = (redSide ? miss.redTeam : miss.blueTeam).backPlayer.x;
+            TeamInput blockedMove = new TeamInput();
+            blockedMove.backLeft = true;
+            blockedMove.backRight = true;
+            updateOnlySide(miss, redSide, blockedMove);
+            check((redSide ? miss.redTeam : miss.blueTeam).backPlayer.x == serverStartX,
+                    "跳發拋球後等待起跳期間不能用方向鍵移動後排");
+            double highest = miss.ball.y;
+            for (int frame = 0; frame < 140 && !miss.isRallyOverForNetwork(); frame++) {
+                updateOnlySide(miss, redSide, new TeamInput());
+                highest = Math.min(highest, miss.ball.y);
+            }
+            check(Math.abs(highest - GameConfig.SETTER_SET_APEX_Y) < 1
+                            && miss.isRallyOverForNetwork()
+                            && "發球犯規".equals(miss.transientMessage)
+                            && (redSide ? miss.blueScore == 1 : miss.redScore == 1),
+                    "拋球最高點與 Setter 相同；未擊球落地判發球方犯規");
+
+            boolean hit = false;
+            int successfulDelay = -1;
+            for (int delay = 15; delay <= 45 && !hit; delay++) {
+                GameModel model = jumpServeModel(redSide);
+                updateOnlySide(model, redSide, jumpServeInput(true));
+                for (int frame = 0; frame < delay; frame++) {
+                    updateOnlySide(model, redSide, new TeamInput());
+                }
+                TeamInput press = jumpServeInput(false);
+                updateOnlySide(model, redSide, press);
+                check(model.getServeHandler().getState() == ServeState.JUMP_TOSS
+                                && (redSide ? model.redTeam : model.blueTeam).backPlayer.jumping,
+                        "第二次按發球鍵只讓後排起跳，不發球");
+                updateOnlySide(model, redSide, new TeamInput());
+                updateOnlySide(model, redSide, press);
+                for (int frame = 0; frame < 65 && !model.isRallyOverForNetwork(); frame++) {
+                    if (model.getServeHandler().getState() != ServeState.JUMP_TOSS) {
+                        hit = true;
+                        break;
+                    }
+                    updateOnlySide(model, redSide, press);
+                }
+                if (hit) {
+                    successfulDelay = delay;
+                    check(model.ball.vx == (redSide ? 1 : -1) * GameConfig.SERVE_JUMP_VX
+                                    && !model.isServeReceptionComplete(),
+                            "第三次按住發球鍵，球進攻擊框後才由 Server 真正發球");
+                    Packet.CompactState.from(model).applyTo(new GameModel());
+                }
+            }
+            check(hit, "紅藍跳發球拋球與後排起跳有可命中的時機");
+            for (int route = 0; route < 4; route++) {
+                checkJumpServeRoute(redSide, successfulDelay, route);
+            }
+            for (int delay = 0; delay <= 60; delay++) {
+                for (int route = 0; route < 4; route++) {
+                    checkJumpServeRouteIfHittable(redSide, delay, route);
+                }
+            }
+        }
+    }
+
+    private static void testServePlayerCenters() {
+        GameModel redServe = new GameModel();
+        GameModel blueServe = new GameModel();
+        blueServe.getServeHandler().setRedServing(false);
+        blueServe.getServeHandler().setWaitingForServe(true);
+        double redCenter = redServe.redTeam.backPlayer.x
+                + redServe.redTeam.backPlayer.imageWidth / 2.0;
+        double blueCenter = blueServe.blueTeam.backPlayer.x
+                + blueServe.blueTeam.backPlayer.imageWidth / 2.0;
+        check(redCenter == -10 && blueCenter == GameConfig.SCREEN_WIDTH + 10,
+                "待發球後排圖片中心在紅 -10、藍 1210，左右鏡像");
+        check(GameConfig.COURT_LEFT_X - redCenter == blueCenter - GameConfig.COURT_RIGHT_X,
+                "兩隊後排圖片中心距離底線相同");
+        check(redServe.ball.x == GameConfig.RED_SERVE_BALL_X
+                        && blueServe.ball.x == GameConfig.BLUE_SERVE_BALL_X
+                        && redServe.ball.x == GameConfig.BALL_RADIUS
+                        && blueServe.ball.x == GameConfig.SCREEN_WIDTH - GameConfig.BALL_RADIUS,
+                "發球員往場內移後，紅藍待發球球心仍停在原本位置");
+    }
+
+    private static void checkJumpServeRoute(boolean redSide, int delay, int route) {
+        check(checkJumpServeRouteIfHittable(redSide, delay, route),
+                "指定起跳時機可擊中跳發球");
+    }
+
+    private static boolean checkJumpServeRouteIfHittable(boolean redSide, int delay, int route) {
+        GameModel model = jumpServeModel(redSide);
+        updateOnlySide(model, redSide, jumpServeInput(true));
+        for (int frame = 0; frame < delay; frame++) updateOnlySide(model, redSide, new TeamInput());
+        updateOnlySide(model, redSide, jumpServeInput(false));
+        updateOnlySide(model, redSide, new TeamInput());
+        TeamInput hit = jumpServeInput(false);
+        if (route == 1) hit.spikeShort = true;
+        if (route == 2) {
+            if (redSide) hit.backLeft = true;
+            else hit.backRight = true;
+        }
+        if (route == 3) {
+            if (redSide) hit.backRight = true;
+            else hit.backLeft = true;
+        }
+        for (int frame = 0; frame < 65 && model.getServeHandler().getState() == ServeState.JUMP_TOSS; frame++) {
+            updateOnlySide(model, redSide, hit.copy());
+        }
+        if (model.getServeHandler().getState() == ServeState.JUMP_TOSS) return false;
+        double expectedVx = route == 2 ? GameConfig.SERVE_JUMP_SLOW_VX : GameConfig.SERVE_JUMP_VX;
+        double expectedVy = route == 1 ? GameConfig.SERVE_JUMP_SHORT_VY
+                : route == 3 ? GameConfig.SERVE_JUMP_LONG_VY : GameConfig.SERVE_JUMP_VY;
+        check(Math.abs(model.ball.vx) == expectedVx
+                        && Math.abs(model.ball.vy - (expectedVy + GameConfig.GRAVITY)) < 1e-9,
+                "跳發球路於命中時依方向鍵選擇水平或垂直初速: route=" + route
+                        + " side=" + redSide + " vx=" + model.ball.vx + " vy=" + model.ball.vy);
+        // 球路速度由玩家在 GameConfig 手動調整；此測試只檢查按鍵對應的出手速度，
+        // 不把目前的調校值是否過網、界內當成固定玩法規則。
+        if (route == 0) {
+            double ownCourtX = redSide ? GameConfig.COURT_LEFT_X + 40
+                    : GameConfig.COURT_RIGHT_X - 40;
+            double opponentCourtX = redSide ? GameConfig.COURT_RIGHT_X - 40
+                    : GameConfig.COURT_LEFT_X + 40;
+            for (double landingX : new double[]{ownCourtX, opponentCourtX,
+                    GameConfig.COURT_LEFT_X - 20, GameConfig.COURT_RIGHT_X + 20}) {
+                GameModel landingModel = new GameModel();
+                Packet.CompactState.from(model).applyTo(landingModel);
+                landingModel.ball.x = landingX;
+                landingModel.ball.y = GameConfig.FLOOR_Y - landingModel.ball.radius - 1;
+                landingModel.ball.vx = 0;
+                landingModel.ball.vy = 2;
+                updateOnlySide(landingModel, redSide, new TeamInput());
+                String expected = landingX == ownCourtX ? "發球犯規"
+                        : landingX == opponentCourtX ? "IN" : "OUT";
+                check(expected.equals(landingModel.transientMessage)
+                                && (redSide ? landingModel.blueScore : landingModel.redScore)
+                                        == (landingX == opponentCourtX ? 0 : 1),
+                        "跳發擊出後依落點分類，不再將出界誤判成發球犯規: red="
+                                + redSide + " x=" + landingX);
+            }
+        }
+        return true;
+    }
+
+    private static GameModel jumpServeModel(boolean redSide) {
+        GameModel model = new GameModel();
+        model.getServeHandler().setRedServing(redSide);
+        model.getServeHandler().setWaitingForServe(true);
+        return model;
+    }
+
+    private static TeamInput jumpServeInput(boolean towardNet) {
+        TeamInput input = new TeamInput();
+        input.servePressed = true;
+        input.backJump = true;
+        input.backDive = true;
+        input.spikeFlat = towardNet;
+        return input;
     }
 
     private static void testAirSetRequiresBothDirectionKeys() {

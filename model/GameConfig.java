@@ -83,6 +83,8 @@ public final class GameConfig {
     public static final double COURT_WIDTH = 1000;
     public static final double COURT_LEFT_X = NET_X - (COURT_WIDTH / 2.0);
     public static final double COURT_RIGHT_X = NET_X + (COURT_WIDTH / 2.0);
+    // 底線與其他白色球場線共用線寬；落點判定包含球碰到白線外緣。
+    public static final float COURT_LINE_WIDTH = 3.0f;
 
     public static final int PLAYER_IMAGE_WIDTH = 100;
     public static final int PLAYER_IMAGE_HEIGHT = 100;
@@ -94,7 +96,7 @@ public final class GameConfig {
     public static final double SPIKE_SPEED_X = 17.0;
     public static final double SPIKE_SPEED_Y = 7.0;
     
-    // D / →：平打，橫向速度更大。
+    // 紅隊 D／藍隊 ←：平打，橫向速度更大。
     public static final double FLAT_SPIKE_SPEED_X = 20.0;
     public static final double FLAT_SPIKE_SPEED_Y = 4.5;
 
@@ -106,7 +108,7 @@ public final class GameConfig {
     public static final double LOB_SPIKE_SPEED_X = 3.0;
     public static final double LOB_SPIKE_SPEED_Y = -3.0;
 
-    // W + D / ↑ + →：吊長球。
+    // 紅隊 W + D／藍隊 ↑ + ←：吊長球。
     public static final double LONG_LOB_SPIKE_SPEED_X = 8.0;
     public static final double LONG_LOB_SPIKE_SPEED_Y = -4.5;
 
@@ -115,11 +117,12 @@ public final class GameConfig {
     public static final double RED_SETTER_OFFSET_X = -30 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_WING_OFFSET_X = -140 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
-    public static final double RED_BACK_SERVE_X = -100;
+    // 待發球時圖片中心在畫面左緣外 10 像素。
+    public static final double RED_BACK_SERVE_X = -10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double RED_BACK_SERVE_Y = PLAYER_BASE_Y;
 
-    // 發球時，球相對於 red backPlayer 圖片左上角的位置
-    public static final double RED_SERVE_BALL_OFFSET_X = PLAYER_IMAGE_WIDTH + 12;
+    // 待發球的球心維持原本位置，不隨後排發球員的站位往場內移動。
+    public static final double RED_SERVE_BALL_X = BALL_RADIUS;
     public static final double RED_SERVE_BALL_OFFSET_Y = -5;
 
     // blue 隊各角色相對基準點的位置
@@ -127,11 +130,11 @@ public final class GameConfig {
     public static final double BLUE_SETTER_OFFSET_X = 30 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_QUICK_OFFSET_X = 5 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_WING_OFFSET_X = 140 - PLAYER_NET_OVERLAP_X;
-    public static final double BLUE_BACK_SERVE_X = SCREEN_WIDTH + 100 - PLAYER_IMAGE_WIDTH;
+    // 待發球時圖片中心在畫面右緣外 10 像素。
+    public static final double BLUE_BACK_SERVE_X = SCREEN_WIDTH + 10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double BLUE_BACK_SERVE_Y = PLAYER_BASE_Y;
 
-    // blue 隊發球時，球相對於 blue backPlayer 圖片左上角的位置
-    public static final double BLUE_SERVE_BALL_OFFSET_X = PLAYER_IMAGE_WIDTH + 12;
+    public static final double BLUE_SERVE_BALL_X = SCREEN_WIDTH - BALL_RADIUS;
     public static final double BLUE_SERVE_BALL_OFFSET_Y = -5;
 
     // 發球球速，可依手感調整。
@@ -143,18 +146,18 @@ public final class GameConfig {
     public static final double SERVE_LOW_NET_VY = -7;
     public static final double SERVE_SHORT_VX = 6.4;
     public static final double SERVE_SHORT_VY = -14.1;
-    // 保留給之後啟用跳發出手階段；目前跳發動作尚未使用這兩個速度。
-    public static final double SERVE_JUMP_VX = 11.5;
-    public static final double SERVE_JUMP_VY = -9.5;
+    // 跳發出手的預設速度；其餘三種球路於觸球當下調整其中一個分量。
+    public static final double SERVE_JUMP_VX = 20.0;
+    public static final double SERVE_JUMP_VY = -1.0;
+    public static final double SERVE_JUMP_SHORT_VY = 0.0;
+    public static final double SERVE_JUMP_LONG_VY = -2.0;
+    public static final double SERVE_JUMP_SLOW_VX = 17.0;
 
-    // 三米線距離（像素）；後排起跳扣球或空中舉球都以起跳中心判定，踩線也違規。
+    // 三米線距離（像素）；後排起跳扣球以起跳中心判定，踩線也違規。
     public static final double THREE_METER_PX = 167.0;
 
-    // 預留給之後啟用的跳發第一段拋球位置與力量（目前未使用）。
-    public static final double RED_JUMP_SERVE_TOSS_LANDING_X = 75;
-    public static final double BLUE_JUMP_SERVE_TOSS_LANDING_X = SCREEN_WIDTH - 75;
+    // 跳發拋球的水平落點由後排起跳最高點的攻擊框中心計算；垂直初速由固定最高點計算。
     public static final double JUMP_SERVE_TOSS_LANDING_Y = FLOOR_Y - BALL_RADIUS;
-    public static final double JUMP_SERVE_TOSS_POWER = 14.0;
 
     // 發球隨機誤差範圍
     public static final double SERVE_RANDOM_VX_RANGE = 0.7;

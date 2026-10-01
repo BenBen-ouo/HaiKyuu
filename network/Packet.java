@@ -8,6 +8,7 @@ import model.GameModel;
 import model.TeamInput;
 import model.ball.Ball;
 import model.player.Player;
+import model.player.BackPlayer;
 import model.player.PlayerAction;
 import model.player.QuickAttacker;
 import model.player.Team;
@@ -46,7 +47,8 @@ public final class Packet {
         RULE,
         RESET,
         FLOW,
-        AIR_SET_CONTACT
+        AIR_SET_CONTACT,
+        JUMP_TOSS
     }
 
     public static int encodeInput(TeamInput input) {
@@ -516,6 +518,9 @@ public final class Packet {
             player.diving = diving;
             player.mirrorImage = mirrorImage;
             player.jumpStartX = jumpStartX;
+            if (player instanceof BackPlayer backPlayer && jumping) {
+                backPlayer.syncJumpAirSpeed(vx);
+            }
             player.hitBox.set(
                     hitBoxOffsetX,
                     hitBoxOffsetY,

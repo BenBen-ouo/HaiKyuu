@@ -18,7 +18,7 @@ final class BallLandingPredictor {
         }
 
         double landingX = ball.x + ball.vx * landingTime;
-        return landingX < GameConfig.COURT_LEFT_X || landingX > GameConfig.COURT_RIGHT_X;
+        return !ScoringLogic.isBallInCourt(landingX, ball.radius);
     }
 
     private static double calculateLandingTime(Ball ball) {

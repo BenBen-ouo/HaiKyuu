@@ -45,9 +45,6 @@ public class RallyContactHandler {
             model.ball.useSlowFloorBounceSpin();
             model.spikeEffect.stopSpikeTrail();
             model.recordRegularHit(redSide, player);
-            if (isBackRowThreeMeterFault(player, redSide)) {
-                model.awardPointWithMessage(!redSide, "後排三米線");
-            }
             return true;
         }
         return false;
@@ -84,6 +81,13 @@ public class RallyContactHandler {
             }
 
             if (collidePlayer(player, target, redSide, hitCount, input)) {
+                if (redSide == model.getServeHandler().isRedServing()
+                        && !model.isServeReceptionComplete()
+                        && model.getServeHandler().hasLaunchedServe()) {
+                    model.awardPointWithMessage(!redSide, "發球犯規");
+                    break;
+                }
+
                 // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
 
