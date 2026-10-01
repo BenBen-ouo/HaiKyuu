@@ -66,8 +66,12 @@ public final class GameServer implements AutoCloseable {
     private volatile boolean blueResetConfirmed;
 
     public GameServer() throws SocketException {
+        this(NetworkAddress.findLocalIpv4());
+    }
+
+    public GameServer(String localIp) throws SocketException {
         socket = new DatagramSocket(UDP_PORT);
-        localIp = NetworkAddress.findLocalIpv4();
+        this.localIp = localIp;
     }
 
     public void run() {

@@ -163,6 +163,7 @@ public class GameModel {
         }
         serveHandler.filterNetworkPredictionInput(input, localRedSide, localInput.servePressed);
         input.hasFirstRegularTouch = getHitCount(localRedSide) > 0;
+        input.opponentHasFirstRegularTouch = getHitCount(!localRedSide) > 0;
         configureAttackInput(input, localRedSide ? redTeam : blueTeam, localRedSide);
         (localRedSide ? redTeam : blueTeam).update(input);
         effects.update();
@@ -238,6 +239,12 @@ public class GameModel {
         syncPublicHitCounters();
     }
 
+    /** 新發球清除兩隊攔網紀錄；來回中的重新計次由對手第一顆一般接球觸發。 */
+    public void resetBlockJumpCounts() {
+        redTeam.quickAttacker.resetBlockJumpCount();
+        blueTeam.quickAttacker.resetBlockJumpCount();
+    }
+
     public int getHitCount(boolean redSide) {
         return rallyState.getHitCount(redSide);
     }
@@ -258,7 +265,11 @@ public class GameModel {
             firstServeReceptionThisFrame = true;
         }
 
+        boolean firstRegularTouch = serveReceptionComplete && getHitCount(redSide) == 0;
         recordContact(redSide, hitter, serveReceptionComplete);
+        if (firstRegularTouch) {
+            (redSide ? blueTeam : redTeam).quickAttacker.beginOpponentReceiveCycle();
+        }
     }
 
     private void recordContact(boolean redSide, Player hitter, boolean counts) {
@@ -303,6 +314,8 @@ public class GameModel {
         configureBackActions(redInput, blueInput);
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
+        redInput.opponentHasFirstRegularTouch = blueHitCount > 0;
+        blueInput.opponentHasFirstRegularTouch = redHitCount > 0;
         configureAttackInput(redInput, redTeam, true);
         configureAttackInput(blueInput, blueTeam, false);
         updateTeams(redInput, blueInput);
@@ -336,6 +349,8 @@ public class GameModel {
         BackActionResolver.apply(blueInput, blueHitCount);
         redInput.hasFirstRegularTouch = redHitCount > 0;
         blueInput.hasFirstRegularTouch = blueHitCount > 0;
+        redInput.opponentHasFirstRegularTouch = blueHitCount > 0;
+        blueInput.opponentHasFirstRegularTouch = redHitCount > 0;
         configureAttackInput(redInput, redTeam, true);
         configureAttackInput(blueInput, blueTeam, false);
         updateTeams(redInput, blueInput);

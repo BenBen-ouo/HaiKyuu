@@ -8,6 +8,7 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Enumeration;
 
 public final class NetworkAddress {
@@ -26,7 +27,8 @@ public final class NetworkAddress {
                 Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress address = addresses.nextElement();
-                    if (address instanceof Inet4Address && !address.isLoopbackAddress()) {
+                    if (address instanceof Inet4Address && !address.isLoopbackAddress()
+                            && !address.isAnyLocalAddress() && !address.isLinkLocalAddress()) {
                         return address.getHostAddress();
                     }
                 }
@@ -35,5 +37,19 @@ public final class NetworkAddress {
             // 同一台電腦測試時使用 loopback 即可。
         }
         return "127.0.0.1";
+    }
+
+    /** 創立房間不可使用 loopback／未指定／自動配置位址作為分享 IP。 */
+    public static boolean isUsableLanIpv4(String ip) {
+        if (ip == null || ip.isBlank()) return false;
+        try {
+            InetAddress address = InetAddress.getByName(ip);
+            return address instanceof Inet4Address
+                    && !address.isLoopbackAddress()
+                    && !address.isAnyLocalAddress()
+                    && !address.isLinkLocalAddress();
+        } catch (UnknownHostException exception) {
+            return false;
+        }
     }
 }

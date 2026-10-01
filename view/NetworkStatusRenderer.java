@@ -17,28 +17,8 @@ public class NetworkStatusRenderer {
         if (networkView == null) {
             return;
         }
-        drawHeader(g, networkView);
         drawConnectionMessage(g, networkView);
         drawResetMessage(g, networkView);
-    }
-
-    private void drawHeader(Graphics2D g, NetworkView networkView) {
-        String text = networkView.getHeaderText();
-        g.setFont(new Font("Microsoft JhengHei", Font.BOLD, 16));
-        FontMetrics metrics = g.getFontMetrics();
-        int padding = 10;
-        int width = metrics.stringWidth(text) + padding * 2;
-        int height = metrics.getHeight() + padding;
-        int x = GameConfig.SCREEN_WIDTH - width - 12;
-        int y = 10;
-
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.82f));
-        g.setColor(Color.WHITE);
-        g.fillRoundRect(x, y, width, height, 12, 12);
-        g.setComposite(AlphaComposite.SrcOver);
-        g.setColor(Color.DARK_GRAY);
-        g.drawRoundRect(x, y, width, height, 12, 12);
-        g.drawString(text, x + padding, y + padding / 2 + metrics.getAscent());
     }
 
     private void drawConnectionMessage(Graphics2D g, NetworkView networkView) {

@@ -32,7 +32,7 @@ public class Main {
             } else if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
                 startLocalGame(true);
             } else if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
-                String error = startClient(args[1], null, "HaiKyuu!! - UDP Client");
+                String error = startClient(args[1], null, networkWindowTitle(args[1]));
                 if (error != null) showError(error);
             } else if (args.length > 0 && "host".equalsIgnoreCase(args[0])) {
                 String error = startHostedGame();
@@ -68,7 +68,7 @@ public class Main {
 
             @Override
             public String join(String ip) {
-                String error = startClient(ip, null, "HaiKyuu!! - UDP Client");
+                String error = startClient(ip, null, networkWindowTitle(ip));
                 if (error == null) frame.dispose();
                 return error;
             }
@@ -92,14 +92,17 @@ public class Main {
     }
 
     private static String startHostedGame() {
+        String hostIp = NetworkAddress.findLocalIpv4();
+        String addressError = hostedIpError(hostIp);
+        if (addressError != null) return addressError;
         try {
-            GameServer server = new GameServer();
+            GameServer server = new GameServer(hostIp);
             TimingDiagnostics.start("host");
             Thread serverThread = new Thread(server::run, "haikyuu-host-server");
             serverThread.start();
             // 房主與訪客都建立 GameClient；房主不直接操作 Server 的 GameModel。
-            String error = startClient("127.0.0.1", server,
-                    "HaiKyuu!! - 房主（分享 IP " + server.getLocalIp() + "）");
+            String error = startClient(server.getLocalIp(), server,
+                    networkWindowTitle(server.getLocalIp()));
             if (error != null) server.close();
             return error;
         } catch (IOException exception) {
@@ -119,6 +122,15 @@ public class Main {
         } catch (IOException exception) {
             return "無法建立 UDP Client：" + exception.getMessage();
         }
+    }
+
+    static String networkWindowTitle(String hostIp) {
+        return "HaiKyuu!! - 房主 IP " + hostIp;
+    }
+
+    static String hostedIpError(String hostIp) {
+        return NetworkAddress.isUsableLanIpv4(hostIp) ? null
+                : "無法創立房間：找不到可用的區網 IPv4 位址，請先連上 Wi-Fi 或有線網路。";
     }
 
     private static void startLocalGame(boolean practiceMode) {

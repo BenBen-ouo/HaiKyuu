@@ -162,10 +162,8 @@ try {
     Set-Content -LiteralPath (Join-Path $stagedApp '.haikyuu-generated') `
         -Value 'HaiKyuu generated Windows app-image' -Encoding UTF8
 
-    Write-Host '6/6 Updating dist and uncompressed release...'
-    $distRoot = Join-Path $projectRoot 'dist'
-    New-Item -ItemType Directory -Path $distRoot, $releaseRoot -Force | Out-Null
-    Assert-SafePath $distRoot | Out-Null
+    Write-Host '6/6 Updating uncompressed release...'
+    New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
     Assert-SafePath $releaseApp | Out-Null
     $previousApp = Join-Path $workRoot 'previous-release'
     Assert-SafePath $previousApp | Out-Null
@@ -174,13 +172,6 @@ try {
             throw "release/HaiKyuu has no generated marker. Inspect it first: $releaseApp"
         }
         Assert-ReleaseNotRunning $releaseApp
-        $oldLogs = Join-Path $releaseApp 'diagnostics'
-        if (Test-Path -LiteralPath $oldLogs) {
-            $logBackup = Join-Path $projectRoot ('diagnostics\release-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-            New-Item -ItemType Directory -Path (Split-Path $logBackup -Parent) -Force | Out-Null
-            Copy-Item -LiteralPath $oldLogs -Destination $logBackup -Recurse
-            Write-Host "Previous diagnostics backed up to: $logBackup"
-        }
         # Rename the complete old image first; a locked file cannot leave it half deleted.
         Move-Item -LiteralPath $releaseApp -Destination $previousApp
     }
@@ -193,7 +184,6 @@ try {
         }
         throw
     }
-    Copy-Item -LiteralPath $jarPath -Destination (Join-Path $distRoot 'HaiKyuu.jar') -Force
     $oldZipPath = Join-Path $releaseRoot 'HaiKyuu-Windows.zip'
     Assert-SafePath $oldZipPath | Out-Null
     if (Test-Path -LiteralPath $oldZipPath) {
@@ -204,6 +194,15 @@ try {
             Remove-Item -LiteralPath $previousApp -Recurse -Force
         } catch {
             Write-Warning "New release is ready, but the previous image could not be removed: $previousApp"
+        }
+    }
+
+    if (Test-Path -LiteralPath $workMarker) {
+        try {
+            Assert-SafePath $workRoot | Out-Null
+            Remove-Item -LiteralPath $workRoot -Recurse -Force
+        } catch {
+            Write-Warning "Release is ready, but the generated build workspace remains: $workRoot"
         }
     }
 

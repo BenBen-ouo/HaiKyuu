@@ -5,5 +5,4 @@ out/
 sources.txt
 diagnostics/
 .release-build/
-dist/
 release/

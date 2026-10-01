@@ -37,8 +37,9 @@ public final class GameConfig {
     public static final double PLAYER_SPEED = 4.3;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
     public static final double PLAYER_JUMP_SPEED = -9.0;
-    public static final double SETTER_JUMP_SPEED = -6.6;
+    public static final double SETTER_JUMP_SPEED = -6.3;
     public static final double QUICK_ATTACKER_JUMP_SPEED = -7.8;
+    public static final double MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER = 0.9;
     public static final double WING_SPIKER_JUMP_SPEED = -7.8;
     public static final double DIVE_SPEED = 5.0;
 
@@ -101,7 +102,7 @@ public final class GameConfig {
     public static final double FLAT_SPIKE_SPEED_Y = 4.5;
 
     // S / ↓：短球，向下速度更大。
-    public static final double SHORT_SPIKE_SPEED_X = 15.0;
+    public static final double SHORT_SPIKE_SPEED_X = 10.5;
     public static final double SHORT_SPIKE_SPEED_Y = 10.0;
 
     // W / ↑：吊球，慢速上拋後越過攔網。
@@ -116,7 +117,7 @@ public final class GameConfig {
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_SETTER_OFFSET_X = -30 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
-    public static final double RED_WING_OFFSET_X = -140 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
+    public static final double RED_WING_OFFSET_X = -156 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     // 待發球時圖片中心在畫面左緣外 10 像素。
     public static final double RED_BACK_SERVE_X = -10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double RED_BACK_SERVE_Y = PLAYER_BASE_Y;
@@ -129,7 +130,7 @@ public final class GameConfig {
     public static final double BLUE_BACK_OFFSET_X = 300 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_SETTER_OFFSET_X = 30 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_QUICK_OFFSET_X = 5 - PLAYER_NET_OVERLAP_X;
-    public static final double BLUE_WING_OFFSET_X = 140 - PLAYER_NET_OVERLAP_X;
+    public static final double BLUE_WING_OFFSET_X = 156 - PLAYER_NET_OVERLAP_X;
     // 待發球時圖片中心在畫面右緣外 10 像素。
     public static final double BLUE_BACK_SERVE_X = SCREEN_WIDTH + 10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double BLUE_BACK_SERVE_Y = PLAYER_BASE_Y;

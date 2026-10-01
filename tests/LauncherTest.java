@@ -3,6 +3,7 @@ import java.awt.Container;
 import javax.swing.JButton;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import network.NetworkAddress;
 import view.LauncherPanel;
 
 /** 不開實體視窗，檢查啟動選單的模式與內嵌 IP 欄位。 */
@@ -13,6 +14,17 @@ public final class LauncherTest {
     }
 
     private static void testLauncherActions() {
+        check("HaiKyuu!! - 房主 IP 192.168.1.20".equals(Main.networkWindowTitle("192.168.1.20")),
+                "房主與加入者使用同一個顯示房主 IP 的視窗標題");
+        check(NetworkAddress.isUsableLanIpv4("192.168.1.20")
+                && Main.hostedIpError("192.168.1.20") == null,
+                "創立房間允許區網 IPv4");
+        for (String invalid : new String[] {"127.0.0.1", "0.0.0.0", "169.254.1.2", "bad ip"}) {
+            check(!NetworkAddress.isUsableLanIpv4(invalid)
+                    && Main.hostedIpError(invalid) != null,
+                    "創立房間拒絕無法分享的 IP：" + invalid);
+        }
+        check(Main.hostedIpError(null) != null, "創立房間拒絕找不到 IP");
         int[] selected = new int[4];
         String[] joinedIp = new String[1];
         LauncherPanel panel = new LauncherPanel("192.168.1.20", new LauncherPanel.Actions() {
@@ -38,6 +50,14 @@ public final class LauncherTest {
         findButton(panel, "加入房間").doClick();
         check(selected[3] == 1 && !LauncherPanel.isValidIpv4("example.com"),
                 "錯誤 IP 不會啟動 Client");
+
+        LauncherPanel noLanPanel = new LauncherPanel("127.0.0.1", new LauncherPanel.Actions() {
+            @Override public void startLocal() {}
+            @Override public void startPractice() {}
+            @Override public String startHost() { return Main.hostedIpError("127.0.0.1"); }
+            @Override public String join(String ip) { return null; }
+        });
+        check(!findButton(noLanPanel, "複製").isEnabled(), "沒有區網 IP 時不允許複製 loopback");
     }
 
     private static JTextField findEditableField(Container parent) {

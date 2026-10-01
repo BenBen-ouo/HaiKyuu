@@ -12,6 +12,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
 public final class LauncherPanel extends JPanel {
@@ -52,10 +53,12 @@ public final class LauncherPanel extends JPanel {
         JPanel hostIpRow = new JPanel(new BorderLayout(8, 0));
         hostIpRow.setOpaque(false);
         hostIpRow.add(new JLabel("創立房間後分享此 IP："), BorderLayout.WEST);
-        JTextField hostIpField = new JTextField(localIp);
+        boolean hasHostIp = NetworkAddress.isUsableLanIpv4(localIp);
+        JTextField hostIpField = new JTextField(hasHostIp ? localIp : "無可用區網 IP");
         hostIpField.setEditable(false);
         hostIpRow.add(hostIpField, BorderLayout.CENTER);
         JButton copyButton = new JButton("複製");
+        copyButton.setEnabled(hasHostIp);
         copyButton.addActionListener(event -> {
             try {
                 Toolkit.getDefaultToolkit().getSystemClipboard()

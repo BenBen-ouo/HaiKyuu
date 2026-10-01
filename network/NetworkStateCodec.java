@@ -147,6 +147,8 @@ final class NetworkStateCodec {
         out.writeDouble(player.jumpStartX);
         out.writeByte(player.actionOrdinal);
         out.writeBoolean(player.attackHitBoxEnabled);
+        out.writeInt(player.countedBlockJumps);
+        out.writeBoolean(player.opponentFirstTouchSeen);
         out.writeDouble(player.hitBoxOffsetX);
         out.writeDouble(player.hitBoxOffsetY);
         out.writeDouble(player.hitBoxWidth);
@@ -162,6 +164,7 @@ final class NetworkStateCodec {
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
                 in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(),
                 in.readDouble(), in.readByte(), in.readBoolean(),
+                in.readInt(), in.readBoolean(),
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
                 in.readInt(), in.readInt(), in.readDouble()
         );

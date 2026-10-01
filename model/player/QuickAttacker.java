@@ -9,6 +9,8 @@ import model.TeamInput;
 
 public class QuickAttacker extends Player {
     private boolean previousQuickAttack = false;
+    private int countedBlockJumps;
+    private boolean opponentFirstTouchSeen;
     public final BlockHitBox blockHitBox;
 
     public QuickAttacker(String assetName, double x, double y, boolean redSide) {
@@ -20,12 +22,38 @@ public class QuickAttacker extends Player {
     public void resetToInitial() {
         super.resetToInitial();
         previousQuickAttack = false;
+        resetBlockJumpCount();
+    }
+
+    public void resetBlockJumpCount() {
+        countedBlockJumps = 0;
+        opponentFirstTouchSeen = false;
+    }
+
+    /** 對手在新球權接起第一顆一般球，攔網起跳從第一次重新計算。 */
+    public void beginOpponentReceiveCycle() {
+        countedBlockJumps = 0;
+        opponentFirstTouchSeen = true;
+    }
+
+    public int getCountedBlockJumps() {
+        return countedBlockJumps;
+    }
+
+    public boolean hasSeenOpponentFirstTouch() {
+        return opponentFirstTouchSeen;
+    }
+
+    public void applyBlockJumpState(int count, boolean firstTouchSeen) {
+        countedBlockJumps = Math.max(0, count);
+        opponentFirstTouchSeen = firstTouchSeen;
     }
 
     @Override
     public void update(TeamInput input) {
         clearAttackAttempt();
         boolean justPressedQuick = input.quickAttack && !previousQuickAttack;
+        if (input.opponentHasFirstRegularTouch) opponentFirstTouchSeen = true;
 
         vx = 0;
 
@@ -51,10 +79,14 @@ public class QuickAttacker extends Player {
         if (justPressedQuick) {
             if (input.hasFirstRegularTouch) {
                 startAttackReady(0);
+                vy = GameConfig.QUICK_ATTACKER_JUMP_SPEED;
             } else {
                 startBlockAnimation();
+                vy = GameConfig.QUICK_ATTACKER_JUMP_SPEED
+                        * (opponentFirstTouchSeen && countedBlockJumps > 0
+                                ? GameConfig.MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER : 1.0);
+                if (opponentFirstTouchSeen) countedBlockJumps++;
             }
-            vy = GameConfig.QUICK_ATTACKER_JUMP_SPEED;
         }
 
         applyGravity();

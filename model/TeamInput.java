@@ -19,6 +19,8 @@ public class TeamInput {
     public boolean quickAttack;
     // 本隊在這次球權內是否已完成第一次一般觸球。
     public boolean hasFirstRegularTouch;
+    // 對手本次球權是否已完成一般接球；供 MB 攔網起跳計數啟用。
+    public boolean opponentHasFirstRegularTouch;
 
     public boolean wingAttack;
     public boolean airSetModifier;
@@ -52,6 +54,7 @@ public class TeamInput {
         copy.setterJump = setterJump;
         copy.quickAttack = quickAttack;
         copy.hasFirstRegularTouch = hasFirstRegularTouch;
+        copy.opponentHasFirstRegularTouch = opponentHasFirstRegularTouch;
         copy.wingAttack = wingAttack;
         copy.airSetModifier = airSetModifier;
         copy.ball = ball;

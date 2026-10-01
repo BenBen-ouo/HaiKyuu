@@ -12,6 +12,7 @@ import model.serve.ServeState;
 public final class NetworkSyncTest {
     public static void main(String[] args) throws Exception {
         testWorldSnapshotRoundTripAndOrdering();
+        testBlockJumpCountSnapshot();
         testRallyContactsWithoutReliableEvent();
         testReliableEventRestoresContactHistory();
         testReliableEventsStayInOrder();
@@ -51,6 +52,20 @@ public final class NetworkSyncTest {
         check(inbox.offer(future, 1) == null, "過期快照不倒退球員位置");
         UdpCodec.WorldSnapshotFrame oldRevision = snapshot(4, 0, Packet.WorldSnapshot.from(model, 0));
         check(inbox.offer(oldRevision, 1) == null, "舊碰撞版本不得覆蓋較新位置");
+    }
+
+    private static void testBlockJumpCountSnapshot() throws Exception {
+        GameModel server = new GameModel();
+        TeamInput block = new TeamInput();
+        block.quickAttack = true;
+        block.opponentHasFirstRegularTouch = true;
+        server.redTeam.quickAttacker.update(block);
+        Packet.WorldSnapshot decoded = snapshot(1, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
+        GameModel client = new GameModel();
+        decoded.redTeam.applyMotionTo(client.redTeam);
+        check(client.redTeam.quickAttacker.getCountedBlockJumps() == 1
+                        && client.redTeam.quickAttacker.hasSeenOpponentFirstTouch(),
+                "攔網起跳次數與啟用狀態隨快照同步");
     }
 
     private static void testJumpServeInputAndTossEvent() throws Exception {

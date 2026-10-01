@@ -183,6 +183,7 @@ public class ServeHandler {
                 serveLaunchedThisFrame = true;
                 waitForPostServeSpaceRelease = true;
                 model.resetCounters();
+                model.resetBlockJumpCounts();
                 model.resetServeReception();
             }
         }
@@ -222,6 +223,7 @@ public class ServeHandler {
         serveLaunchedThisFrame = true;
 
         model.resetCounters();
+        model.resetBlockJumpCounts();
         model.resetServeReception();
     }
 

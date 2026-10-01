@@ -16,6 +16,7 @@ import model.player.Player;
 import model.player.PlayerAction;
 import model.player.QuickAttacker;
 import model.player.Team;
+import model.player.WingSpiker;
 import model.rally.RallyContactHandler;
 import model.rally.ScoringLogic;
 import model.serve.ServeState;
@@ -33,6 +34,7 @@ public class GameplayFlowTest {
         testRemovedShortFlatCombination();
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
+        testWingApproachPositionAndBlockJumpCount();
         testWingDiveBeforeFirstReception();
         testBlueControlsRetainNumpadMappings();
         testBlueDirectionMirrors();
@@ -128,6 +130,75 @@ public class GameplayFlowTest {
                 blue.wingSpiker.attackHitBox, "WS 攻擊框");
         check(red.wingSpiker.hitBox.offsetX == 30 && blue.wingSpiker.hitBox.offsetX == 45,
                 "WS 一般框採目前紅藍偏移設定");
+    }
+
+    private static void testWingApproachPositionAndBlockJumpCount() {
+        Team red = new Team(true);
+        Team blue = new Team(false);
+        double netX = GameConfig.NET_X;
+        check(Math.abs(netX - (red.wingSpiker.x + red.wingSpiker.imageWidth / 2.0)
+                - (172.0 + 2.0 / 3.0)) < 0.001, "紅隊 WS 中心距網 172.67");
+        check(Math.abs((blue.wingSpiker.x + blue.wingSpiker.imageWidth / 2.0)
+                - netX - (172.0 + 2.0 / 3.0)) < 0.001, "藍隊 WS 中心鏡像距網 172.67");
+        for (boolean redSide : new boolean[] {true, false}) {
+            WingSpiker wing = (redSide ? red : blue).wingSpiker;
+            TeamInput input = new TeamInput();
+            input.wingAttack = true;
+            input.hasFirstRegularTouch = true;
+            wing.update(input);
+            for (int frame = 0; frame < 16; frame++) wing.update(input);
+            double distance = Math.abs(netX - (wing.x + wing.imageWidth / 2.0));
+            check(wing.getAction() == PlayerAction.ATTACK_READY
+                    && Math.abs(distance - (60.0 + 1.0 / 6.0)) < 0.001,
+                    "WS 兩隊鏡像站位、16 幀動畫與 15 幀實際位移");
+        }
+
+        QuickAttacker mb = new QuickAttacker("player 1 MB.png", 100, GameConfig.PLAYER_BASE_Y, true);
+        TeamInput input = new TeamInput();
+        input.quickAttack = true;
+        mb.update(input);
+        check(mb.getCountedBlockJumps() == 0, "對手接第一球前的攔網不計次");
+        for (int frame = 0; frame < 90; frame++) mb.update(new TeamInput());
+        input.opponentHasFirstRegularTouch = true;
+        mb.update(input);
+        check(mb.getCountedBlockJumps() == 1
+                && Math.abs(mb.vy - (GameConfig.QUICK_ATTACKER_JUMP_SPEED + GameConfig.GRAVITY)) < 0.001,
+                "對手接第一球後第一次攔網完整起跳");
+        for (int frame = 0; frame < 90; frame++) mb.update(new TeamInput());
+        input.opponentHasFirstRegularTouch = false;
+        mb.update(input);
+        check(mb.getCountedBlockJumps() == 2
+                && Math.abs(mb.vy - (GameConfig.QUICK_ATTACKER_JUMP_SPEED
+                        * GameConfig.MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER + GameConfig.GRAVITY)) < 0.001,
+                "第二次攔網速度乘 0.9，球過網後仍保留次數");
+        for (int frame = 0; frame < 90; frame++) mb.update(new TeamInput());
+        input.hasFirstRegularTouch = true;
+        mb.update(input);
+        check(mb.getAction() == PlayerAction.ATTACK_READY
+                && mb.getCountedBlockJumps() == 2
+                && Math.abs(mb.vy - (GameConfig.QUICK_ATTACKER_JUMP_SPEED + GameConfig.GRAVITY)) < 0.001,
+                "MB 攻擊不計攔網次數，也不降低起跳速度");
+        mb.resetBlockJumpCount();
+        check(mb.getCountedBlockJumps() == 0 && !mb.hasSeenOpponentFirstTouch(),
+                "新一球攔網次數歸零");
+
+        GameModel rally = new GameModel();
+        rally.recordRegularHit(false, rally.blueTeam.backPlayer);
+        QuickAttacker redMb = rally.redTeam.quickAttacker;
+        check(redMb.hasSeenOpponentFirstTouch(), "藍隊第一顆一般接球啟用紅隊 MB 攔網計數");
+        redMb.applyBlockJumpState(2, true);
+        rally.recordRegularHit(false, rally.blueTeam.setter);
+        check(redMb.getCountedBlockJumps() == 2, "對手第二顆一般觸球不重新計數");
+        rally.resetCounters(); // 同一來回，球過網後既有三觸歸零。
+        check(redMb.getCountedBlockJumps() == 2, "單純過網不重新計數");
+        rally.recordRegularHit(false, rally.blueTeam.backPlayer);
+        check(redMb.getCountedBlockJumps() == 0 && redMb.hasSeenOpponentFirstTouch(),
+                "同一來回藍隊再次接起第一顆時，紅隊 MB 攔網重新從第一次計算");
+        rally.blueTeam.quickAttacker.applyBlockJumpState(2, true);
+        rally.resetCounters();
+        rally.recordRegularHit(true, rally.redTeam.backPlayer);
+        check(rally.blueTeam.quickAttacker.getCountedBlockJumps() == 0,
+                "紅隊接起第一顆時，藍隊 MB 也鏡像重新計數");
     }
 
     private static void checkMirroredHitBox(HitBox red, HitBox blue, String name) {
