@@ -20,6 +20,7 @@ public final class NetworkSyncTest {
         testMotionSnapshotKeepsAnimationAlive();
         testMbSnapshotReconcilesActionAndAsset();
         testAirSetInputAndSnapshotAnimation();
+        testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
         if (args.length > 0 && "loopback".equals(args[0])) {
@@ -50,6 +51,35 @@ public final class NetworkSyncTest {
         check(inbox.offer(future, 1) == null, "過期快照不倒退球員位置");
         UdpCodec.WorldSnapshotFrame oldRevision = snapshot(4, 0, Packet.WorldSnapshot.from(model, 0));
         check(inbox.offer(oldRevision, 1) == null, "舊碰撞版本不得覆蓋較新位置");
+    }
+
+    private static void testJumpServeInputAndTossEvent() throws Exception {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel server = new GameModel();
+            server.getServeHandler().setRedServing(redSide);
+            server.getServeHandler().setWaitingForServe(true);
+            TeamInput local = new TeamInput();
+            local.servePressed = true;
+            local.backJump = true;
+            local.backDive = true;
+            local.backRight = true; // 兩台 Client 均用 D 朝網。
+            local.spikeFlat = true;
+            TeamInput decoded = Packet.decodeInput(Packet.encodeInput(local));
+            TeamInput world = redSide ? decoded : decoded.mirroredHorizontally();
+            server.update(redSide ? world : new TeamInput(), redSide ? new TeamInput() : world);
+            check(server.getServeHandler().getState() == ServeState.JUMP_TOSS,
+                    "紅藍連線輸入均可用 D+Space 開始跳發拋球");
+            byte[] encoded = UdpCodec.event(7, 1, 1, Packet.EventType.JUMP_TOSS, 1,
+                    Packet.CompactState.from(server));
+            UdpCodec.Event event = (UdpCodec.Event) UdpCodec.decode(encoded, encoded.length);
+            GameModel client = new GameModel();
+            event.state.applyToForClient(client);
+            check(event.type == Packet.EventType.JUMP_TOSS
+                            && client.getServeHandler().getState() == ServeState.JUMP_TOSS
+                            && Math.abs(client.ball.x - server.ball.x) < 1e-9
+                            && Math.abs(client.ball.vy - server.ball.vy) < 1e-9,
+                    "跳發拋球以可靠事件傳遞階段，球以 Server 狀態同步");
+        }
     }
 
     private static UdpCodec.WorldSnapshotFrame snapshot(int sequence, int revision,

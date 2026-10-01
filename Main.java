@@ -1,6 +1,6 @@
 /*
 程式進入點。
-server 參數啟動完全無畫面的 UDP 權威 Server；join <IP> 啟動 Client，未帶參數則保留單機測試模式。
+未帶參數開啟 GUI 選單；server 啟動無畫面的權威 Server，join <IP> 直接啟動 Client。
 */
 import controller.GameController;
 import controller.KeyboardController;
@@ -13,9 +13,11 @@ import javax.swing.SwingUtilities;
 import model.GameModel;
 import network.GameClient;
 import network.GameServer;
+import network.NetworkAddress;
 import network.NetworkView;
 import network.TimingDiagnostics;
 import view.GamePanel;
+import view.LauncherPanel;
 
 public class Main {
     public static void main(String[] args) {
@@ -25,19 +27,58 @@ public class Main {
         }
 
         SwingUtilities.invokeLater(() -> {
-            if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
+            if (args.length > 0 && "local".equalsIgnoreCase(args[0])) {
+                startLocalGame(false);
+            } else if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
                 startLocalGame(true);
             } else if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
-                startClient(args[1]);
-            } else if (args.length > 0 && "join".equalsIgnoreCase(args[0])) {
-                String serverIp = JOptionPane.showInputDialog(null, "輸入 Server IPv4 位址：", "加入 UDP Server", JOptionPane.QUESTION_MESSAGE);
-                if (serverIp != null && !serverIp.isBlank()) {
-                    startClient(serverIp.trim());
-                }
+                String error = startClient(args[1], null, "HaiKyuu!! - UDP Client");
+                if (error != null) showError(error);
+            } else if (args.length > 0 && "host".equalsIgnoreCase(args[0])) {
+                String error = startHostedGame();
+                if (error != null) showError(error);
             } else {
-                startLocalGame(false);
+                showLauncher();
             }
         });
+    }
+
+    private static void showLauncher() {
+        JFrame frame = new JFrame("HaiKyuu!! - 啟動選單");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        LauncherPanel panel = new LauncherPanel(NetworkAddress.findLocalIpv4(), new LauncherPanel.Actions() {
+            @Override
+            public void startLocal() {
+                startLocalGame(false);
+                frame.dispose();
+            }
+
+            @Override
+            public void startPractice() {
+                startLocalGame(true);
+                frame.dispose();
+            }
+
+            @Override
+            public String startHost() {
+                String error = startHostedGame();
+                if (error == null) frame.dispose();
+                return error;
+            }
+
+            @Override
+            public String join(String ip) {
+                String error = startClient(ip, null, "HaiKyuu!! - UDP Client");
+                if (error == null) frame.dispose();
+                return error;
+            }
+        });
+        frame.add(panel);
+        frame.pack();
+        frame.setSize(480, 340);
+        frame.setResizable(false);
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
     }
 
     private static void startDedicatedServer() {
@@ -50,16 +91,33 @@ public class Main {
         }
     }
 
-    private static void startClient(String hostIp) {
-        TimingDiagnostics.start("client");
+    private static String startHostedGame() {
+        try {
+            GameServer server = new GameServer();
+            TimingDiagnostics.start("host");
+            Thread serverThread = new Thread(server::run, "haikyuu-host-server");
+            serverThread.start();
+            // 房主與訪客都建立 GameClient；房主不直接操作 Server 的 GameModel。
+            String error = startClient("127.0.0.1", server,
+                    "HaiKyuu!! - 房主（分享 IP " + server.getLocalIp() + "）");
+            if (error != null) server.close();
+            return error;
+        } catch (IOException exception) {
+            return "無法創立房間（UDP 5001）：" + exception.getMessage();
+        }
+    }
+
+    private static String startClient(String hostIp, GameServer hostedServer, String title) {
+        TimingDiagnostics.start(hostedServer == null ? "client" : "host");
         try {
             GameModel model = new GameModel();
             KeyboardController keyboard = new KeyboardController();
             GameClient client = new GameClient(model, hostIp);
             GameController controller = new GameController(model, keyboard, client);
-            showWindow(model, keyboard, controller, client, "HaiKyuu!! - UDP Client");
+            showWindow(model, keyboard, controller, client, hostedServer, title);
+            return null;
         } catch (IOException exception) {
-            showError("無法建立 UDP Client：\n" + exception.getMessage());
+            return "無法建立 UDP Client：" + exception.getMessage();
         }
     }
 
@@ -67,8 +125,8 @@ public class Main {
         GameModel model = new GameModel(practiceMode);
         KeyboardController keyboard = new KeyboardController();
         GameController controller = new GameController(model, keyboard);
-        showWindow(model, keyboard, controller, null,
-                practiceMode ? "HaiKyuu!! - 練習模式" : "HaiKyuu!! - 單機測試");
+        showWindow(model, keyboard, controller, null, null,
+                practiceMode ? "HaiKyuu!! - 練習模式" : "HaiKyuu!! - 本地雙人");
     }
 
     private static void showWindow(
@@ -76,25 +134,26 @@ public class Main {
             KeyboardController keyboard,
             GameController controller,
             NetworkView networkView,
+            GameServer hostedServer,
             String title
     ) {
         GamePanel panel = new GamePanel(model, controller, networkView);
         panel.addKeyListener(keyboard);
 
         JFrame frame = new JFrame(title);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.setResizable(false);
         frame.add(panel);
         frame.pack();
         frame.setLocationRelativeTo(null);
-        if (networkView != null) {
-            frame.addWindowListener(new WindowAdapter() {
-                @Override
-                public void windowClosing(WindowEvent event) {
-                    networkView.close();
-                }
-            });
-        }
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent event) {
+                panel.stopGameLoop();
+                if (networkView != null) networkView.close();
+                if (hostedServer != null) hostedServer.close();
+            }
+        });
         frame.setVisible(true);
         panel.requestFocusInWindow();
         panel.startGameLoop();

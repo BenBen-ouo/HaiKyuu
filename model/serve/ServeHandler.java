@@ -1,6 +1,6 @@
 /*
-控制發球流程狀態，包含等待發球、球已發出與進入正式來回。
-負責鎖住發球方 backPlayer 輸入，避免發球 Space 被誤判成撲球或攻擊。
+控制發球流程狀態，包含等待發球、跳發拋球、球已發出與正式來回。
+發球方後排平時鎖住動作；跳發拋球期間只開放第二次起跳與第三次擊球。
 每次進入下一球等待發球時，會將接球方 backPlayer 回復至預設站位。
 */
 package model.serve;
@@ -21,6 +21,11 @@ public class ServeHandler {
     private boolean lastServePressed = false;
     private boolean waitForPostServeSpaceRelease = false;
     private boolean serveLaunchedThisFrame = false;
+    private boolean jumpStarted;
+    private boolean jumpShortArc;
+    private boolean jumpSlowHorizontal;
+    private boolean jumpLongArc;
+    private boolean predictionLastServePressed;
 
     public ServeHandler(GameModel model) {
         this.model = model;
@@ -35,8 +40,13 @@ public class ServeHandler {
         return redServing;
     }
 
-    public boolean shouldUpdateBall() {
+    public boolean hasLaunchedServe() {
         return state == ServeState.SERVE_LAUNCHED || state == ServeState.IN_PLAY;
+    }
+
+    public boolean shouldUpdateBall() {
+        return state == ServeState.JUMP_TOSS || state == ServeState.SERVE_LAUNCHED
+                || state == ServeState.IN_PLAY;
     }
 
     public boolean shouldUseGameBackPlayerAction(boolean redSide) {
@@ -88,6 +98,8 @@ public class ServeHandler {
         this.state = state == null ? ServeState.WAITING_FOR_SERVE : state;
         this.redServing = redServing;
         lastServePressed = false;
+        Player server = redServing ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
+        jumpStarted = this.state == ServeState.JUMP_TOSS && server.jumping;
         // IN_PLAY 可能與發球同幀出現；不能因此清除仍按住發球鍵的保護。
         if (this.state == ServeState.WAITING_FOR_SERVE) {
             waitForPostServeSpaceRelease = false;
@@ -107,7 +119,18 @@ public class ServeHandler {
         if (redSide != redServing) {
             return;
         }
-        if (state == ServeState.WAITING_FOR_SERVE || state == ServeState.SERVE_LAUNCHED) {
+        boolean justPressed = rawServePressed && !predictionLastServePressed;
+        predictionLastServePressed = rawServePressed;
+        if (state == ServeState.JUMP_TOSS) {
+            ServeInputLocker.lockBackPlayer(input);
+            Player server = redSide ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
+            if (justPressed && !server.jumping && !jumpStarted) {
+                input.backJump = true;
+                jumpStarted = true;
+            } else if (rawServePressed && server.jumping && jumpStarted) {
+                input.backJump = true;
+            }
+        } else if (state == ServeState.WAITING_FOR_SERVE || state == ServeState.SERVE_LAUNCHED) {
             ServeInputLocker.lockBackPlayer(input);
             if (state == ServeState.SERVE_LAUNCHED && !rawServePressed) {
                 waitForPostServeSpaceRelease = false;
@@ -125,9 +148,21 @@ public class ServeHandler {
 
         TeamInput servingInput = redServing ? redInput : blueInput;
         boolean justPressedServe = servingInput.servePressed && !lastServePressed;
+        jumpShortArc = servingInput.spikeShort;
+        jumpSlowHorizontal = redServing ? servingInput.backLeft : servingInput.backRight;
+        jumpLongArc = redServing ? servingInput.backRight : servingInput.backLeft;
 
         if (state == ServeState.WAITING_FOR_SERVE) {
             updateReadyState(servingInput, justPressedServe);
+        } else if (state == ServeState.JUMP_TOSS) {
+            ServeInputLocker.lockBackPlayer(servingInput);
+            Player server = redServing ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
+            if (justPressedServe && !jumpStarted && !server.jumping) {
+                servingInput.backJump = true;
+                jumpStarted = true;
+            } else if (servingInput.servePressed && server.jumping && jumpStarted) {
+                servingInput.backJump = true;
+            }
         } else if (state == ServeState.SERVE_LAUNCHED) {
             ServeInputLocker.lockBackPlayer(servingInput);
         } else if (state == ServeState.IN_PLAY) {
@@ -138,13 +173,26 @@ public class ServeHandler {
     }
 
     public void updateAfterTeams() {
+        if (state == ServeState.JUMP_TOSS) {
+            Player server = redServing ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
+            if (server.isAttackSwinging() && server.hasValidAttackAttemptThisFrame()) {
+                ballController.hitJumpServe(redServing, jumpShortArc,
+                        jumpSlowHorizontal, jumpLongArc);
+                server.attackHitBox.disable();
+                state = ServeState.SERVE_LAUNCHED;
+                serveLaunchedThisFrame = true;
+                waitForPostServeSpaceRelease = true;
+                model.resetCounters();
+                model.resetServeReception();
+            }
+        }
         if (state == ServeState.SERVE_LAUNCHED && isServerOnGround()) {
             state = ServeState.IN_PLAY;
         }
     }
 
     public void updateAfterBall() {
-        // 目前先移除跳飄拋球流程；保留入口讓之後跳發／拋球狀態可接回來。
+        // 拋球落地由 RallyScorer 判發球犯規；這裡不改變 Server 的球路。
     }
 
     public void finishFrame() {
@@ -156,7 +204,13 @@ public class ServeHandler {
         ServeInputLocker.lockBackPlayer(servingInput);
 
         if (justPressedServe) {
-            launchServe(servingInput.serveType);
+            if (servingInput.spikeFlat) {
+                ballController.tossJumpServe(redServing);
+                state = ServeState.JUMP_TOSS;
+                jumpStarted = false;
+            } else {
+                launchServe(servingInput.serveType);
+            }
         }
     }
 
@@ -203,5 +257,7 @@ public class ServeHandler {
         lastServePressed = false;
         waitForPostServeSpaceRelease = false;
         serveLaunchedThisFrame = false;
+        jumpStarted = false;
+        predictionLastServePressed = false;
     }
 }

@@ -7,6 +7,7 @@ package model.rally;
 import model.GameConfig;
 import model.GameModel;
 import model.TeamInput;
+import model.serve.ServeState;
 
 public class RallyScorer {
     private static final int MOVABLE_SCORE_FRAMES = 60;
@@ -106,14 +107,25 @@ public class RallyScorer {
                 model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
                 model.spikeEffect.stopSpikeTrail();
             }
-            finishRally();
+            boolean serveNotReceived = !model.isServeReceptionComplete();
+            boolean unhitToss = model.getServeHandler().getState() == ServeState.JUMP_TOSS;
+            boolean inCourt = ScoringLogic.isBallInCourt(model.ball.x, model.ball.radius);
+            boolean redServing = model.getServeHandler().isRedServing();
+            boolean onOpponentHalf = redServing ? model.ball.x > GameConfig.NET_X
+                    : model.ball.x < GameConfig.NET_X;
+            if (serveNotReceived && (unhitToss
+                    || (model.getServeHandler().hasLaunchedServe() && inCourt && !onOpponentHalf))) {
+                awardPointWithMessage(!redServing, "發球犯規");
+            } else {
+                finishRally();
+            }
         }
     }
 
     private void finishRally() {
         // 若之前標記為 pending touch out，等落地後再決定是否為 TOUCH OUT
         if (model.pendingTouchOut) {
-            boolean isInNow = model.ball.x >= GameConfig.COURT_LEFT_X && model.ball.x <= GameConfig.COURT_RIGHT_X;
+            boolean isInNow = ScoringLogic.isBallInCourt(model.ball.x, model.ball.radius);
             Boolean winner = model.pendingTouchOutWinner;
             // 先清除 pending
             model.pendingTouchOut = false;
@@ -131,9 +143,9 @@ public class RallyScorer {
         }
 
         // 原先結束來回時的得分流程，改用 handlePoint 以便重用
-        boolean isIn = model.ball.x >= GameConfig.COURT_LEFT_X && model.ball.x <= GameConfig.COURT_RIGHT_X;
+        boolean isIn = ScoringLogic.isBallInCourt(model.ball.x, model.ball.radius);
         boolean redWins = ScoringLogic.determineWinner(
-                model.ball.x,
+                model.ball,
                 model.getLastHitTeam(),
                 model.getServeHandler().isRedServing()
         );

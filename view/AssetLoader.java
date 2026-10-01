@@ -1,5 +1,5 @@
 /*
-圖片資源載入器，負責從 assets/images 或 assets 讀取圖片。
+圖片資源載入器，優先從 JAR 內的 assets/images 讀取；開發執行時可回退到外部 assets。
 已載入過的圖片會快取，避免每幀重複讀取檔案。
 */
 package view;
@@ -9,6 +9,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import javax.imageio.ImageIO;
@@ -23,14 +24,27 @@ public class AssetLoader {
 
         BufferedImage image = null;
 
-        File imageFolderFile = new File("assets/images", fileName);
-        File assetRootFile = new File("assets", fileName);
-
         try {
-            if (imageFolderFile.exists()) {
-                image = ImageIO.read(imageFolderFile);
-            } else if (assetRootFile.exists()) {
-                image = ImageIO.read(assetRootFile);
+            try (InputStream resource = AssetLoader.class.getResourceAsStream("/assets/images/" + fileName)) {
+                if (resource != null) {
+                    image = ImageIO.read(resource);
+                }
+            }
+            if (image == null) {
+                try (InputStream resource = AssetLoader.class.getResourceAsStream("/assets/" + fileName)) {
+                    if (resource != null) {
+                        image = ImageIO.read(resource);
+                    }
+                }
+            }
+            if (image == null) {
+                File imageFolderFile = new File("assets/images", fileName);
+                File assetRootFile = new File("assets", fileName);
+                if (imageFolderFile.exists()) {
+                    image = ImageIO.read(imageFolderFile);
+                } else if (assetRootFile.exists()) {
+                    image = ImageIO.read(assetRootFile);
+                }
             }
 
             // 強制轉成帶 alpha 的 ARGB 格式，確保透明通道被保留和一致

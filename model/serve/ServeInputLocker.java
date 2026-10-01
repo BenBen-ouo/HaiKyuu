@@ -1,6 +1,6 @@
 /*
 發球流程用的輸入鎖定工具。
-可禁止發球方 backPlayer 移動、撲球、跳躍，或等待發球鍵放開後再恢復操作。
+可禁止發球方 backPlayer 移動與一般動作；跳發起跳與擊球由 ServeHandler 單獨放行。
 */
 package model.serve;
 
