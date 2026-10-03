@@ -164,7 +164,8 @@ public class RallyContactHandler {
     }
 
     private boolean canSpike(Player player) {
-        return player.isAttackSwinging() && player.jumping && player.hasValidAttackAttemptThisFrame();
+        // 本幀落地仍允許落地前已在空中、且球已進框的攻擊。
+        return player.hasValidAttackAttemptThisFrame();
     }
 
     private void performSpike(AttackContext context, TeamInput input) {

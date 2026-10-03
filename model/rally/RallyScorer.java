@@ -177,8 +177,8 @@ public class RallyScorer {
         deadBallTimer = SCORE_FRAMES;
 
         if (model.isPracticeMode()) {
-            // 練習模式仍裁決回合，但不計分；每球都由藍隊發球。
-            model.getServeHandler().setRedServing(false);
+            // 練習模式仍裁決回合但不計分；每球固定由練習方的對手發球。
+            model.getServeHandler().setRedServing(model.isPracticeRedServing());
         } else {
             if (redWins) {
                 model.redScore++;

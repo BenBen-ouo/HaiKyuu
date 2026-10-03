@@ -132,11 +132,12 @@ public class BackPlayer extends Player {
 
     private void updateBackAttack(boolean justPressedAction, TeamInput input) {
         if (isHeldAttackReady(input.backJump || input.backDive, justPressedAction)
+                && input.lastHitter != this
                 && isBallInAttackBox(input)) {
             if (input.canBackAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
-            } else {
-                startAttackSwingAnimation();
+            } else if (input.canResolveAttack) {
+                queueAttackAttempt();
             }
         }
 
@@ -151,7 +152,7 @@ public class BackPlayer extends Player {
     }
 
     private void updateNormalRun(TeamInput input) {
-        if (input.backLeft || input.backRight) {
+        if (input.backLeft != input.backRight) {
             vx = 0;
             moveHorizontally(input);
             startRunLoopAnimation();

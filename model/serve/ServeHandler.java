@@ -85,7 +85,7 @@ public class ServeHandler {
 
     public void reset() {
         state = ServeState.WAITING_FOR_SERVE;
-        redServing = !model.isPracticeMode();
+        redServing = !model.isPracticeMode() || model.isPracticeRedServing();
         ballController.prepareServe(redServing);
         resetFrameFlags();
     }
@@ -175,7 +175,8 @@ public class ServeHandler {
     public void updateAfterTeams() {
         if (state == ServeState.JUMP_TOSS) {
             Player server = redServing ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
-            if (server.isAttackSwinging() && server.hasValidAttackAttemptThisFrame()) {
+            if (server.hasValidAttackAttemptThisFrame()) {
+                server.startAttackSwingAnimation();
                 ballController.hitJumpServe(redServing, jumpShortArc,
                         jumpSlowHorizontal, jumpLongArc);
                 server.attackHitBox.disable();

@@ -7,6 +7,7 @@ package model;
 
 import model.serve.ServeType;
 import model.ball.Ball;
+import model.player.Player;
 
 public class TeamInput {
     public boolean backLeft;
@@ -29,6 +30,10 @@ public class TeamInput {
     public Ball ball;
     public boolean canBackAirSet;
     public boolean canWingAirSet;
+    // 本機角色判定用：同隊上一位觸球者不能緊接著再攻擊。
+    public Player lastHitter;
+    // Client 的碰撞由 Server 判定，不能先自行播放揮臂命中動畫。
+    public boolean canResolveAttack = true;
 
     // 扣球命中當下的球路修正鍵。
     public boolean spikeFlat;
@@ -60,6 +65,8 @@ public class TeamInput {
         copy.ball = ball;
         copy.canBackAirSet = canBackAirSet;
         copy.canWingAirSet = canWingAirSet;
+        copy.lastHitter = lastHitter;
+        copy.canResolveAttack = canResolveAttack;
         copy.spikeFlat = spikeFlat;
         copy.spikeShort = spikeShort;
         copy.spikeLob = spikeLob;

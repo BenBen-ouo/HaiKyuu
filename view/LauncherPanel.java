@@ -19,6 +19,7 @@ public final class LauncherPanel extends JPanel {
     public interface Actions {
         void startLocal();
         void startPractice();
+        void startBluePractice();
         String startHost();
         String join(String ip);
     }
@@ -42,9 +43,13 @@ public final class LauncherPanel extends JPanel {
         localButton.addActionListener(event -> actions.startLocal());
         options.add(localButton);
 
-        JButton practiceButton = new JButton("練習模式");
+        JButton practiceButton = new JButton("紅隊練習模式");
         practiceButton.addActionListener(event -> actions.startPractice());
         options.add(practiceButton);
+
+        JButton bluePracticeButton = new JButton("藍隊練習模式");
+        bluePracticeButton.addActionListener(event -> actions.startBluePractice());
+        options.add(bluePracticeButton);
 
         JButton hostButton = new JButton("創立房間");
         hostButton.addActionListener(event -> showResult(actions.startHost()));

@@ -59,8 +59,9 @@ public class QuickAttacker extends Player {
 
         if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
             if (isHeldAttackReady(input.quickAttack, justPressedQuick)
+                    && input.canResolveAttack && input.lastHitter != this
                     && isBallInAttackBox(input)) {
-                startAttackSwingAnimation();
+                queueAttackAttempt();
             }
 
             applyGravity();

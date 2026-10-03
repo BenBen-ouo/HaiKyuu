@@ -31,6 +31,8 @@ public class Main {
                 startLocalGame(false);
             } else if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
                 startLocalGame(true);
+            } else if (args.length > 0 && "practice-blue".equalsIgnoreCase(args[0])) {
+                startLocalGame(true, true);
             } else if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
                 String error = startClient(args[1], null, networkWindowTitle(args[1]));
                 if (error != null) showError(error);
@@ -60,6 +62,12 @@ public class Main {
             }
 
             @Override
+            public void startBluePractice() {
+                startLocalGame(true, true);
+                frame.dispose();
+            }
+
+            @Override
             public String startHost() {
                 String error = startHostedGame();
                 if (error == null) frame.dispose();
@@ -75,7 +83,7 @@ public class Main {
         });
         frame.add(panel);
         frame.pack();
-        frame.setSize(480, 340);
+        frame.setSize(480, 390);
         frame.setResizable(false);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -134,11 +142,16 @@ public class Main {
     }
 
     private static void startLocalGame(boolean practiceMode) {
-        GameModel model = new GameModel(practiceMode);
+        startLocalGame(practiceMode, false);
+    }
+
+    private static void startLocalGame(boolean practiceMode, boolean practiceRedServing) {
+        GameModel model = new GameModel(practiceMode, practiceRedServing);
         KeyboardController keyboard = new KeyboardController();
         GameController controller = new GameController(model, keyboard);
         showWindow(model, keyboard, controller, null, null,
-                practiceMode ? "HaiKyuu!! - 練習模式" : "HaiKyuu!! - 本地雙人");
+                practiceMode ? "HaiKyuu!! - " + (practiceRedServing ? "藍隊練習模式" : "紅隊練習模式")
+                        : "HaiKyuu!! - 本地雙人");
     }
 
     private static void showWindow(

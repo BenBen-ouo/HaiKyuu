@@ -19,6 +19,7 @@ public final class NetworkSyncTest {
         testServerKeepsUnacknowledgedEvents();
         testControlsStayInOrder();
         testMotionSnapshotKeepsAnimationAlive();
+        testAuthoritativeAttackSwingSnapshot();
         testMbSnapshotReconcilesActionAndAsset();
         testAirSetInputAndSnapshotAnimation();
         testJumpServeInputAndTossEvent();
@@ -251,6 +252,18 @@ public final class NetworkSyncTest {
         model.redTeam.setter.update(new TeamInput());
         check(model.redTeam.setter.getAction() == PlayerAction.SETTING,
                 "逐 tick 位置校正不重置 Setter 動畫序列");
+    }
+
+    private static void testAuthoritativeAttackSwingSnapshot() {
+        GameModel server = new GameModel();
+        GameModel client = new GameModel();
+        server.redTeam.wingSpiker.jumping = true;
+        server.redTeam.wingSpiker.startAttackSwingAnimation();
+        Packet.PlayerState.from(server.redTeam.wingSpiker)
+                .applyMotionTo(client.redTeam.wingSpiker);
+        check(client.redTeam.wingSpiker.getAction() == PlayerAction.ATTACK_SWING
+                        && client.redTeam.wingSpiker.assetName.contains("attack"),
+                "Client 不預播揮臂，但收到 Server 攻擊快照後會顯示");
     }
 
     private static void testMbSnapshotReconcilesActionAndAsset() {

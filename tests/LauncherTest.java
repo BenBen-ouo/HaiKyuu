@@ -25,35 +25,38 @@ public final class LauncherTest {
                     "創立房間拒絕無法分享的 IP：" + invalid);
         }
         check(Main.hostedIpError(null) != null, "創立房間拒絕找不到 IP");
-        int[] selected = new int[4];
+        int[] selected = new int[5];
         String[] joinedIp = new String[1];
         LauncherPanel panel = new LauncherPanel("192.168.1.20", new LauncherPanel.Actions() {
             @Override public void startLocal() { selected[0]++; }
             @Override public void startPractice() { selected[1]++; }
-            @Override public String startHost() { selected[2]++; return null; }
-            @Override public String join(String ip) { selected[3]++; joinedIp[0] = ip; return null; }
+            @Override public void startBluePractice() { selected[2]++; }
+            @Override public String startHost() { selected[3]++; return null; }
+            @Override public String join(String ip) { selected[4]++; joinedIp[0] = ip; return null; }
         });
 
         JTextField joinField = findEditableField(panel);
         check(joinField != null, "加入房間的 IP 欄位與模式按鈕在同一個啟動畫面");
         findButton(panel, "本地雙人").doClick();
-        findButton(panel, "練習模式").doClick();
+        findButton(panel, "紅隊練習模式").doClick();
+        findButton(panel, "藍隊練習模式").doClick();
         findButton(panel, "創立房間").doClick();
-        check(selected[0] == 1 && selected[1] == 1 && selected[2] == 1,
-                "三個模式分別呼叫自己的啟動入口");
+        check(selected[0] == 1 && selected[1] == 1 && selected[2] == 1 && selected[3] == 1,
+                "本地雙人及雙側練習模式分別呼叫自己的啟動入口");
 
         joinField.setText(" 192.168.1.20 ");
         findButton(panel, "加入房間").doClick();
-        check(selected[3] == 1 && "192.168.1.20".equals(joinedIp[0]),
+        check(selected[4] == 1 && "192.168.1.20".equals(joinedIp[0]),
                 "在主選單輸入 IP 即可加入，不需第二個輸入視窗");
         joinField.setText("192.168.1.999");
         findButton(panel, "加入房間").doClick();
-        check(selected[3] == 1 && !LauncherPanel.isValidIpv4("example.com"),
+        check(selected[4] == 1 && !LauncherPanel.isValidIpv4("example.com"),
                 "錯誤 IP 不會啟動 Client");
 
         LauncherPanel noLanPanel = new LauncherPanel("127.0.0.1", new LauncherPanel.Actions() {
             @Override public void startLocal() {}
             @Override public void startPractice() {}
+            @Override public void startBluePractice() {}
             @Override public String startHost() { return Main.hostedIpError("127.0.0.1"); }
             @Override public String join(String ip) { return null; }
         });

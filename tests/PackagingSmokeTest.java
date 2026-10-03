@@ -40,6 +40,7 @@ public final class PackagingSmokeTest {
         LauncherPanel launcher = new LauncherPanel("127.0.0.1", new LauncherPanel.Actions() {
             @Override public void startLocal() {}
             @Override public void startPractice() {}
+            @Override public void startBluePractice() {}
             @Override public String startHost() { return null; }
             @Override public String join(String ip) { return null; }
         });

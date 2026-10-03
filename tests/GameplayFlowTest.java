@@ -35,12 +35,17 @@ public class GameplayFlowTest {
         testDiveSelectsSlowFloorBounceSpin();
         testServeReceptionAndMbChoice();
         testWingApproachPositionAndBlockJumpCount();
+        testBackPlayerBothDirectionsStayIdle();
         testWingDiveBeforeFirstReception();
         testBlueControlsRetainNumpadMappings();
         testBlueDirectionMirrors();
         testAirSetRequiresBothDirectionKeys();
         testBlockOnlyOnceAndSetterThirdTouch();
         testAttackCanHoldSecondPressUntilBallArrives();
+        testNoSwingForPreviousHitter();
+        testAttackOnLandingFrame();
+        testDiveCanSaveOnLandingFrame();
+        testClientWaitsForAuthoritativeSwing();
         testAttackPressBeforeBallMovesIntoHitBox();
         testAirSetAfterTakeoff();
         testWingAirSetMirrors();
@@ -58,6 +63,7 @@ public class GameplayFlowTest {
         testClientPredictionDoesNotResolveCollisions();
         testScorePhasesAndReleaseGate();
         testPracticeMode();
+        testBluePracticeMode();
         testFinalPointStopsBeforeNextServe();
         System.out.println("GameplayFlowTest passed");
     }
@@ -137,9 +143,9 @@ public class GameplayFlowTest {
         Team blue = new Team(false);
         double netX = GameConfig.NET_X;
         check(Math.abs(netX - (red.wingSpiker.x + red.wingSpiker.imageWidth / 2.0)
-                - (172.0 + 2.0 / 3.0)) < 0.001, "紅隊 WS 中心距網 172.67");
+                - (180.0 + 1.0 / 6.0)) < 0.001, "紅隊 WS 中心距網 180.17");
         check(Math.abs((blue.wingSpiker.x + blue.wingSpiker.imageWidth / 2.0)
-                - netX - (172.0 + 2.0 / 3.0)) < 0.001, "藍隊 WS 中心鏡像距網 172.67");
+                - netX - (180.0 + 1.0 / 6.0)) < 0.001, "藍隊 WS 中心鏡像距網 180.17");
         for (boolean redSide : new boolean[] {true, false}) {
             WingSpiker wing = (redSide ? red : blue).wingSpiker;
             TeamInput input = new TeamInput();
@@ -201,6 +207,32 @@ public class GameplayFlowTest {
                 "紅隊接起第一顆時，藍隊 MB 也鏡像重新計數");
     }
 
+    private static void testBackPlayerBothDirectionsStayIdle() {
+        for (boolean redSide : new boolean[] {true, false}) {
+            BackPlayer player = (redSide ? new Team(true) : new Team(false)).backPlayer;
+            TeamInput both = new TeamInput();
+            both.backLeft = true;
+            both.backRight = true;
+            double initialX = player.x;
+            player.update(both);
+            check(player.x == initialX && player.vx == 0
+                            && player.getAction() == PlayerAction.IDLE
+                            && player.assetName.contains("back.png"),
+                    "後排同時按左右鍵時原地顯示站立圖片");
+
+            TeamInput move = new TeamInput();
+            move.backRight = true;
+            player.update(move);
+            check(player.getAction() == PlayerAction.RUN_LOOP, "單方向仍可跑步");
+            double movedX = player.x;
+            player.update(both);
+            check(player.x == movedX && player.vx == 0
+                            && player.getAction() == PlayerAction.IDLE
+                            && player.assetName.contains("back.png"),
+                    "跑步途中同時按左右鍵會立即切回站立圖片");
+        }
+    }
+
     private static void checkMirroredHitBox(HitBox red, HitBox blue, String name) {
         check(red.offsetX + red.width + blue.offsetX == GameConfig.PLAYER_IMAGE_WIDTH
                         && red.offsetY == blue.offsetY
@@ -221,8 +253,8 @@ public class GameplayFlowTest {
         GameModel model = new GameModel();
         model.recordRegularHit(false, model.blueTeam.backPlayer);
         QuickAttacker attacker = model.redTeam.quickAttacker;
-        attacker.startAttackSwingAnimation();
         attacker.jumping = true;
+        attacker.startAttackSwingAnimation();
         model.ball.x = attacker.attackHitBox.getCenterX();
         model.ball.y = attacker.attackHitBox.getCenterY();
         attacker.captureAttackAttemptBallOverlap(model.ball);
@@ -385,8 +417,8 @@ public class GameplayFlowTest {
         model.recordRegularHit(false, model.blueTeam.setter);
         Team team = redSide ? model.redTeam : model.blueTeam;
         Player backPlayer = team.backPlayer;
-        backPlayer.startAttackSwingAnimation();
         backPlayer.jumping = true;
+        backPlayer.startAttackSwingAnimation();
         backPlayer.jumpStartX = jumpStartX;
         model.ball.x = backPlayer.attackHitBox.getCenterX();
         model.ball.y = backPlayer.attackHitBox.getCenterY();
@@ -402,8 +434,8 @@ public class GameplayFlowTest {
     private static void testServeFaults() {
         GameModel attackModel = new GameModel();
         QuickAttacker attacker = attackModel.redTeam.quickAttacker;
-        attacker.startAttackSwingAnimation();
         attacker.jumping = true;
+        attacker.startAttackSwingAnimation();
         attackModel.ball.x = attacker.attackHitBox.getCenterX();
         attackModel.ball.y = attacker.attackHitBox.getCenterY();
         attacker.captureAttackAttemptBallOverlap(attackModel.ball);
@@ -416,8 +448,8 @@ public class GameplayFlowTest {
 
         GameModel receivingAttackModel = new GameModel();
         QuickAttacker receivingAttacker = receivingAttackModel.blueTeam.quickAttacker;
-        receivingAttacker.startAttackSwingAnimation();
         receivingAttacker.jumping = true;
+        receivingAttacker.startAttackSwingAnimation();
         receivingAttackModel.ball.x = receivingAttacker.attackHitBox.getCenterX();
         receivingAttackModel.ball.y = receivingAttacker.attackHitBox.getCenterY();
         receivingAttacker.captureAttackAttemptBallOverlap(receivingAttackModel.ball);
@@ -676,6 +708,91 @@ public class GameplayFlowTest {
                             && !cancelledAttacker.hasValidAttackAttemptThisFrame(),
                     roles[role] + "：提早按攻擊後放開，不會繼續預約命中");
         }
+    }
+
+    private static void testNoSwingForPreviousHitter() {
+        String[] roles = {"後排", "MB", "WS"};
+        for (int role = 0; role < roles.length; role++) {
+            GameModel model = new GameModel();
+            model.getServeHandler().setWaitingForServe(false);
+            TeamInput press = new TeamInput();
+            Player attacker = prepareAttackReady(model, role, press);
+            attackerRelease(attacker, model.ball);
+            model.recordHit(true, attacker);
+            placeBallInAttackHitBox(model, attacker);
+            model.ball.vx = 0;
+            model.ball.vy = 0;
+            int previousTouches = model.getHitCount(true);
+            model.update(press, new TeamInput());
+            check(attacker.getAction() == PlayerAction.ATTACK_READY
+                            && model.getHitCount(true) == previousTouches
+                            && model.ball.vx == 0,
+                    roles[role] + "：本隊上一位觸球者不可只播放揮臂卻不擊球");
+        }
+    }
+
+    private static void testAttackOnLandingFrame() {
+        String[] roles = {"後排", "MB", "WS"};
+        for (int role = 0; role < roles.length; role++) {
+            GameModel model = new GameModel();
+            model.getServeHandler().setWaitingForServe(false);
+            TeamInput press = new TeamInput();
+            Player attacker = prepareAttackReady(model, role, press);
+            attackerRelease(attacker, model.ball);
+            attacker.y = GameConfig.PLAYER_BASE_Y - 0.1;
+            attacker.vy = 5;
+            attacker.jumping = true;
+            placeBallInAttackHitBox(model, attacker);
+            model.ball.vx = 0;
+            model.ball.vy = 0;
+            model.update(press, new TeamInput());
+            check(!attacker.jumping && model.getHitCount(true) == 2 && model.ball.vx > 0,
+                    roles[role] + "：落地同幀以落地前空中重疊完成攻擊");
+        }
+    }
+
+    private static void testDiveCanSaveOnLandingFrame() {
+        for (boolean redSide : new boolean[] {true, false}) {
+            GameModel model = new GameModel();
+            model.getServeHandler().setRedServing(!redSide);
+            model.getServeHandler().setWaitingForServe(false);
+            Player receiver = (redSide ? model.redTeam : model.blueTeam).backPlayer;
+            model.ball.x = receiver.x + receiver.imageWidth / 2.0;
+            model.ball.y = GameConfig.FLOOR_Y - model.ball.radius - 15;
+            model.ball.vx = 0;
+            model.ball.vy = 20;
+            TeamInput dive = new TeamInput();
+            dive.backDive = true;
+            model.update(redSide ? dive : new TeamInput(), redSide ? new TeamInput() : dive);
+            check(model.getHitCount(redSide) == 1 && !model.isRallyOverForNetwork()
+                            && !model.didBallLandThisFrame(),
+                    (redSide ? "紅隊" : "藍隊") + "撲球框在落地同幀碰球先完成接球");
+
+            GameModel missed = new GameModel();
+            missed.getServeHandler().setRedServing(!redSide);
+            missed.getServeHandler().setWaitingForServe(false);
+            Player standing = (redSide ? missed.redTeam : missed.blueTeam).backPlayer;
+            missed.ball.x = standing.x + standing.imageWidth / 2.0;
+            missed.ball.y = GameConfig.FLOOR_Y - missed.ball.radius - 15;
+            missed.ball.vx = 0;
+            missed.ball.vy = 20;
+            missed.update(new TeamInput(), new TeamInput());
+            check(missed.getHitCount(redSide) == 0 && missed.isRallyOverForNetwork()
+                            && missed.didBallLandThisFrame(),
+                    (redSide ? "紅隊" : "藍隊") + "沒有有效撲球框仍照常判落地");
+        }
+    }
+
+    private static void testClientWaitsForAuthoritativeSwing() {
+        GameModel model = new GameModel();
+        model.getServeHandler().setWaitingForServe(false);
+        TeamInput press = new TeamInput();
+        Player attacker = prepareAttackReady(model, 1, press);
+        attackerRelease(attacker, model.ball);
+        placeBallInAttackHitBox(model, attacker);
+        model.updateForNetworkPrediction(press, true);
+        check(attacker.getAction() == PlayerAction.ATTACK_READY && model.getHitCount(true) == 1,
+                "Client 只預約攻擊，不在 Server 確認前自行播放揮臂");
     }
 
     private static void testAttackPressBeforeBallMovesIntoHitBox() {
@@ -1519,6 +1636,51 @@ public class GameplayFlowTest {
                         && model.redTeam.backPlayer.x == new Team(true).backPlayer.x,
                 "練習模式按 R 重開後仍由藍隊發球");
         check(!new GameModel().isPracticeMode(), "一般單機與 Server 預設不是練習模式");
+    }
+
+    private static void testBluePracticeMode() {
+        GameModel model = new GameModel(true, true);
+        check(model.isPracticeMode() && model.isPracticeRedServing()
+                        && model.getServeHandler().isRedServing()
+                        && model.getServeHandler().isWaitingForServe(),
+                "藍隊練習模式起始由紅隊等待發球");
+        check(model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X
+                        && model.blueTeam.backPlayer.x == new Team(false).backPlayer.x,
+                "藍隊練習模式只讓紅隊後排站到發球位");
+
+        TeamInput blueServe = new TeamInput();
+        blueServe.servePressed = true;
+        model.update(new TeamInput(), blueServe);
+        check(model.getServeHandler().isWaitingForServe(), "藍隊不能在練習模式發球");
+
+        TeamInput redServe = new TeamInput();
+        redServe.servePressed = true;
+        model.update(redServe, new TeamInput());
+        check(!model.getServeHandler().isWaitingForServe() && model.ball.vx > 0,
+                "紅隊使用原本發球流程向藍隊發球");
+
+        for (boolean redWins : new boolean[] {true, false}) {
+            model.awardPointWithMessage(redWins, redWins ? "IN" : "OUT");
+            check(model.redScore == 0 && model.blueScore == 0 && !model.matchOver
+                            && model.getServeHandler().isRedServing()
+                            && model.transientMessageTimer == 90,
+                    "藍隊練習模式得失分都不計分，仍顯示 90 幀並由紅隊發球");
+            for (int frame = 0; frame < 60; frame++) model.update(new TeamInput(), new TeamInput());
+            check(model.isLockedScorePhase()
+                            && model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X,
+                    "藍隊練習模式前 60 幀後紅隊發球員直接歸發球位");
+            for (int frame = 0; frame < 30; frame++) model.update(new TeamInput(), new TeamInput());
+            check(model.getServeHandler().isWaitingForServe()
+                            && model.getServeHandler().isRedServing()
+                            && model.transientMessage == null,
+                    "藍隊練習模式後 30 幀結束才重新允許紅隊發球");
+        }
+
+        model.restart();
+        check(model.isPracticeMode() && model.isPracticeRedServing()
+                        && model.getServeHandler().isRedServing()
+                        && model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X,
+                "藍隊練習模式重開後仍由紅隊發球");
     }
 
     private static void testFinalPointStopsBeforeNextServe() {

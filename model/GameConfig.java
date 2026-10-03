@@ -98,12 +98,12 @@ public final class GameConfig {
     public static final double SPIKE_SPEED_Y = 7.0;
     
     // 紅隊 D／藍隊 ←：平打，橫向速度更大。
-    public static final double FLAT_SPIKE_SPEED_X = 20.0;
-    public static final double FLAT_SPIKE_SPEED_Y = 4.5;
+    public static final double FLAT_SPIKE_SPEED_X = 18.0;
+    public static final double FLAT_SPIKE_SPEED_Y = 3.5;
 
     // S / ↓：短球，向下速度更大。
-    public static final double SHORT_SPIKE_SPEED_X = 10.5;
-    public static final double SHORT_SPIKE_SPEED_Y = 10.0;
+    public static final double SHORT_SPIKE_SPEED_X = 13.5;
+    public static final double SHORT_SPIKE_SPEED_Y = 11.0;
 
     // W / ↑：吊球，慢速上拋後越過攔網。
     public static final double LOB_SPIKE_SPEED_X = 3.0;
@@ -117,7 +117,7 @@ public final class GameConfig {
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_SETTER_OFFSET_X = -30 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     public static final double RED_QUICK_OFFSET_X = -5 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
-    public static final double RED_WING_OFFSET_X = -156 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
+    public static final double RED_WING_OFFSET_X = -163.5 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
     // 待發球時圖片中心在畫面左緣外 10 像素。
     public static final double RED_BACK_SERVE_X = -10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double RED_BACK_SERVE_Y = PLAYER_BASE_Y;
@@ -130,7 +130,7 @@ public final class GameConfig {
     public static final double BLUE_BACK_OFFSET_X = 300 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_SETTER_OFFSET_X = 30 - PLAYER_NET_OVERLAP_X;
     public static final double BLUE_QUICK_OFFSET_X = 5 - PLAYER_NET_OVERLAP_X;
-    public static final double BLUE_WING_OFFSET_X = 156 - PLAYER_NET_OVERLAP_X;
+    public static final double BLUE_WING_OFFSET_X = 163.5 - PLAYER_NET_OVERLAP_X;
     // 待發球時圖片中心在畫面右緣外 10 像素。
     public static final double BLUE_BACK_SERVE_X = SCREEN_WIDTH + 10 - PLAYER_IMAGE_WIDTH / 2.0;
     public static final double BLUE_BACK_SERVE_Y = PLAYER_BASE_Y;

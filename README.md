@@ -2,9 +2,9 @@
 
 Java 2D 火柴人排球遊戲。
 可用單機雙人模式，或透過同一區域網路的 UDP Server 進行兩人連線。
-選單提供「本地雙人」、「練習模式」、「創立房間」與「加入房間」。
+選單提供「本地雙人」、「紅隊練習模式」、「藍隊練習模式」、「創立房間」與「加入房間」。
 
-## Windows 發行版
+## 發行版啟動
 
 - 點兩下 `release/HaiKyuu/HaiKyuu.exe` 即可遊玩，不需另裝 JDK。
 - 完整的遊戲檔案位於 `release/HaiKyuu/` 資料夾；可複製整個資料夾到其他路徑，不可只複製 `HaiKyuu.exe`。
@@ -31,6 +31,9 @@ java -cp .\build Main local
 
 # 本地練習模式：紅隊練習接發與攻擊，藍隊固定發球，不計分
 java -cp .\build Main practice
+
+# 藍隊練習模式：藍隊練習接發與攻擊，紅隊固定發球，不計分
+java -cp .\build Main practice-blue
 
 # 主機：啟動無畫面的 UDP Server（使用 UDP 5001）
 java -cp .\build Main server

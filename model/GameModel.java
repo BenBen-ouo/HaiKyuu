@@ -20,6 +20,7 @@ import model.serve.ServeHandler;
 
 public class GameModel {
     private final boolean practiceMode;
+    private final boolean practiceRedServing;
 
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, 130);
     public final NetHitBox netHitBox = new NetHitBox();
@@ -52,6 +53,7 @@ public class GameModel {
     private boolean setterContactThisFrame;
     private boolean airSetContactThisFrame;
     private boolean firstServeReceptionThisFrame;
+    private boolean ballContactThisFrame;
     private boolean serveReceptionComplete;
     private final ActionReleaseGate redActionReleaseGate = new ActionReleaseGate();
     private final ActionReleaseGate blueActionReleaseGate = new ActionReleaseGate();
@@ -76,15 +78,25 @@ public class GameModel {
     }
 
     public GameModel(boolean practiceMode) {
+        this(practiceMode, false);
+    }
+
+    /** practiceRedServing=true 表示藍隊練習、紅隊每球固定發球。 */
+    public GameModel(boolean practiceMode, boolean practiceRedServing) {
         this.practiceMode = practiceMode;
+        this.practiceRedServing = practiceMode && practiceRedServing;
         if (practiceMode) {
-            serveHandler.setRedServing(false);
+            serveHandler.setRedServing(this.practiceRedServing);
         }
         serveHandler.setWaitingForServe(true);
     }
 
     public boolean isPracticeMode() {
         return practiceMode;
+    }
+
+    public boolean isPracticeRedServing() {
+        return practiceRedServing;
     }
 
     public ServeHandler getServeHandler() {
@@ -162,6 +174,7 @@ public class GameModel {
             BackActionResolver.apply(input, getHitCount(localRedSide));
         }
         serveHandler.filterNetworkPredictionInput(input, localRedSide, localInput.servePressed);
+        input.canResolveAttack = false;
         input.hasFirstRegularTouch = getHitCount(localRedSide) > 0;
         input.opponentHasFirstRegularTouch = getHitCount(!localRedSide) > 0;
         configureAttackInput(input, localRedSide ? redTeam : blueTeam, localRedSide);
@@ -199,6 +212,7 @@ public class GameModel {
         setterContactThisFrame = false;
         airSetContactThisFrame = false;
         firstServeReceptionThisFrame = false;
+        ballContactThisFrame = false;
         resolvingRallyOutcomes = resolveRallyOutcomes;
 
         try {
@@ -276,6 +290,7 @@ public class GameModel {
         if (matchOver) return;
 
         rallyState.recordHit(redSide, hitter, counts);
+        ballContactThisFrame = true;
         if (hitter instanceof Setter) {
             setterContactThisFrame = true;
         }
@@ -303,6 +318,7 @@ public class GameModel {
         if (matchOver) return;
 
         rallyState.recordBlock(redSide, blocker);
+        ballContactThisFrame = true;
     }
 
     private void updateActiveFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
@@ -330,9 +346,21 @@ public class GameModel {
         }
         serveHandler.updateAfterTeams();
 
-        updateBallIfNeeded(resolveRallyOutcomes);
+        updateBallIfNeeded();
         if (!airSetContact) {
             collideTeamsIfAllowed(redInput, blueInput);
+        }
+
+        if (ballLandedThisFrame) {
+            if (ballContactThisFrame) {
+                ballLandedThisFrame = false;
+            } else if (!scorer.isRallyOver() && !predictionAwaitingAuthority) {
+                if (resolveRallyOutcomes) {
+                    scorer.checkBallLanding();
+                } else {
+                    awaitAuthoritativeRallyResult();
+                }
+            }
         }
 
         serveHandler.finishFrame();
@@ -353,6 +381,8 @@ public class GameModel {
         blueInput.opponentHasFirstRegularTouch = redHitCount > 0;
         configureAttackInput(redInput, redTeam, true);
         configureAttackInput(blueInput, blueTeam, false);
+        redInput.canResolveAttack = false;
+        blueInput.canResolveAttack = false;
         updateTeams(redInput, blueInput);
     }
 
@@ -418,6 +448,7 @@ public class GameModel {
         input.ball = ball;
         boolean secondTouch = getHitCount(redSide) == 1 && serveReceptionComplete;
         Player lastHitter = getLastHitter(redSide);
+        input.lastHitter = lastHitter;
         input.canBackAirSet = secondTouch && lastHitter != team.backPlayer;
         input.canWingAirSet = secondTouch && lastHitter != team.wingSpiker;
     }
@@ -427,7 +458,7 @@ public class GameModel {
         blueTeam.update(blueInput);
     }
 
-    private void updateBallIfNeeded(boolean resolveRallyOutcomes) {
+    private void updateBallIfNeeded() {
         if (!serveHandler.shouldUpdateBall()) {
             return;
         }
@@ -438,15 +469,6 @@ public class GameModel {
         ballHitNetThisFrame = ball.collideWithNet(netHitBox);
 
         serveHandler.updateAfterBall();
-        if (resolveRallyOutcomes) {
-            scorer.checkBallLanding();
-        } else if (ball.y + ball.radius >= GameConfig.FLOOR_Y) {
-            // 不在 Client 顯示本地得分／違規結果；等待 Server 的 SCORE 快照。
-            ball.vx = 0;
-            ball.vy = 0;
-            awaitAuthoritativeRallyResult();
-        }
-
         if (!scorer.isRallyOver() && !predictionAwaitingAuthority) {
             resetCountersIfBallCrossesNet();
         }
