@@ -15,7 +15,7 @@ public class MatchDisplay {
     public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
         // 練習模式不顯示比分；一般對局依觀看隊伍排序。
         String scoreText = model.isPracticeMode()
-                ? "練習模式"
+                ? (model.isPracticeRedServing() ? "藍隊練習模式" : "紅隊練習模式")
                 : bluePerspective
                         ? model.blueScore + " : " + model.redScore
                         : model.redScore + " : " + model.blueScore;

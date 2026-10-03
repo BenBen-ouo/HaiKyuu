@@ -21,6 +21,7 @@ public class GamePanel extends JPanel {
     private final NetworkView networkView;
     private final GameRenderer renderer = new GameRenderer();
     private final NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
+    private Thread gameLoop;
 
     public GamePanel(GameModel model, GameController controller) {
         this(model, controller, null);
@@ -34,8 +35,9 @@ public class GamePanel extends JPanel {
         setFocusable(true);
     }
 
-    public void startGameLoop() {
-        Thread loop = new Thread(() -> {
+    public synchronized void startGameLoop() {
+        if (gameLoop != null) return;
+        gameLoop = new Thread(() -> {
             long tickNanos = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
             long nextTickNanos = System.nanoTime();
 
@@ -56,8 +58,15 @@ public class GamePanel extends JPanel {
                 sleepUntil(nextTickNanos);
             }
         }, "haikyuu-game-loop");
-        loop.setDaemon(true);
-        loop.start();
+        gameLoop.setDaemon(true);
+        gameLoop.start();
+    }
+
+    public synchronized void stopGameLoop() {
+        if (gameLoop != null) {
+            gameLoop.interrupt();
+            gameLoop = null;
+        }
     }
 
     private void sleepUntil(long deadlineNanos) {

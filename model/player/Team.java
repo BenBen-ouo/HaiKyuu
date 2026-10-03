@@ -23,11 +23,11 @@ public class Team {
     private static final double SETTER_HITBOX_ROTATION = 0; ///之後再看有沒有需要讓貼網球早點接觸
 
     private static final double BLOCK_HITBOX_RED_X = 50;
-    private static final double BLOCK_HITBOX_Y = 10;
-    private static final double BLOCK_HITBOX_WIDTH = 15;
-    private static final double BLOCK_HITBOX_HEIGHT = 50;
+    private static final double BLOCK_HITBOX_Y = 20;
+    private static final double BLOCK_HITBOX_WIDTH = 10;
+    private static final double BLOCK_HITBOX_HEIGHT = 45;
     private static final int BLOCK_HITBOX_ARC = 10;
-    private static final double BLOCK_HITBOX_ROTATION = 40;
+    private static final double BLOCK_HITBOX_ROTATION = 35;
 
     private static final double ATTACK_HITBOX_RED_X = 40;
     private static final double ATTACK_HITBOX_Y = 10;

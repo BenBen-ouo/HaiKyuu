@@ -41,6 +41,7 @@ public abstract class Player {
     protected PlayerAction action = PlayerAction.IDLE;
     private boolean attackAttemptThisFrame;
     private boolean ballInAttackHitBoxWhenSwingStarted;
+    private boolean attackAttemptStartedInAir;
     private boolean heldAttackQueued;
     private boolean airSetAttemptThisFrame;
 
@@ -65,6 +66,7 @@ public abstract class Player {
     public void resetToInitial() {
         attackAttemptThisFrame = false;
         ballInAttackHitBoxWhenSwingStarted = false;
+        attackAttemptStartedInAir = false;
         heldAttackQueued = false;
         airSetAttemptThisFrame = false;
         PlayerPhysics.resetToInitial(this);
@@ -140,7 +142,14 @@ public abstract class Player {
     public void startAttackSwingAnimation() {
         heldAttackQueued = false;
         attackAttemptThisFrame = true;
+        attackAttemptStartedInAir = jumping;
         actionAnimator.startAttackSwing();
+    }
+
+    /** 只提出本幀攻擊請求；球真的被碰撞流程擊中後才播放揮臂。 */
+    protected void queueAttackAttempt() {
+        attackAttemptThisFrame = true;
+        attackAttemptStartedInAir = jumping;
     }
 
     public boolean hasAirSetAttemptThisFrame() {
@@ -154,7 +163,10 @@ public abstract class Player {
     }
 
     protected boolean isBallInAttackBox(TeamInput input) {
-        return input.ball != null && attackHitBox.intersectsBall(input.ball);
+        boolean overlaps = input.ball != null && attackHitBox.intersectsBall(input.ball);
+        // 角色可能在同幀落地；保留落地前已成立的球與攻擊框重疊。
+        if (overlaps) ballInAttackHitBoxWhenSwingStarted = true;
+        return overlaps;
     }
 
     protected boolean canAirSetWith(TeamInput input) {
@@ -172,17 +184,20 @@ public abstract class Player {
     }
 
     public boolean hasValidAttackAttemptThisFrame() {
-        return attackAttemptThisFrame && ballInAttackHitBoxWhenSwingStarted;
+        return attackAttemptThisFrame && attackAttemptStartedInAir
+                && ballInAttackHitBoxWhenSwingStarted;
     }
 
     /** 球移動前確認本幀開始揮臂時已與攻擊框重疊，不以球移動後的位置補判。 */
     public void captureAttackAttemptBallOverlap(Ball ball) {
-        ballInAttackHitBoxWhenSwingStarted = attackAttemptThisFrame && attackHitBox.intersectsBall(ball);
+        ballInAttackHitBoxWhenSwingStarted = attackAttemptThisFrame
+                && (ballInAttackHitBoxWhenSwingStarted || attackHitBox.intersectsBall(ball));
     }
 
     protected void clearAttackAttempt() {
         attackAttemptThisFrame = false;
         ballInAttackHitBoxWhenSwingStarted = false;
+        attackAttemptStartedInAir = false;
         airSetAttemptThisFrame = false;
     }
 

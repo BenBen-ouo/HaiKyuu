@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class WingSpiker extends Player {
-    private static final double APPROACH_SPEED = 6.5;
+    private static final double APPROACH_SPEED = 8.0;
     private static final double RETURN_SPEED = 6.5;
 
     private final double homeX;
@@ -100,11 +100,12 @@ public class WingSpiker extends Player {
 
     private void updateAttackInAir(boolean justPressedAttack, TeamInput input) {
         if (isHeldAttackReady(input.wingAttack, justPressedAttack)
+                && input.lastHitter != this
                 && isBallInAttackBox(input)) {
             if (input.canWingAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
-            } else {
-                startAttackSwingAnimation();
+            } else if (input.canResolveAttack) {
+                queueAttackAttempt();
             }
         }
 
@@ -114,7 +115,7 @@ public class WingSpiker extends Player {
         // 不能直接 animation.update()，否則會跳過 attack hitBox 的關閉判斷。
         updateActionAnimation();
 
-        if (!jumping) {
+        if (!jumping && action != PlayerAction.ATTACK_SWING) {
             startReturnToHome();
         }
     }

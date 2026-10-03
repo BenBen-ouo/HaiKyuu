@@ -9,8 +9,6 @@ import model.player.Player;
 public interface NetworkView extends AutoCloseable {
     boolean isBluePerspective();
 
-    String getHeaderText();
-
     String getConnectionMessage();
 
     String getResetMessage();

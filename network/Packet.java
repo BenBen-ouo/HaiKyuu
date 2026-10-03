@@ -8,6 +8,7 @@ import model.GameModel;
 import model.TeamInput;
 import model.ball.Ball;
 import model.player.Player;
+import model.player.BackPlayer;
 import model.player.PlayerAction;
 import model.player.QuickAttacker;
 import model.player.Team;
@@ -46,7 +47,8 @@ public final class Packet {
         RULE,
         RESET,
         FLOW,
-        AIR_SET_CONTACT
+        AIR_SET_CONTACT,
+        JUMP_TOSS
     }
 
     public static int encodeInput(TeamInput input) {
@@ -409,6 +411,8 @@ public final class Packet {
         public final double jumpStartX;
         public final int actionOrdinal;
         public final boolean attackHitBoxEnabled;
+        public final int countedBlockJumps;
+        public final boolean opponentFirstTouchSeen;
 
         // 一般觸球 hitBox 必須與角色動作一併由 Server 快照還原。
         public final double hitBoxOffsetX;
@@ -433,6 +437,8 @@ public final class Packet {
                 double jumpStartX,
                 int actionOrdinal,
                 boolean attackHitBoxEnabled,
+                int countedBlockJumps,
+                boolean opponentFirstTouchSeen,
                 double hitBoxOffsetX,
                 double hitBoxOffsetY,
                 double hitBoxWidth,
@@ -454,6 +460,8 @@ public final class Packet {
             this.jumpStartX = jumpStartX;
             this.actionOrdinal = actionOrdinal;
             this.attackHitBoxEnabled = attackHitBoxEnabled;
+            this.countedBlockJumps = countedBlockJumps;
+            this.opponentFirstTouchSeen = opponentFirstTouchSeen;
             this.hitBoxOffsetX = hitBoxOffsetX;
             this.hitBoxOffsetY = hitBoxOffsetY;
             this.hitBoxWidth = hitBoxWidth;
@@ -478,6 +486,8 @@ public final class Packet {
                     player.jumpStartX,
                     player.getAction().ordinal(),
                     player.attackHitBox.enabled,
+                    player instanceof QuickAttacker mb ? mb.getCountedBlockJumps() : 0,
+                    player instanceof QuickAttacker mb ? mb.hasSeenOpponentFirstTouch() : false,
                     player.hitBox.offsetX,
                     player.hitBox.offsetY,
                     player.hitBox.width,
@@ -516,6 +526,12 @@ public final class Packet {
             player.diving = diving;
             player.mirrorImage = mirrorImage;
             player.jumpStartX = jumpStartX;
+            if (player instanceof QuickAttacker mb) {
+                mb.applyBlockJumpState(countedBlockJumps, opponentFirstTouchSeen);
+            }
+            if (player instanceof BackPlayer backPlayer && jumping) {
+                backPlayer.syncJumpAirSpeed(vx);
+            }
             player.hitBox.set(
                     hitBoxOffsetX,
                     hitBoxOffsetY,
