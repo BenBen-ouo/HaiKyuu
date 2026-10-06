@@ -64,7 +64,7 @@ public class CourtRenderer {
         int centerX = GameConfig.SCREEN_WIDTH / 2;
 
         g.setColor(Color.WHITE);
-        g.setStroke(new BasicStroke(3));
+        g.setStroke(new BasicStroke(GameConfig.COURT_LINE_WIDTH));
         g.drawLine(0, floorY, GameConfig.SCREEN_WIDTH, floorY);
         g.drawLine(centerX, floorY, centerX, GameConfig.SCREEN_HEIGHT);
         int threeMeter = (int) GameConfig.THREE_METER_PX;

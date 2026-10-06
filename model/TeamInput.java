@@ -7,6 +7,7 @@ package model;
 
 import model.serve.ServeType;
 import model.ball.Ball;
+import model.player.Player;
 
 public class TeamInput {
     public boolean backLeft;
@@ -19,6 +20,8 @@ public class TeamInput {
     public boolean quickAttack;
     // 本隊在這次球權內是否已完成第一次一般觸球。
     public boolean hasFirstRegularTouch;
+    // 對手本次球權是否已完成一般接球；供 MB 攔網起跳計數啟用。
+    public boolean opponentHasFirstRegularTouch;
 
     public boolean wingAttack;
     public boolean airSetModifier;
@@ -27,6 +30,10 @@ public class TeamInput {
     public Ball ball;
     public boolean canBackAirSet;
     public boolean canWingAirSet;
+    // 本機角色判定用：同隊上一位觸球者不能緊接著再攻擊。
+    public Player lastHitter;
+    // Client 的碰撞由 Server 判定，不能先自行播放揮臂命中動畫。
+    public boolean canResolveAttack = true;
 
     // 扣球命中當下的球路修正鍵。
     public boolean spikeFlat;
@@ -52,11 +59,14 @@ public class TeamInput {
         copy.setterJump = setterJump;
         copy.quickAttack = quickAttack;
         copy.hasFirstRegularTouch = hasFirstRegularTouch;
+        copy.opponentHasFirstRegularTouch = opponentHasFirstRegularTouch;
         copy.wingAttack = wingAttack;
         copy.airSetModifier = airSetModifier;
         copy.ball = ball;
         copy.canBackAirSet = canBackAirSet;
         copy.canWingAirSet = canWingAirSet;
+        copy.lastHitter = lastHitter;
+        copy.canResolveAttack = canResolveAttack;
         copy.spikeFlat = spikeFlat;
         copy.spikeShort = spikeShort;
         copy.spikeLob = spikeLob;

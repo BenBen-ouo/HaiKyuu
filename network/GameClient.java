@@ -550,16 +550,6 @@ public final class GameClient implements NetworkView {
     }
 
     @Override
-    public String getHeaderText() {
-        if (!assigned) {
-            return "UDP 5001：連線中";
-        }
-        return redSide
-                ? "Player 1 / 紅隊    UDP " + hostIp + ":5001"
-                : "Player 2 / 藍隊    UDP " + hostIp + ":5001";
-    }
-
-    @Override
     public String getConnectionMessage() {
         if (sessionEnded) {
             return endMessage;

@@ -13,9 +13,16 @@ import model.*;
 
 public class MatchDisplay {
     public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
+        g.setColor(Color.GRAY);
+        g.setFont(new Font("Arial", Font.PLAIN, 14));
+        FontMetrics versionMetrics = g.getFontMetrics();
+        g.drawString(AppVersion.LABEL,
+                GameConfig.SCREEN_WIDTH - versionMetrics.stringWidth(AppVersion.LABEL) - 12,
+                20);
+
         // 練習模式不顯示比分；一般對局依觀看隊伍排序。
         String scoreText = model.isPracticeMode()
-                ? "練習模式"
+                ? (model.isPracticeRedServing() ? "藍隊練習模式" : "紅隊練習模式")
                 : bluePerspective
                         ? model.blueScore + " : " + model.redScore
                         : model.redScore + " : " + model.blueScore;

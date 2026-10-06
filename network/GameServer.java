@@ -66,8 +66,12 @@ public final class GameServer implements AutoCloseable {
     private volatile boolean blueResetConfirmed;
 
     public GameServer() throws SocketException {
+        this(NetworkAddress.findLocalIpv4());
+    }
+
+    public GameServer(String localIp) throws SocketException {
         socket = new DatagramSocket(UDP_PORT);
-        localIp = NetworkAddress.findLocalIpv4();
+        this.localIp = localIp;
     }
 
     public void run() {
@@ -204,7 +208,13 @@ public final class GameServer implements AutoCloseable {
 
         ServeState currentServeState = model.getServeHandler().getState();
         if (before.serveState == ServeState.WAITING_FOR_SERVE
-                && currentServeState != ServeState.WAITING_FOR_SERVE
+                && currentServeState == ServeState.JUMP_TOSS) {
+            events.add(Packet.EventType.JUMP_TOSS);
+        }
+        if ((before.serveState == ServeState.WAITING_FOR_SERVE
+                || before.serveState == ServeState.JUMP_TOSS)
+                && (currentServeState == ServeState.SERVE_LAUNCHED
+                || currentServeState == ServeState.IN_PLAY)
                 && Math.abs(model.ball.vx) + Math.abs(model.ball.vy) > 0.01) {
             events.add(Packet.EventType.SERVE);
         }
@@ -226,10 +236,11 @@ public final class GameServer implements AutoCloseable {
         }
 
         boolean scoreChanged = before.redScore != model.redScore || before.blueScore != model.blueScore;
-        if (scoreChanged && isRuleMessage(model.transientMessage)) {
+        boolean rallyEnded = !before.rallyOver && model.isRallyOverForNetwork();
+        if ((scoreChanged || rallyEnded) && isRuleMessage(model.transientMessage)) {
             events.add(Packet.EventType.RULE);
         }
-        if (scoreChanged) {
+        if (scoreChanged || rallyEnded) {
             events.add(Packet.EventType.SCORE);
         }
         if ((before.rallyOver && !model.isRallyOverForNetwork())
