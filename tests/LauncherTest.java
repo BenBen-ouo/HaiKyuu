@@ -1,8 +1,10 @@
 import java.awt.Component;
 import java.awt.Container;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import model.AppVersion;
 import network.NetworkAddress;
 import view.LauncherPanel;
 
@@ -60,6 +62,12 @@ public final class LauncherTest {
             @Override public String startHost() { return Main.hostedIpError("127.0.0.1"); }
             @Override public String join(String ip) { return null; }
         });
+
+        check("v1.0.0".equals(AppVersion.LABEL)
+                && hasLabelContaining(panel, AppVersion.LABEL)
+                && hasLabelContaining(panel, "HaiKyuu!!")
+                && !hasLabelContaining(panel, "HaiKyuu!!  " + AppVersion.LABEL),
+                "啟動頁版本號與標題分開顯示");
         check(!findButton(noLanPanel, "複製").isEnabled(), "沒有區網 IP 時不允許複製 loopback");
     }
 
@@ -72,6 +80,14 @@ public final class LauncherTest {
             }
         }
         return null;
+    }
+
+    private static boolean hasLabelContaining(Container parent, String text) {
+        for (Component child : parent.getComponents()) {
+            if (child instanceof JLabel label && label.getText().contains(text)) return true;
+            if (child instanceof Container container && hasLabelContaining(container, text)) return true;
+        }
+        return false;
     }
 
     private static JButton findButton(Container parent, String label) {

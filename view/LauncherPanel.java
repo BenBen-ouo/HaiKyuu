@@ -12,6 +12,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import model.AppVersion;
 import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
@@ -89,7 +90,14 @@ public final class LauncherPanel extends JPanel {
 
         add(options, BorderLayout.CENTER);
         statusLabel.setForeground(new Color(152, 35, 35));
-        add(statusLabel, BorderLayout.SOUTH);
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setOpaque(false);
+        footer.add(statusLabel, BorderLayout.CENTER);
+        JLabel versionLabel = new JLabel(AppVersion.LABEL);
+        versionLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        versionLabel.setForeground(Color.GRAY);
+        footer.add(versionLabel, BorderLayout.EAST);
+        add(footer, BorderLayout.SOUTH);
     }
 
     private void join(Actions actions) {
