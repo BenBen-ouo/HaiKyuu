@@ -45,7 +45,7 @@ java -cp .\build Main join <Server-IP>
 ```
 
 - 更新程式後再執行同一個 `build-release.bat` 即可重新打包產生發行版。若要從命令列執行而不暫停，可用 `build-release.bat --no-pause`。
-- 打包過程的 JAR 只放在暫存的 `.release-build/`，成功後會清除；正式發行版包含 `release/HaiKyuu/` 和 `release/HaiKyuu-v1.0.0.zip`（版本取自 `model/AppVersion.java`，同版本重新打包會覆蓋同名 ZIP）。ZIP 可上傳 GitHub Releases 供下載；`release/` 維持由 Git 忽略。
+- 打包過程的 JAR 只放在暫存的 `.release-build/`，成功後會清除；正式發行版包含 `release/HaiKyuu/` 和 `release/HaiKyuu-v1.1.0.zip`（版本取自 `model/AppVersion.java`，同版本重新打包會覆蓋同名 ZIP）。ZIP 可上傳 GitHub Releases 供下載；`release/` 維持由 Git 忽略。
 - `Start Haikyuu.vbs`：專案根目錄的啟動捷徑開啟上述 EXE；若尚未打包，會提示先執行 `build-release.bat`。
 - 「創立房間」會啟動 UDP Server，房主的 Client 使用畫面顯示的區網 IP 連入，不直接操作 Server 模型；找不到可用區網 IPv4 時會顯示錯誤且不啟動。
 - 「加入房間」為加入房主顯示的區域網路 IPv4。雙方都透過相同的 Server 權威判定流程遊玩，使用 UDP 5001。

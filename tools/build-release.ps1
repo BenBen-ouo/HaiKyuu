@@ -155,7 +155,8 @@ try {
 
     Write-Host '5/6 Creating Windows app-image with bundled Java runtime...'
     & $jpackage --type app-image --name HaiKyuu --input $input `
-        --main-jar HaiKyuu.jar --main-class Main --dest $packageDest
+        --main-jar HaiKyuu.jar --main-class Main --dest $packageDest `
+        --app-version $versionMatch.Groups[1].Value.Substring(1)
     Assert-ToolSucceeded 'jpackage'
     $stagedApp = Join-Path $packageDest 'HaiKyuu'
     foreach ($required in @('HaiKyuu.exe', 'app\HaiKyuu.jar', 'runtime')) {

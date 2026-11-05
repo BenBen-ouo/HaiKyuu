@@ -63,7 +63,7 @@ public final class LauncherTest {
             @Override public String join(String ip) { return null; }
         });
 
-        check("v1.0.0".equals(AppVersion.LABEL)
+        check(AppVersion.LABEL.matches("v\\d+\\.\\d+\\.\\d+")
                 && hasLabelContaining(panel, AppVersion.LABEL)
                 && hasLabelContaining(panel, "HaiKyuu!!")
                 && !hasLabelContaining(panel, "HaiKyuu!!  " + AppVersion.LABEL),
