@@ -6,6 +6,10 @@ $workMarker = Join-Path $workRoot '.haikyuu-generated'
 $releaseRoot = Join-Path $projectRoot 'release'
 $releaseApp = Join-Path $releaseRoot 'HaiKyuu'
 $releaseMarker = Join-Path $releaseApp '.haikyuu-generated'
+$versionSource = Get-Content -LiteralPath (Join-Path $projectRoot 'model\AppVersion.java') -Raw -Encoding UTF8
+$versionMatch = [regex]::Match($versionSource, 'LABEL\s*=\s*"(v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.-]+)?)"')
+if (-not $versionMatch.Success) { throw 'Cannot read release version from model/AppVersion.java.' }
+$releaseZip = Join-Path $releaseRoot ('HaiKyuu-' + $versionMatch.Groups[1].Value + '.zip')
 
 function Assert-SafePath([string]$target) {
     $full = [System.IO.Path]::GetFullPath($target).TrimEnd('\')
@@ -162,7 +166,30 @@ try {
     Set-Content -LiteralPath (Join-Path $stagedApp '.haikyuu-generated') `
         -Value 'HaiKyuu generated Windows app-image' -Encoding UTF8
 
-    Write-Host '6/6 Updating uncompressed release...'
+    Write-Host '6/6 Creating versioned ZIP and updating release...'
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression
+    $stagedZip = Join-Path $workRoot 'release.zip'
+    Assert-SafePath $stagedZip | Out-Null
+    $zipArchive = [System.IO.Compression.ZipFile]::Open($stagedZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in Get-ChildItem -LiteralPath $stagedApp -Recurse -File -Force) {
+            $relativePath = $file.FullName.Substring($stagedApp.Length).TrimStart('\').Replace('\', '/')
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zipArchive, $file.FullName, ('HaiKyuu/' + $relativePath),
+                [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally {
+        $zipArchive.Dispose()
+    }
+    $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($stagedZip)
+    try {
+        foreach ($required in @('HaiKyuu/HaiKyuu.exe', 'HaiKyuu/app/HaiKyuu.jar', 'HaiKyuu/runtime/lib/modules')) {
+            if ($null -eq $zipArchive.GetEntry($required)) { throw "ZIP is missing: $required" }
+        }
+    } finally {
+        $zipArchive.Dispose()
+    }
     New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
     Assert-SafePath $releaseApp | Out-Null
     $previousApp = Join-Path $workRoot 'previous-release'
@@ -184,6 +211,8 @@ try {
         }
         throw
     }
+    Assert-SafePath $releaseZip | Out-Null
+    Move-Item -LiteralPath $stagedZip -Destination $releaseZip -Force
     $oldZipPath = Join-Path $releaseRoot 'HaiKyuu-Windows.zip'
     Assert-SafePath $oldZipPath | Out-Null
     if (Test-Path -LiteralPath $oldZipPath) {
@@ -208,6 +237,7 @@ try {
 
     Write-Host "Built: $releaseApp\HaiKyuu.exe"
     Write-Host "Distribute the whole uncompressed folder: $releaseApp"
+    Write-Host "GitHub Releases upload: $releaseZip"
     Write-Host 'Manual checks on a Java-free Windows PC and real LAN are still required.'
     exit 0
 } catch {

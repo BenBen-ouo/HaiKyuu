@@ -83,6 +83,7 @@ public class RallyScorer {
     /** 賽末得分後沿用相同物理與操作，直到重新開始；不進入下一球。 */
     public void updateFinishedMatch(TeamInput redInput, TeamInput blueInput) {
         updatePostPointMotion(redInput, blueInput);
+        model.updateTransientMessage();
     }
 
     private void updatePostPointMotion(TeamInput redInput, TeamInput blueInput) {
@@ -96,7 +97,7 @@ public class RallyScorer {
 
         if (model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y
                 && model.spikeEffect.isSpikeTrailActive()) {
-            model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+            model.spawnLandingSmoke();
             model.spikeEffect.stopSpikeTrail();
         }
     }
@@ -104,7 +105,7 @@ public class RallyScorer {
     public void checkBallLanding() {
         if (!rallyOver && model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y) {
             if (model.spikeEffect.isSpikeTrailActive()) {
-                model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+                model.spawnLandingSmoke();
                 model.spikeEffect.stopSpikeTrail();
             }
             boolean serveNotReceived = !model.isServeReceptionComplete();
@@ -196,12 +197,16 @@ public class RallyScorer {
             }
         }
 
-        if (!model.matchOver && model.transientMessage != null) {
+        if (model.transientMessage != null) {
             model.transientMessageTimer = SCORE_FRAMES;
         }
     }
 
     private void prepareNextServe() {
+        model.pendingTouchOut = false;
+        model.pendingTouchOutWinner = null;
+        model.redAttackLocked = false;
+        model.blueAttackLocked = false;
         rallyOver = false;
         model.getServeHandler().setWaitingForServe(true);
         model.resetCounters();

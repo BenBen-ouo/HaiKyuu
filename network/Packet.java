@@ -36,7 +36,7 @@ public final class Packet {
 
     /*
      * 可靠 COLLISION_EVENT 的事件類型。
-     * 只保留目前指定的事件；攔網、撞網等額外事件暫不加入。
+     * 落地煙霧與碰網閃爍由權威事件確認。
      */
     public enum EventType {
         SERVE,
@@ -48,7 +48,8 @@ public final class Packet {
         RESET,
         FLOW,
         AIR_SET_CONTACT,
-        JUMP_TOSS
+        JUMP_TOSS,
+        NET_CONTACT
     }
 
     public static int encodeInput(TeamInput input) {
@@ -100,6 +101,7 @@ public final class Packet {
         public final int collisionRevision;
         public final boolean spikeTrailActive;
         public final boolean spikeTrailRedSide;
+        public int netFlashFrames;
 
         public WorldSnapshot(BallState ball, TeamState redTeam, TeamState blueTeam,
                              RallyContactState rallyContacts,
@@ -114,7 +116,7 @@ public final class Packet {
         }
 
         public static WorldSnapshot from(GameModel model, int collisionRevision) {
-            return new WorldSnapshot(
+            WorldSnapshot snapshot = new WorldSnapshot(
                     BallState.from(model.ball),
                     TeamState.from(model.redTeam),
                     TeamState.from(model.blueTeam),
@@ -123,6 +125,8 @@ public final class Packet {
                     model.spikeEffect.isSpikeTrailActive(),
                     model.spikeEffect.getCurrentSpikeIsRed()
             );
+            snapshot.netFlashFrames = model.netFlashFrames;
+            return snapshot;
         }
     }
 
@@ -141,6 +145,8 @@ public final class Packet {
         public final boolean blueSetterTouchedFirst;
         public final boolean redBlockUsed;
         public final boolean blueBlockUsed;
+        public boolean redAttackLocked;
+        public boolean blueAttackLocked;
 
         public RallyContactState(int redHitCount, int blueHitCount,
                                  int redLastHitterIndex, int blueLastHitterIndex,
@@ -165,7 +171,7 @@ public final class Packet {
         }
 
         public static RallyContactState from(GameModel model) {
-            return new RallyContactState(
+            RallyContactState state = new RallyContactState(
                     model.redHitCount, model.blueHitCount,
                     model.getLastHitterIndexForNetwork(true), model.getLastHitterIndexForNetwork(false),
                     encodeNullableBoolean(model.getLastHitTeam()),
@@ -174,9 +180,14 @@ public final class Packet {
                     model.wasSetterTouchedFirst(true), model.wasSetterTouchedFirst(false),
                     model.hasBlocked(true), model.hasBlocked(false)
             );
+            state.redAttackLocked = model.redAttackLocked;
+            state.blueAttackLocked = model.blueAttackLocked;
+            return state;
         }
 
         public void applyTo(GameModel model) {
+            model.redAttackLocked = redAttackLocked;
+            model.blueAttackLocked = blueAttackLocked;
             model.applyNetworkRallyContactState(
                     redHitCount, blueHitCount, decodeNullableBoolean(lastHitTeamCode),
                     lastTouchWasBlock, serveReceptionComplete,
@@ -209,6 +220,8 @@ public final class Packet {
         public final int transientMessageColorCode;
         public final boolean pendingTouchOut;
         public final int pendingTouchOutWinnerCode;
+        public int netFlashFrames;
+        public boolean landingSmoke;
 
         public CompactState(
                 BallState ball,
@@ -249,7 +262,7 @@ public final class Packet {
         }
 
         public static CompactState from(GameModel model) {
-            return new CompactState(
+            CompactState state = new CompactState(
                     BallState.from(model.ball),
                     TeamState.from(model.redTeam),
                     TeamState.from(model.blueTeam),
@@ -268,6 +281,9 @@ public final class Packet {
                     model.pendingTouchOut,
                     encodeNullableBoolean(model.pendingTouchOutWinner)
             );
+            state.netFlashFrames = model.netFlashFrames;
+            state.landingSmoke = model.landingSmokeThisFrame;
+            return state;
         }
 
         public void applyTo(GameModel model) {
@@ -280,6 +296,7 @@ public final class Packet {
         }
 
         private void applyTo(GameModel model, boolean preserveAnimations) {
+            model.netFlashFrames = netFlashFrames;
             ball.applyTo(model.ball);
             if (preserveAnimations) {
                 redTeam.applyMotionTo(model.redTeam);

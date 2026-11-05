@@ -58,6 +58,7 @@ public class PlayerRenderer {
         if (DebugSettings.areHitBoxesVisible()) {
             drawDefaultHitBox(g, player, redTeam);
             drawBlockHitBox(g, player, redTeam);
+            drawHeadBlockHitBox(g, player, redTeam);
             drawAttackHitBox(g, player);
         }
     }
@@ -166,6 +167,23 @@ public class PlayerRenderer {
             );
         } finally {
             hitBoxGraphics.dispose();
+        }
+    }
+
+    private void drawHeadBlockHitBox(Graphics2D g, Player player, boolean redTeam) {
+        if (!(player instanceof QuickAttacker blocker) || !blocker.isHeadBlockHitBoxActive()) return;
+        HitBox box = blocker.headBlockHitBox;
+        Graphics2D circleGraphics = (Graphics2D) g.create();
+        try {
+            circleGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+            circleGraphics.setColor(hitBoxFillColor(redTeam));
+            circleGraphics.fillOval(hitX(box), hitY(box), hitWidth(box), hitHeight(box));
+            circleGraphics.setComposite(AlphaComposite.SrcOver);
+            circleGraphics.setColor(Color.BLACK);
+            circleGraphics.setStroke(new BasicStroke(2));
+            circleGraphics.drawOval(hitX(box), hitY(box), hitWidth(box), hitHeight(box));
+        } finally {
+            circleGraphics.dispose();
         }
     }
 

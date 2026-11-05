@@ -64,7 +64,7 @@ public class GameRenderer {
     }
 
     private void drawWorld(Graphics2D g, GameModel model, boolean drawWorldBoundaryGuide, NetworkView networkView) {
-        courtRenderer.draw(g, drawWorldBoundaryGuide);
+        courtRenderer.draw(g, drawWorldBoundaryGuide, model.netFlashFrames);
         drawNetHitBox(g, model.netHitBox);
 
         playerRenderer.drawTeamExceptBack(g, model.redTeam, true, networkView);

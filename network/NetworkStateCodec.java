@@ -35,6 +35,8 @@ final class NetworkStateCodec {
         out.writeByte(state.transientMessageColorCode);
         out.writeBoolean(state.pendingTouchOut);
         out.writeByte(state.pendingTouchOutWinnerCode);
+        out.writeInt(state.netFlashFrames);
+        out.writeBoolean(state.landingSmoke);
     }
 
     static Packet.CompactState readState(DataInputStream in) throws IOException {
@@ -59,7 +61,7 @@ final class NetworkStateCodec {
         boolean pendingTouchOut = in.readBoolean();
         int pendingTouchOutWinnerCode = in.readByte();
 
-        return new Packet.CompactState(
+        Packet.CompactState state = new Packet.CompactState(
                 ball, redTeam, blueTeam,
                 redScore, blueScore,
                 rallyContacts,
@@ -68,6 +70,9 @@ final class NetworkStateCodec {
                 transientMessage, transientMessageTimer, transientMessageColorCode,
                 pendingTouchOut, pendingTouchOutWinnerCode
         );
+        state.netFlashFrames = in.readInt();
+        state.landingSmoke = in.readBoolean();
+        return state;
     }
 
     static void writeRallyContacts(DataOutputStream out, Packet.RallyContactState state) throws IOException {
@@ -84,15 +89,20 @@ final class NetworkStateCodec {
         out.writeBoolean(state.blueSetterTouchedFirst);
         out.writeBoolean(state.redBlockUsed);
         out.writeBoolean(state.blueBlockUsed);
+        out.writeBoolean(state.redAttackLocked);
+        out.writeBoolean(state.blueAttackLocked);
     }
 
     static Packet.RallyContactState readRallyContacts(DataInputStream in) throws IOException {
-        return new Packet.RallyContactState(
+        Packet.RallyContactState state = new Packet.RallyContactState(
                 in.readInt(), in.readInt(), in.readInt(), in.readInt(),
                 in.readByte(), in.readBoolean(), in.readBoolean(),
                 in.readBoolean(), in.readBoolean(), in.readBoolean(),
                 in.readBoolean(), in.readBoolean(), in.readBoolean()
         );
+        state.redAttackLocked = in.readBoolean();
+        state.blueAttackLocked = in.readBoolean();
+        return state;
     }
 
     static void writeBall(DataOutputStream out, Packet.BallState ball) throws IOException {

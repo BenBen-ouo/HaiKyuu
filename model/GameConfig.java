@@ -35,6 +35,8 @@ public final class GameConfig {
     public static final double QUICK_SET_APEX_Y = 420;
 
     public static final double PLAYER_SPEED = 4.3;
+    public static final double BACK_RUN_FAST_SPEED = 6.5;
+    public static final int BACK_RUN_ACCELERATION_FRAMES = 30;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
     public static final double PLAYER_JUMP_SPEED = -9.0;
     public static final double SETTER_JUMP_SPEED = -6.3;
@@ -44,7 +46,7 @@ public final class GameConfig {
     public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
-    public static final double BALL_BOUNCE = 0.72;
+    public static final double BALL_BOUNCE = 0.8;
     // 球撞到世界邊界（非網子）時的反彈係數。
     public static final double WORLD_BOUNDARY_BOUNCE = 0.4;
 
@@ -59,11 +61,13 @@ public final class GameConfig {
     public static final double FLOOR_BOUNCE_SLOW_SPIN_SPEED = 5.0;
 
     public static final double NET_WIDTH = 4;
+    public static final int NET_FLASH_FRAMES = 60;
+    public static final int NET_FLASH_COUNT = 6;
     public static final double NET_HEIGHT = 135; //因為我螢幕小 所以我照比例換算 243 * 5/9
     public static final double NET_X = SCREEN_WIDTH / 2;
     public static final double NET_TOP_Y = FLOOR_Y - NET_HEIGHT;
 
-    // 網子碰撞箱：預設和畫面上的網子完全重合，可獨立調整碰撞區域。
+    // 實際網子判定維持寬 4；下段寬 6 的深紅球柱僅為外觀。
     public static final double NET_HITBOX_CENTER_X = NET_X;
     public static final double NET_HITBOX_TOP_Y = NET_TOP_Y;
     public static final double NET_HITBOX_WIDTH = NET_WIDTH;
@@ -78,7 +82,8 @@ public final class GameConfig {
 
     // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
     public static final double BLOCK_HITBOX_BOUNCE = 0.5;
-    public static final double BLOCK_HITBOX_MIN_SPEED = 6.0;
+    // 頭部圓框的反彈係數；兩種攔網框皆不強制最低球速。
+    public static final double BLOCK_HEAD_BOUNCE = 0.7;
 
     // 球場範圍 (以網子中心點左右各 500)
     public static final double COURT_WIDTH = 1000;

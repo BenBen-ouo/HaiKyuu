@@ -14,6 +14,7 @@ public class WingSpiker extends Player {
     private final double homeX;
     private final DiveController diveController;
     private boolean previousWingAttack = false;
+    private boolean resumeReturnAfterReceive;
 
     public WingSpiker(String assetName, double x, double y, boolean redSide) {
         super(assetName, x, y, redSide);
@@ -26,6 +27,7 @@ public class WingSpiker extends Player {
         super.resetToInitial();
         diveController.cancel();
         previousWingAttack = false;
+        resumeReturnAfterReceive = false;
     }
 
     @Override
@@ -47,6 +49,10 @@ public class WingSpiker extends Player {
             vx = 0;
             applyGravity();
             updateActionAnimation();
+            if (resumeReturnAfterReceive && !isMovementLockedByAnimation()) {
+                resumeReturnAfterReceive = false;
+                startReturnToHome();
+            }
             previousWingAttack = input.wingAttack;
             return;
         }
@@ -104,7 +110,7 @@ public class WingSpiker extends Player {
                 && isBallInAttackBox(input)) {
             if (input.canWingAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
-            } else if (input.canResolveAttack) {
+            } else if (input.canResolveAttack && !input.attackLocked) {
                 queueAttackAttempt();
             }
         }
@@ -129,6 +135,12 @@ public class WingSpiker extends Player {
         startRunLoopAnimation();
     }
 
+    @Override
+    public void playReceiveAnimation() {
+        resumeReturnAfterReceive = action == PlayerAction.RUN_RETURN;
+        super.playReceiveAnimation();
+    }
+
     private void updateReturnToHome() {
         double dx = homeX - x;
 
@@ -147,11 +159,11 @@ public class WingSpiker extends Player {
     }
     @Override
     public boolean isDefaultHitBoxActive() {
-        return (action == PlayerAction.IDLE || action == PlayerAction.DIVE)
+        return (action == PlayerAction.IDLE || action == PlayerAction.DIVE || action == PlayerAction.RUN_RETURN)
                 && !jumping
                 && !attacking
                 && !blocking
-                && (diving || Math.abs(vx) < 0.001)
+                && (diving || action == PlayerAction.RUN_RETURN || Math.abs(vx) < 0.001)
                 && Math.abs(vy) < 0.001;
     }
 }

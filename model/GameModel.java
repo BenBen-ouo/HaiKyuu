@@ -61,7 +61,10 @@ public class GameModel {
     // Client 本地預測時不可自行裁決得分或下一次發球位置。
     private boolean resolvingRallyOutcomes = true;
     private boolean predictionAwaitingAuthority;
-    private boolean networkSmokeShownOnFloor;
+    public boolean redAttackLocked;
+    public boolean blueAttackLocked;
+    public int netFlashFrames;
+    public boolean landingSmokeThisFrame;
 
     // 短暫訊息（例如違規提示），每幀遞減
     public String transientMessage = null;
@@ -119,7 +122,10 @@ public class GameModel {
         effects.clear();
         spikeEffect.clear();
         predictionAwaitingAuthority = false;
-        networkSmokeShownOnFloor = false;
+        redAttackLocked = false;
+        blueAttackLocked = false;
+        netFlashFrames = 0;
+        landingSmokeThisFrame = false;
         serveReceptionComplete = false;
         redActionReleaseGate.reset();
         blueActionReleaseGate.reset();
@@ -162,6 +168,8 @@ public class GameModel {
 
     /** Client 只預測本機球員；球、對手與一切碰撞／裁決都等 Server。 */
     public void updateForNetworkPrediction(TeamInput localInput, boolean localRedSide) {
+        if (netFlashFrames > 0) netFlashFrames--;
+        if (matchOver) updateTransientMessage();
         TeamInput input = localInput.copy();
         ActionReleaseGate releaseGate = localRedSide ? redActionReleaseGate : blueActionReleaseGate;
         if (!matchOver && scorer.isLockedPhase()) {
@@ -189,24 +197,39 @@ public class GameModel {
     /** 快照只同步視覺特效的開關，不讓 Client 自行判定扣球或落地。 */
     public void syncNetworkVisualEffects(boolean trailActive, boolean trailRedSide) {
         boolean wasActive = spikeEffect.isSpikeTrailActive();
-        boolean onFloor = ball.y + ball.radius >= GameConfig.FLOOR_Y;
-        if (!onFloor) {
-            networkSmokeShownOnFloor = false;
-        }
         if (trailActive) {
             if (!wasActive || spikeEffect.getCurrentSpikeIsRed() != trailRedSide) {
                 spikeEffect.startSpikeTrail(trailRedSide);
             }
-        } else if (wasActive) {
-            if (onFloor && !networkSmokeShownOnFloor) {
-                spikeEffect.spawnSmoke(ball.x, GameConfig.FLOOR_Y);
-                networkSmokeShownOnFloor = true;
-            }
-            spikeEffect.stopSpikeTrail();
+        } else if (wasActive || rallyState.wasLastTouchBlock()) {
+            if (rallyState.wasLastTouchBlock()) spikeEffect.clearSpikeTrail();
+            else spikeEffect.stopSpikeTrail();
         }
     }
 
+    public boolean isAttackLocked(boolean redSide) {
+        return redSide ? redAttackLocked : blueAttackLocked;
+    }
+
+    public void lockAttack(boolean redSide) {
+        if (redSide) redAttackLocked = true;
+        else blueAttackLocked = true;
+    }
+
+    /** 僅權威物理落地流程呼叫；Client 以可靠 LANDING 事件播放。 */
+    public void spawnLandingSmoke() {
+        spikeEffect.spawnSmoke(ball.x, GameConfig.FLOOR_Y);
+        landingSmokeThisFrame = true;
+    }
+
+    private void collideNet() {
+        ballHitNetThisFrame = ball.collideWithNet(netHitBox);
+        if (ballHitNetThisFrame) netFlashFrames = GameConfig.NET_FLASH_FRAMES;
+    }
+
     private void updateFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
+        if (netFlashFrames > 0) netFlashFrames--;
+        landingSmokeThisFrame = false;
         ballHitNetThisFrame = false;
         ballLandedThisFrame = false;
         setterContactThisFrame = false;
@@ -273,6 +296,9 @@ public class GameModel {
 
     public void recordRegularHit(boolean redSide, Player hitter) {
         if (matchOver) return;
+        preparePossession(redSide);
+        redAttackLocked = false;
+        blueAttackLocked = false;
 
         if (!serveReceptionComplete && redSide != serveHandler.isRedServing()) {
             serveReceptionComplete = true;
@@ -288,6 +314,11 @@ public class GameModel {
 
     private void recordContact(boolean redSide, Player hitter, boolean counts) {
         if (matchOver) return;
+
+        preparePossession(redSide);
+        pendingTouchOut = false;
+        pendingTouchOutWinner = null;
+        resetTeamContacts(!redSide);
 
         rallyState.recordHit(redSide, hitter, counts);
         ballContactThisFrame = true;
@@ -319,6 +350,14 @@ public class GameModel {
 
         rallyState.recordBlock(redSide, blocker);
         ballContactThisFrame = true;
+    }
+
+    private void preparePossession(boolean redSide) {
+        Boolean previousSide = getLastHitTeam();
+        // 接球／攻擊造成球權交替時也重設，涵蓋碰撞推出球體跨網的情況。
+        if (previousSide != null && previousSide != redSide && !rallyState.wasLastTouchBlock()) {
+            resetCounters();
+        }
     }
 
     private void updateActiveFrame(TeamInput redInput, TeamInput blueInput, boolean resolveRallyOutcomes) {
@@ -388,8 +427,10 @@ public class GameModel {
 
     /** 得分後球仍在移動時保留撞網；不重新判定觸球、落地得分或球權。 */
     public void updatePostPointBall() {
+        boolean aboveFloor = ball.y + ball.radius < GameConfig.FLOOR_Y;
         ball.update();
-        ballHitNetThisFrame = ball.collideWithNet(netHitBox);
+        ballLandedThisFrame = aboveFloor && ball.y + ball.radius >= GameConfig.FLOOR_Y;
+        collideNet();
     }
 
     public void observeLockedActions(TeamInput redInput, TeamInput blueInput) {
@@ -410,7 +451,6 @@ public class GameModel {
                 }
                 if (ball.y + ball.radius >= GameConfig.FLOOR_Y
                         && spikeEffect.isSpikeTrailActive()) {
-                    spikeEffect.spawnSmoke(ball.x, GameConfig.FLOOR_Y);
                     spikeEffect.stopSpikeTrail();
                 }
             } else {
@@ -445,6 +485,7 @@ public class GameModel {
     }
 
     private void configureAttackInput(TeamInput input, Team team, boolean redSide) {
+        input.attackLocked = isAttackLocked(redSide);
         input.ball = ball;
         boolean secondTouch = getHitCount(redSide) == 1 && serveReceptionComplete;
         Player lastHitter = getLastHitter(redSide);
@@ -466,7 +507,7 @@ public class GameModel {
         ball.update();
         spikeEffect.addTrailPoint(ball.x, ball.y);
         ballLandedThisFrame = ball.y + ball.radius >= GameConfig.FLOOR_Y;
-        ballHitNetThisFrame = ball.collideWithNet(netHitBox);
+        collideNet();
 
         serveHandler.updateAfterBall();
         if (!scorer.isRallyOver() && !predictionAwaitingAuthority) {

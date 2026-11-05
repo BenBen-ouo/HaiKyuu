@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 9;
+    private static final short VERSION = 10;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
@@ -255,6 +255,7 @@ public final class UdpCodec {
             NetworkStateCodec.writeRallyContacts(out, snapshot.rallyContacts);
             out.writeBoolean(snapshot.spikeTrailActive);
             out.writeBoolean(snapshot.spikeTrailRedSide);
+            out.writeInt(snapshot.netFlashFrames);
         });
     }
 
@@ -333,7 +334,7 @@ public final class UdpCodec {
                     int serverTick = in.readInt();
                     int sequence = in.readInt();
                     int revision = in.readInt();
-                    yield new WorldSnapshotFrame(token, serverTick, sequence, new Packet.WorldSnapshot(
+                    Packet.WorldSnapshot snapshot = new Packet.WorldSnapshot(
                             NetworkStateCodec.readBall(in),
                             NetworkStateCodec.readTeam(in),
                             NetworkStateCodec.readTeam(in),
@@ -341,7 +342,9 @@ public final class UdpCodec {
                             revision,
                             in.readBoolean(),
                             in.readBoolean()
-                    ));
+                    );
+                    snapshot.netFlashFrames = in.readInt();
+                    yield new WorldSnapshotFrame(token, serverTick, sequence, snapshot);
                 }
                 default -> null;
             };

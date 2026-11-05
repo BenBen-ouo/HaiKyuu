@@ -205,6 +205,7 @@ public final class GameServer implements AutoCloseable {
 
     private List<Packet.EventType> detectSyncEvents(FrameState before) {
         List<Packet.EventType> events = new ArrayList<>(5);
+        if (model.didBallHitNetThisFrame()) events.add(Packet.EventType.NET_CONTACT);
 
         ServeState currentServeState = model.getServeHandler().getState();
         if (before.serveState == ServeState.WAITING_FOR_SERVE
@@ -231,7 +232,7 @@ public final class GameServer implements AutoCloseable {
             events.add(Packet.EventType.RECEPTION);
         }
 
-        if (model.didBallLandThisFrame()) {
+        if (model.didBallLandThisFrame() || model.landingSmokeThisFrame) {
             events.add(Packet.EventType.LANDING);
         }
 

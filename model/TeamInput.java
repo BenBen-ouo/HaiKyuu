@@ -34,6 +34,7 @@ public class TeamInput {
     public Player lastHitter;
     // Client 的碰撞由 Server 判定，不能先自行播放揮臂命中動畫。
     public boolean canResolveAttack = true;
+    public boolean attackLocked;
 
     // 扣球命中當下的球路修正鍵。
     public boolean spikeFlat;
@@ -67,6 +68,7 @@ public class TeamInput {
         copy.canWingAirSet = canWingAirSet;
         copy.lastHitter = lastHitter;
         copy.canResolveAttack = canResolveAttack;
+        copy.attackLocked = attackLocked;
         copy.spikeFlat = spikeFlat;
         copy.spikeShort = spikeShort;
         copy.spikeLob = spikeLob;

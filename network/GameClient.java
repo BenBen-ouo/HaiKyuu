@@ -285,8 +285,8 @@ public final class GameClient implements NetworkView {
             renderModel.transientMessageTimer = Math.min(previousMessageTimer, event.state.transientMessageTimer);
             renderModel.transientMessageIsRed = previousMessageColor;
         }
-        if (event.type == Packet.EventType.LANDING && renderModel.spikeEffect.isSpikeTrailActive()) {
-            renderModel.spikeEffect.spawnSmoke(renderModel.ball.x, model.GameConfig.FLOOR_Y);
+        if (event.type == Packet.EventType.LANDING && event.state.landingSmoke) {
+            renderModel.spikeEffect.spawnSmoke(event.state.ball.x, model.GameConfig.FLOOR_Y);
             renderModel.spikeEffect.stopSpikeTrail();
         }
         if (phaseReset) {
@@ -333,6 +333,7 @@ public final class GameClient implements NetworkView {
         frame.snapshot.redTeam.applyMotionTo(renderModel.redTeam);
         frame.snapshot.blueTeam.applyMotionTo(renderModel.blueTeam);
         frame.snapshot.rallyContacts.applyTo(renderModel);
+        renderModel.netFlashFrames = frame.snapshot.netFlashFrames;
         clearSpikeTrailIfLargeCorrection(previousBallX, previousBallY);
         renderModel.syncNetworkVisualEffects(
                 frame.snapshot.spikeTrailActive, frame.snapshot.spikeTrailRedSide);
