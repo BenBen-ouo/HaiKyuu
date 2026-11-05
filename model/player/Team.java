@@ -22,12 +22,16 @@ public class Team {
     private static final int SETTER_HITBOX_ARC = 5;
     private static final double SETTER_HITBOX_ROTATION = 0; ///之後再看有沒有需要讓貼網球早點接觸
 
-    private static final double BLOCK_HITBOX_RED_X = 50;
-    private static final double BLOCK_HITBOX_Y = 20;
+    private static final double BLOCK_HITBOX_RED_X = 55;
+    private static final double BLOCK_HITBOX_Y = 15;
     private static final double BLOCK_HITBOX_WIDTH = 10;
-    private static final double BLOCK_HITBOX_HEIGHT = 45;
+    private static final double BLOCK_HITBOX_HEIGHT = 50;
     private static final int BLOCK_HITBOX_ARC = 10;
     private static final double BLOCK_HITBOX_ROTATION = 35;
+    // 攔網 block1 頭部圓框：可平移圓心、調整半徑；藍隊自動鏡像。
+    private static final double BLOCK_HEAD_CENTER_RED_X = 50;
+    private static final double BLOCK_HEAD_CENTER_Y = 39;
+    private static final double BLOCK_HEAD_RADIUS = 12;
 
     private static final double ATTACK_HITBOX_RED_X = 40;
     private static final double ATTACK_HITBOX_Y = 10;
@@ -111,6 +115,9 @@ public class Team {
                 BLOCK_HITBOX_WIDTH, BLOCK_HITBOX_HEIGHT,
                 BLOCK_HITBOX_ARC, BLOCK_HITBOX_ARC,
                 rotationDirection * BLOCK_HITBOX_ROTATION);
+        quickAttacker.headBlockHitBox.setCircle(
+                redSide ? BLOCK_HEAD_CENTER_RED_X : GameConfig.PLAYER_IMAGE_WIDTH - BLOCK_HEAD_CENTER_RED_X,
+                BLOCK_HEAD_CENTER_Y, BLOCK_HEAD_RADIUS);
         wingSpiker.hitBox.set(receiveX, RECEIVE_HITBOX_Y,
                 RECEIVE_HITBOX_WIDTH, RECEIVE_HITBOX_HEIGHT,
                 RECEIVE_HITBOX_ARC, RECEIVE_HITBOX_ARC,

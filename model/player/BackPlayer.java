@@ -14,6 +14,8 @@ public class BackPlayer extends Player {
     private HitBoxSnapshot defaultHitBox;
     private boolean previousBackAction = false;
     private double jumpAirSpeed;
+    private int runDirection;
+    private int runHeldFrames;
 
     public BackPlayer(String assetName, double x, double y, boolean redSide) {
         super(assetName, x, y, redSide);
@@ -23,6 +25,13 @@ public class BackPlayer extends Player {
     @Override
     public void update(TeamInput input) {
         clearAttackAttempt();
+        int direction = input.backLeft == input.backRight ? 0 : input.backLeft ? -1 : 1;
+        boolean canRun = !jumping && !diving
+                && (action == PlayerAction.IDLE || action == PlayerAction.RUN_LOOP)
+                && !input.backJump && !input.backDive;
+        runHeldFrames = canRun && direction != 0
+                ? (direction == runDirection ? runHeldFrames + 1 : 1) : 0;
+        runDirection = runHeldFrames == 0 ? 0 : direction;
         boolean actionPressed = input.backJump || input.backDive;
         boolean justPressedAction = actionPressed && !previousBackAction;
 
@@ -136,7 +145,7 @@ public class BackPlayer extends Player {
                 && isBallInAttackBox(input)) {
             if (input.canBackAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
-            } else if (input.canResolveAttack) {
+            } else if (input.canResolveAttack && !input.attackLocked) {
                 queueAttackAttempt();
             }
         }
@@ -175,12 +184,14 @@ public class BackPlayer extends Player {
     }
 
     private void moveHorizontally(TeamInput input) {
+        double speed = runHeldFrames > GameConfig.BACK_RUN_ACCELERATION_FRAMES
+                ? GameConfig.BACK_RUN_FAST_SPEED : GameConfig.PLAYER_SPEED;
         if (input.backLeft) {
-            vx -= GameConfig.PLAYER_SPEED;
+            vx -= speed;
         }
 
         if (input.backRight) {
-            vx += GameConfig.PLAYER_SPEED;
+            vx += speed;
         }
     }
 
@@ -226,6 +237,8 @@ public class BackPlayer extends Player {
      * 發球準備時清除舊的撲球／攻擊動作，避免發球鍵沿用上一個 Space 狀態。
      */
     public void prepareForServe() {
+        runDirection = 0;
+        runHeldFrames = 0;
         diveController.cancel();
         restoreDefaultHitBox();
         previousBackAction = false;
@@ -237,6 +250,8 @@ public class BackPlayer extends Player {
 
     @Override
     public void resetToInitial() {
+        runDirection = 0;
+        runHeldFrames = 0;
         diveController.cancel();
         super.resetToInitial();
         restoreDefaultHitBox();

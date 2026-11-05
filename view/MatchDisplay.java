@@ -22,7 +22,7 @@ public class MatchDisplay {
 
         // 練習模式不顯示比分；一般對局依觀看隊伍排序。
         String scoreText = model.isPracticeMode()
-                ? (model.isPracticeRedServing() ? "藍隊練習模式" : "紅隊練習模式")
+                ? (model.isPracticeRedServing() ? "右方練習模式" : "左方練習模式")
                 : bluePerspective
                         ? model.blueScore + " : " + model.redScore
                         : model.redScore + " : " + model.blueScore;
@@ -34,7 +34,7 @@ public class MatchDisplay {
         g.drawString(scoreText, (GameConfig.SCREEN_WIDTH - scoreMetrics.stringWidth(scoreText)) / 2, 44);
 
         // 若比賽結束，顯示勝利框 (圓角、以贏家顏色)
-        if (model.matchOver) {
+        if (model.matchOver && model.transientMessageTimer <= 0) {
             String msg = (model.matchWinnerRed != null && model.matchWinnerRed) ? "RED WINS" : "BLUE WINS";
             g.setFont(new Font("Arial", Font.BOLD, 48));
             FontMetrics fm = g.getFontMetrics();

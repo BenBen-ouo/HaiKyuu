@@ -40,8 +40,8 @@ public final class LauncherTest {
         JTextField joinField = findEditableField(panel);
         check(joinField != null, "加入房間的 IP 欄位與模式按鈕在同一個啟動畫面");
         findButton(panel, "本地雙人").doClick();
-        findButton(panel, "紅隊練習模式").doClick();
-        findButton(panel, "藍隊練習模式").doClick();
+        findButton(panel, "左方練習模式").doClick();
+        findButton(panel, "右方練習模式").doClick();
         findButton(panel, "創立房間").doClick();
         check(selected[0] == 1 && selected[1] == 1 && selected[2] == 1 && selected[3] == 1,
                 "本地雙人及雙側練習模式分別呼叫自己的啟動入口");

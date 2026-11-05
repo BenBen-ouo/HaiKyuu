@@ -263,9 +263,9 @@ public abstract class Player {
     public boolean isAssetCompatibleWith(PlayerAction serverAction) {
         String name = assetName;
         return switch (serverAction) {
-            case IDLE -> !name.contains(" run") && !name.contains(" dive")
+            case IDLE -> name.equals(teamAsset("MB ready attack")) || (!name.contains(" run") && !name.contains(" dive")
                     && !name.contains(" attack") && !name.contains(" block")
-                    && !name.contains(" setting") && !name.contains(" receive");
+                    && !name.contains(" setting") && !name.contains(" receive"));
             case RUN_APPROACH, RUN_LOOP, RUN_RETURN -> name.contains(" run");
             case ATTACK_READY -> name.contains(" attack1");
             case ATTACK_SWING -> name.contains(" attack2") || name.contains(" attack3");

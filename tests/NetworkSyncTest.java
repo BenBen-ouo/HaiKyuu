@@ -25,6 +25,7 @@ public final class NetworkSyncTest {
         testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
+        testNewRulesAndConfirmedLanding();
         if (args.length > 0 && "loopback".equals(args[0])) {
             testLocalLoopback();
         }
@@ -347,8 +348,41 @@ public final class NetworkSyncTest {
         client.ball.y = model.GameConfig.FLOOR_Y - client.ball.radius;
         client.syncNetworkVisualEffects(false, true);
         check(!client.spikeEffect.isSpikeTrailActive()
-                        && !client.spikeEffect.getSmokeParticles().isEmpty(),
-                "Server 軌跡結束且球落地時仍能顯示煙霧");
+                        && client.spikeEffect.getSmokeParticles().isEmpty(),
+                "僅快照到地板或軌跡關閉不能提前產生煙霧");
+    }
+
+    private static void testNewRulesAndConfirmedLanding() throws Exception {
+        GameModel server = new GameModel();
+        server.redAttackLocked = true;
+        server.blueAttackLocked = true;
+        server.netFlashFrames = 19;
+        Packet.WorldSnapshot decoded = snapshot(20, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
+        GameModel client = new GameModel();
+        decoded.rallyContacts.applyTo(client);
+        check(client.redAttackLocked && client.blueAttackLocked && decoded.netFlashFrames == 19,
+                "每 tick 快照包含兩隊扣球鎖定與碰網閃爍");
+
+        server.landingSmokeThisFrame = true;
+        server.ball.x = 321;
+        byte[] bytes = UdpCodec.event(7, 1, 20, Packet.EventType.LANDING, 0,
+                Packet.CompactState.from(server));
+        UdpCodec.Event landing = (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
+        check(landing.state.landingSmoke && landing.state.netFlashFrames == 19,
+                "可靠事件包含落地煙霧確認與網子閃爍狀態");
+        java.lang.reflect.Method apply = GameClient.class.getDeclaredMethod("applyOrderedEvent", UdpCodec.Event.class);
+        apply.setAccessible(true);
+        try (GameClient connection = new GameClient(client, "127.0.0.1")) {
+            check(client.spikeEffect.getSmokeParticles().isEmpty(), "事件前沒有提前煙霧");
+            apply.invoke(connection, landing);
+            check(!client.spikeEffect.getSmokeParticles().isEmpty(),
+                    "即使快照先關閉軌跡，收到 LANDING 確認仍會播放煙霧");
+            client.spikeEffect.clear();
+            server.landingSmokeThisFrame = false;
+            bytes = UdpCodec.event(7, 2, 21, Packet.EventType.LANDING, 0, Packet.CompactState.from(server));
+            apply.invoke(connection, (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length));
+            check(client.spikeEffect.getSmokeParticles().isEmpty(), "無扣球軌跡的落地不產生煙霧");
+        }
     }
 
     private static void testLocalLoopback() throws Exception {

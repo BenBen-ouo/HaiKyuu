@@ -99,6 +99,7 @@ public class RallyContactHandler {
     }
 
     private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
+        if (model.isAttackLocked(redSide)) return false;
         for (Player player : team.getPlayers()) {
             if (player == lastHitter) {
                 continue;
@@ -169,6 +170,7 @@ public class RallyContactHandler {
     }
 
     private void performSpike(AttackContext context, TeamInput input) {
+        model.lockAttack(context.redSide);
         Player attacker = context.attacker;
 
         pushBallOutsideAttackHitBox(attacker);
@@ -219,20 +221,23 @@ public class RallyContactHandler {
     }
 
     private boolean tryBlockRebound(Player player) {
-        if (!(player instanceof QuickAttacker blocker) || !blocker.isBlockHitBoxActive()) {
+        if (!(player instanceof QuickAttacker blocker)) {
             return false;
         }
+        HitBox blockBox = blocker.activeBlockHitBox();
+        if (blockBox == null) return false;
 
         if (model.hasBlocked(blocker.redSide)) {
             return false;
         }
 
-        if (!blocker.blockHitBox.intersectsBall(model.ball)) {
+        if (!blockBox.intersectsBall(model.ball)) {
             return false;
         }
 
-        pushBallOutsideHitBox(blocker.blockHitBox);
-        reflectBallFromBlock(blocker);
+        pushBallOutsideHitBox(blockBox);
+        reflectBallFromBlock(blocker, blockBox);
+        model.spikeEffect.clearSpikeTrail();
 
         // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
         model.ball.useFastFloorBounceSpin();
@@ -257,17 +262,13 @@ public class RallyContactHandler {
             model.resetTeamContacts(attackingTeam);
         }
 
-        // 攔網後保留扣球軌跡，直到落地或下一次一般接球才停止。
+        // 兩種攔網框共用同一份不計次的攔網紀錄。
         // 攔網接觸獨立記錄，固定不占用球隊的三次觸球次數。
         model.recordBlock(blocker.redSide, blocker);
 
-        // 攻擊方最後觸球、且反彈球預計出界時，延後到實際落地再依 touch out 給分。
-        if (attackingTeam != null
-                && attackingTeam != blocker.redSide
-                && BallLandingPredictor.willLandOutsideCourt(model.ball)) {
-            model.pendingTouchOut = true;
-            model.pendingTouchOutWinner = attackingTeam;
-        }
+        // 最後碰球為攔網時，依實際落地判 TOUCH OUT；下一次一般觸球／扣球會清除。
+        model.pendingTouchOut = true;
+        model.pendingTouchOutWinner = !blocker.redSide;
 
         return true;
     }
@@ -371,9 +372,9 @@ public class RallyContactHandler {
         model.ball.y += dy / length * BALL_UNSTUCK_DISTANCE;
     }
 
-    private void reflectBallFromBlock(QuickAttacker blocker) {
-        double normalX = model.ball.x - blocker.blockHitBox.getCenterX();
-        double normalY = model.ball.y - blocker.blockHitBox.getCenterY();
+    private void reflectBallFromBlock(QuickAttacker blocker, HitBox box) {
+        double normalX = model.ball.x - box.getCenterX();
+        double normalY = model.ball.y - box.getCenterY();
         double normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
 
         if (normalLength < 0.001) {
@@ -396,20 +397,15 @@ public class RallyContactHandler {
             reflectedVy = model.ball.vy - 2 * dot * normalY;
         } else {
             double currentSpeed = Math.sqrt(model.ball.vx * model.ball.vx + model.ball.vy * model.ball.vy);
-            double speed = Math.max(currentSpeed, GameConfig.BLOCK_HITBOX_MIN_SPEED);
+            double speed = currentSpeed;
             reflectedVx = normalX * speed;
             reflectedVy = normalY * speed;
         }
 
-        reflectedVx *= GameConfig.BLOCK_HITBOX_BOUNCE;
-        reflectedVy *= GameConfig.BLOCK_HITBOX_BOUNCE;
-
-        double reflectedSpeed = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
-        if (reflectedSpeed < GameConfig.BLOCK_HITBOX_MIN_SPEED) {
-            double scale = GameConfig.BLOCK_HITBOX_MIN_SPEED / Math.max(0.001, reflectedSpeed);
-            reflectedVx *= scale;
-            reflectedVy *= scale;
-        }
+        double bounce = box == blocker.headBlockHitBox
+                ? GameConfig.BLOCK_HEAD_BOUNCE : GameConfig.BLOCK_HITBOX_BOUNCE;
+        reflectedVx *= bounce;
+        reflectedVy *= bounce;
 
         model.ball.vx = reflectedVx;
         model.ball.vy = reflectedVy;

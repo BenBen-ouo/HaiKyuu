@@ -12,10 +12,12 @@ public class QuickAttacker extends Player {
     private int countedBlockJumps;
     private boolean opponentFirstTouchSeen;
     public final BlockHitBox blockHitBox;
+    public final CircleHitBox headBlockHitBox;
 
     public QuickAttacker(String assetName, double x, double y, boolean redSide) {
         super(assetName, x, y, redSide);
         blockHitBox = new BlockHitBox(this);
+        headBlockHitBox = new CircleHitBox(this);
     }
 
     @Override
@@ -59,7 +61,7 @@ public class QuickAttacker extends Player {
 
         if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
             if (isHeldAttackReady(input.quickAttack, justPressedQuick)
-                    && input.canResolveAttack && input.lastHitter != this
+                    && input.canResolveAttack && !input.attackLocked && input.lastHitter != this
                     && isBallInAttackBox(input)) {
                 queueAttackAttempt();
             }
@@ -92,7 +94,19 @@ public class QuickAttacker extends Player {
 
         applyGravity();
         updateActionAnimation();
+        if (!jumping && action == PlayerAction.IDLE) {
+            animation.show(teamAsset(input.hasFirstRegularTouch ? "MB ready attack" : "MB"));
+        }
         previousQuickAttack = input.quickAttack;
+    }
+
+    public boolean isHeadBlockHitBoxActive() {
+        return jumping && action == PlayerAction.BLOCK && isShowingActionFrame("block1");
+    }
+
+    public HitBox activeBlockHitBox() {
+        return isBlockHitBoxActive() ? blockHitBox
+                : isHeadBlockHitBoxActive() ? headBlockHitBox : null;
     }
     @Override
     public boolean isDefaultHitBoxActive() {
