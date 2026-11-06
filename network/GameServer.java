@@ -17,8 +17,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ArrayBlockingQueue;
 import model.GameConfig;
 import model.GameModel;
+import model.FixedTickSchedule;
 import model.serve.ServeState;
 
 public final class GameServer implements AutoCloseable {
@@ -27,19 +29,21 @@ public final class GameServer implements AutoCloseable {
     public static final String SYNC_TIMEOUT_MESSAGE = "網路同步確認逾時，對局已中止。";
     public static final String CLIENT_TIMEOUT_MESSAGE = "玩家連線逾時，對局已中止。";
 
-    private static final long TICK_NANOS = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
     private static final long CLIENT_TIMEOUT_NANOS = 3_000_000_000L;
-    private static final long INPUT_RELAY_INTERVAL_NANOS = 40_000_000L; // 25 Hz
     private static final long EVENT_RESEND_INTERVAL_NANOS = 60_000_000L;
     private static final long RELIABLE_ACK_TIMEOUT_NANOS = 3_000_000_000L;
     private static final long TERMINATION_ACK_TIMEOUT_NANOS = 3_000_000_000L;
+    private static final int MAX_PENDING_HELLOS = 64;
 
     private final GameModel model = new GameModel();
     private final DatagramSocket socket;
     private final String localIp;
     private final Object slotsLock = new Object();
     private final Object eventOrderLock = new Object();
+    private final ArrayBlockingQueue<HelloRequest> pendingHellos = new ArrayBlockingQueue<>(MAX_PENDING_HELLOS);
     private final AtomicBoolean terminationStarted = new AtomicBoolean();
+    private final AtomicBoolean runStarted = new AtomicBoolean();
+    private volatile Thread receiveThread;
     private final ScheduledExecutorService retryExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "haikyuu-udp-retry");
         thread.setDaemon(true);
@@ -55,10 +59,6 @@ public final class GameServer implements AutoCloseable {
     private int serverTick;
     private final AtomicInteger nextEventId = new AtomicInteger();
     private final AtomicInteger nextControlStatusId = new AtomicInteger();
-    private int lastRedInputMask = Integer.MIN_VALUE;
-    private int lastBlueInputMask = Integer.MIN_VALUE;
-    private long lastRedInputRelayNanos;
-    private long lastBlueInputRelayNanos;
     private long terminationDeadlineNanos;
     private int nextWorldSnapshotSequence;
     private int collisionRevision;
@@ -70,24 +70,33 @@ public final class GameServer implements AutoCloseable {
     }
 
     public GameServer(String localIp) throws SocketException {
-        socket = new DatagramSocket(UDP_PORT);
+        this(localIp, UDP_PORT);
+    }
+
+    GameServer(String localIp, int port) throws SocketException {
+        socket = new DatagramSocket(port);
         this.localIp = localIp;
     }
 
+    int getBoundPort() {
+        return socket.getLocalPort();
+    }
+
     public void run() {
-        Thread receiveThread = new Thread(this::receiveLoop, "haikyuu-udp-server-receive");
-        receiveThread.setDaemon(true);
-        receiveThread.start();
-        retryExecutor.scheduleAtFixedRate(this::retryReliablePackets, 10, 10, TimeUnit.MILLISECONDS);
-
-        System.out.println("HaiKyuu UDP Server 已啟動（無畫面）");
-        System.out.println("UDP 5001: " + localIp);
-        System.out.println("Player 1 與 Player 2 都使用：java -cp build Main join <Server-IP>");
-
+        if (!runStarted.compareAndSet(false, true) || !running) return;
         try {
-            long nextTick = System.nanoTime();
+            receiveThread = new Thread(this::receiveLoop, "haikyuu-udp-server-receive");
+            receiveThread.setDaemon(true);
+            receiveThread.start();
+            retryExecutor.scheduleAtFixedRate(this::retryReliablePackets, 10, 10, TimeUnit.MILLISECONDS);
+
+            System.out.println("HaiKyuu UDP Server 已啟動（無畫面）");
+            System.out.println("UDP " + socket.getLocalPort() + ": " + localIp);
+            System.out.println("Player 1 與 Player 2 都使用：java -cp build Main join <Server-IP>");
+
+            FixedTickSchedule schedule = new FixedTickSchedule(System.nanoTime(), GameConfig.TICKS_PER_SECOND);
             while (running) {
-                long lateNanos = System.nanoTime() - nextTick;
+                long lateNanos = System.nanoTime() - schedule.nextDeadlineNanos();
                 if (lateNanos >= 25_000_000L) {
                     TimingDiagnostics.record("server tick late "
                             + String.format("%.2f", lateNanos / 1_000_000.0) + " ms");
@@ -95,10 +104,19 @@ public final class GameServer implements AutoCloseable {
                 long tickStarted = System.nanoTime();
                 updateOneTick();
                 TimingDiagnostics.recordIfSlow("server full tick", tickStarted, 25);
-                nextTick += TICK_NANOS;
-                sleepUntil(nextTick);
+                if (schedule.completeTick(System.nanoTime())) {
+                    TimingDiagnostics.record("server catch-up limit reached");
+                }
+                sleepUntil(schedule.nextDeadlineNanos());
             }
+        } catch (RuntimeException exception) {
+            endMessage = "Server 更新失敗，對局已中止。";
+            TimingDiagnostics.record("server update failed: " + exception.getClass().getSimpleName());
+            exception.printStackTrace();
+            beginTermination(endMessage);
         } finally {
+            running = false;
+            socket.close();
             retryExecutor.shutdownNow();
         }
 
@@ -114,10 +132,20 @@ public final class GameServer implements AutoCloseable {
         }
 
         serverTick++;
+        // WELCOME 與其他模型快照都在權威更新邊界擷取。
+        for (int i = 0; i < MAX_PENDING_HELLOS; i++) {
+            HelloRequest request = pendingHellos.poll();
+            if (request == null) break;
+            handleHello(request.hello(), request.address(), request.port());
+        }
         ServerPlayerSlot red = redPlayer;
         ServerPlayerSlot blue = bluePlayer;
         if (hasTimedOut(red) || hasTimedOut(blue)) {
             beginTermination(CLIENT_TIMEOUT_MESSAGE);
+            return;
+        }
+        if ((red != null && red.hasInputOverflowed()) || (blue != null && blue.hasInputOverflowed())) {
+            beginTermination("輸入樣本積壓超出上限，對局已中止。");
             return;
         }
 
@@ -155,8 +183,6 @@ public final class GameServer implements AutoCloseable {
         if (terminating) {
             return;
         }
-
-        relayRemoteInputs(red, blue, redMask, blueMask);
 
         for (Packet.EventType eventType : detectSyncEvents(before)) {
             sendReliableEvent(eventType, Packet.CompactState.from(model));
@@ -258,28 +284,6 @@ public final class GameServer implements AutoCloseable {
                 || "發球犯規".equals(message)
                 || "後排三米線".equals(message)
                 || "TOUCH OUT".equals(message);
-    }
-
-    private void relayRemoteInputs(ServerPlayerSlot red, ServerPlayerSlot blue, int redMask, int blueMask) {
-        long now = System.nanoTime();
-        if (redMask != lastRedInputMask || now - lastRedInputRelayNanos >= INPUT_RELAY_INTERVAL_NANOS) {
-            sendRemoteInput(blue, redMask);
-            lastRedInputMask = redMask;
-            lastRedInputRelayNanos = now;
-        }
-        if (blueMask != lastBlueInputMask || now - lastBlueInputRelayNanos >= INPUT_RELAY_INTERVAL_NANOS) {
-            sendRemoteInput(red, blueMask);
-            lastBlueInputMask = blueMask;
-            lastBlueInputRelayNanos = now;
-        }
-    }
-
-    private void sendRemoteInput(ServerPlayerSlot target, int inputMask) {
-        try {
-            sendUdp(UdpCodec.remoteInput(target.sessionToken, serverTick, inputMask), target.address, target.port);
-        } catch (IOException exception) {
-            beginTermination();
-        }
     }
 
     private void sendReliableEvent(Packet.EventType type, Packet.CompactState state) {
@@ -409,7 +413,8 @@ public final class GameServer implements AutoCloseable {
     private void handleDatagram(UdpCodec.Decoded decoded, InetAddress address, int port) {
         if (decoded instanceof UdpCodec.Hello hello) {
             if (!terminating) {
-                handleHello(hello, address, port);
+                // HELLO 本身有重送；滿載時忽略本次嘗試，不阻塞接收／ACK。
+                pendingHellos.offer(new HelloRequest(hello, address, port));
             }
             return;
         }
@@ -619,16 +624,18 @@ public final class GameServer implements AutoCloseable {
         return localIp;
     }
 
-    public String getEndMessage() {
-        return endMessage;
-    }
-
     @Override
     public void close() {
-        if (!terminating) {
+        if (!runStarted.get()) {
+            running = false;
+            socket.close();
+            retryExecutor.shutdownNow();
+        } else if (running) {
             beginTermination();
         }
     }
+
+    private record HelloRequest(UdpCodec.Hello hello, InetAddress address, int port) {}
 
     private static final class FrameState {
         final int redScore;

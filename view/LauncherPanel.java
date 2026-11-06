@@ -17,6 +17,8 @@ import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
 public final class LauncherPanel extends JPanel {
+    @java.io.Serial
+    private static final long serialVersionUID = 1L;
     public interface Actions {
         void startLocal();
         void startPractice();

@@ -31,11 +31,6 @@ final class RemotePlayerInterpolator {
         }
     }
 
-    synchronized void snap(Player player, Packet.PlayerState state, int tick) {
-        histories.remove(player);
-        observe(player, state, tick);
-    }
-
     synchronized double renderedX(Player player) {
         return renderedXAt(player, System.nanoTime());
     }

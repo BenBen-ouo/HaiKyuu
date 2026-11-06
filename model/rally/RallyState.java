@@ -79,34 +79,24 @@ public class RallyState {
         return -1;
     }
 
-    public void applyNetworkState(
-            int redHitCount,
-            int blueHitCount,
-            Boolean lastHitTeam,
-            boolean lastTouchWasBlock,
-            int redLastHitterIndex,
-            int blueLastHitterIndex,
-            boolean redSetterTouched,
-            boolean blueSetterTouched,
-            boolean redSetterTouchedFirst,
-            boolean blueSetterTouchedFirst,
-            boolean redBlockUsed,
-            boolean blueBlockUsed,
-            Team redTeam,
-            Team blueTeam
-    ) {
-        this.redHitCount = Math.max(0, redHitCount);
-        this.blueHitCount = Math.max(0, blueHitCount);
-        this.lastHitTeam = lastHitTeam;
-        this.lastTouchWasBlock = lastTouchWasBlock;
-        this.redLastHitter = playerAt(redTeam, redLastHitterIndex);
-        this.blueLastHitter = playerAt(blueTeam, blueLastHitterIndex);
-        this.redSetterTouched = redSetterTouched;
-        this.blueSetterTouched = blueSetterTouched;
-        this.redSetterTouchedFirst = redSetterTouchedFirst;
-        this.blueSetterTouchedFirst = blueSetterTouchedFirst;
-        this.redBlockUsed = redBlockUsed;
-        this.blueBlockUsed = blueBlockUsed;
+    public RallyContactSnapshot.TeamContacts captureTeamContacts(boolean redSide, Team team, boolean attackLocked) {
+        return new RallyContactSnapshot.TeamContacts(getHitCount(redSide), getLastHitterIndex(redSide, team),
+                hasSetterTouched(redSide), wasSetterTouchedFirst(redSide), hasBlocked(redSide), attackLocked);
+    }
+
+    public void applySnapshot(RallyContactSnapshot snapshot, Team redTeam, Team blueTeam) {
+        redHitCount = Math.max(0, snapshot.red().hitCount());
+        blueHitCount = Math.max(0, snapshot.blue().hitCount());
+        lastHitTeam = snapshot.lastHitTeam();
+        lastTouchWasBlock = snapshot.lastTouchWasBlock();
+        redLastHitter = playerAt(redTeam, snapshot.red().lastHitterIndex());
+        blueLastHitter = playerAt(blueTeam, snapshot.blue().lastHitterIndex());
+        redSetterTouched = snapshot.red().setterTouched();
+        blueSetterTouched = snapshot.blue().setterTouched();
+        redSetterTouchedFirst = snapshot.red().setterTouchedFirst();
+        blueSetterTouchedFirst = snapshot.blue().setterTouchedFirst();
+        redBlockUsed = snapshot.red().blockUsed();
+        blueBlockUsed = snapshot.blue().blockUsed();
     }
 
     private Player playerAt(Team team, int index) {

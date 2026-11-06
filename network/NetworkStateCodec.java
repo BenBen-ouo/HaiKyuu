@@ -7,9 +7,16 @@ package network;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import model.player.PlayerAction;
+import model.serve.ServeState;
+import model.rally.RallyContactSnapshot;
 
 final class NetworkStateCodec {
-    private static final int MAX_PLAYERS_PER_TEAM = 8;
+    private static final int PLAYERS_PER_TEAM = 4;
+    // 協定防護範圍，遠大於目前場地與速度；避免有限但極大的值溢位幾何運算。
+    private static final double MAX_ABSOLUTE_PHYSICS_VALUE = 1_000_000;
+    private static final int PLAYER_ACTION_COUNT = PlayerAction.values().length;
+    private static final int SERVE_STATE_COUNT = ServeState.values().length;
 
     private NetworkStateCodec() {
     }
@@ -68,10 +75,14 @@ final class NetworkStateCodec {
                 serveStateOrdinal, redServing, rallyOver, deadBallTimer,
                 matchOver, matchWinnerCode,
                 transientMessage, transientMessageTimer, transientMessageColorCode,
-                pendingTouchOut, pendingTouchOutWinnerCode
+                pendingTouchOut, pendingTouchOutWinnerCode, in.readInt(), in.readBoolean()
         );
-        state.netFlashFrames = in.readInt();
-        state.landingSmoke = in.readBoolean();
+        require(redScore >= 0 && blueScore >= 0 && deadBallTimer >= 0 && transientMessageTimer >= 0
+                && state.netFlashFrames >= 0, "Invalid score or duration");
+        require(serveStateOrdinal >= 0 && serveStateOrdinal < SERVE_STATE_COUNT,
+                "Invalid serve state");
+        require(isNullableBoolean(matchWinnerCode) && isNullableBoolean(transientMessageColorCode)
+                && isNullableBoolean(pendingTouchOutWinnerCode), "Invalid team code");
         return state;
     }
 
@@ -94,14 +105,32 @@ final class NetworkStateCodec {
     }
 
     static Packet.RallyContactState readRallyContacts(DataInputStream in) throws IOException {
-        Packet.RallyContactState state = new Packet.RallyContactState(
-                in.readInt(), in.readInt(), in.readInt(), in.readInt(),
-                in.readByte(), in.readBoolean(), in.readBoolean(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean()
-        );
-        state.redAttackLocked = in.readBoolean();
-        state.blueAttackLocked = in.readBoolean();
+        // 保留既有線上順序；先讀各欄位，再組裝有語意的模型資料。
+        int redCount = in.readInt();
+        int blueCount = in.readInt();
+        int redHitter = in.readInt();
+        int blueHitter = in.readInt();
+        int lastTeamCode = in.readByte();
+        require(isNullableBoolean(lastTeamCode), "Invalid contact owner");
+        boolean block = in.readBoolean();
+        boolean reception = in.readBoolean();
+        boolean redSetter = in.readBoolean();
+        boolean blueSetter = in.readBoolean();
+        boolean redSetterFirst = in.readBoolean();
+        boolean blueSetterFirst = in.readBoolean();
+        boolean redBlock = in.readBoolean();
+        boolean blueBlock = in.readBoolean();
+        boolean redAttackLocked = in.readBoolean();
+        boolean blueAttackLocked = in.readBoolean();
+        Packet.RallyContactState state = new Packet.RallyContactState(new RallyContactSnapshot(
+                new RallyContactSnapshot.TeamContacts(redCount, redHitter, redSetter, redSetterFirst, redBlock, redAttackLocked),
+                new RallyContactSnapshot.TeamContacts(blueCount, blueHitter, blueSetter, blueSetterFirst, blueBlock, blueAttackLocked),
+                Packet.decodeNullableBoolean(lastTeamCode), block, reception));
+        require(state.redHitCount >= 0 && state.redHitCount <= 4
+                && state.blueHitCount >= 0 && state.blueHitCount <= 4, "Invalid contact count");
+        require(state.redLastHitterIndex >= -1 && state.redLastHitterIndex < PLAYERS_PER_TEAM
+                && state.blueLastHitterIndex >= -1 && state.blueLastHitterIndex < PLAYERS_PER_TEAM
+                && isNullableBoolean(state.lastHitTeamCode), "Invalid contact owner");
         return state;
     }
 
@@ -117,14 +146,17 @@ final class NetworkStateCodec {
     }
 
     static Packet.BallState readBall(DataInputStream in) throws IOException {
-        return new Packet.BallState(
+        Packet.BallState ball = new Packet.BallState(
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readBoolean()
         );
+        requireFinite(ball.x, ball.y, ball.vx, ball.vy, ball.radius, ball.rotationDegrees, ball.rotationSpeed);
+        require(ball.radius > 0, "Invalid ball radius");
+        return ball;
     }
 
     static void writeTeam(DataOutputStream out, Packet.TeamState team) throws IOException {
-        out.writeByte(team.players.length);
+        out.writeByte(team.players.size());
         for (Packet.PlayerState player : team.players) {
             writePlayer(out, player);
         }
@@ -132,7 +164,7 @@ final class NetworkStateCodec {
 
     static Packet.TeamState readTeam(DataInputStream in) throws IOException {
         int count = Byte.toUnsignedInt(in.readByte());
-        if (count > MAX_PLAYERS_PER_TEAM) {
+        if (count != PLAYERS_PER_TEAM) {
             throw new IOException("Invalid player count");
         }
 
@@ -150,12 +182,11 @@ final class NetworkStateCodec {
         out.writeDouble(player.vx);
         out.writeDouble(player.vy);
         out.writeBoolean(player.jumping);
-        out.writeBoolean(player.attacking);
-        out.writeBoolean(player.blocking);
         out.writeBoolean(player.diving);
         out.writeBoolean(player.mirrorImage);
-        out.writeDouble(player.jumpStartX);
+        out.writeDouble(player.jumpStartCenterX);
         out.writeByte(player.actionOrdinal);
+        out.writeByte(player.animationFrameIndex);
         out.writeBoolean(player.attackHitBoxEnabled);
         out.writeInt(player.countedBlockJumps);
         out.writeBoolean(player.opponentFirstTouchSeen);
@@ -169,15 +200,39 @@ final class NetworkStateCodec {
     }
 
     private static Packet.PlayerState readPlayer(DataInputStream in) throws IOException {
-        return new Packet.PlayerState(
+        Packet.PlayerState player = new Packet.PlayerState(
                 readNullableString(in),
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(),
-                in.readDouble(), in.readByte(), in.readBoolean(),
+                in.readBoolean(), in.readBoolean(), in.readBoolean(),
+                in.readDouble(), in.readByte(), in.readUnsignedByte(), in.readBoolean(),
                 in.readInt(), in.readBoolean(),
                 in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble(),
                 in.readInt(), in.readInt(), in.readDouble()
         );
+        requireFinite(player.x, player.y, player.vx, player.vy, player.hitBoxOffsetX,
+                player.hitBoxOffsetY, player.hitBoxWidth, player.hitBoxHeight, player.hitBoxRotationDegrees);
+        if (!Double.isNaN(player.jumpStartCenterX)) requireFinite(player.jumpStartCenterX);
+        require(player.hitBoxWidth > 0 && player.hitBoxHeight > 0
+                && player.hitBoxArcWidth >= 0 && player.hitBoxArcHeight >= 0,
+                "Invalid hitbox dimensions");
+        require(player.actionOrdinal >= 0 && player.actionOrdinal < PLAYER_ACTION_COUNT
+                && player.countedBlockJumps >= 0 && player.assetName != null, "Invalid player state");
+        require(player.actionOrdinal != PlayerAction.BLOCK.ordinal() || player.animationFrameIndex <= 2,
+                "Invalid block animation phase");
+        return player;
+    }
+
+    private static boolean isNullableBoolean(int code) {
+        return code >= 0 && code <= 2;
+    }
+
+    private static void requireFinite(double... values) throws IOException {
+        for (double value : values) require(Double.isFinite(value)
+                && Math.abs(value) <= MAX_ABSOLUTE_PHYSICS_VALUE, "Invalid physics value");
+    }
+
+    private static void require(boolean valid, String message) throws IOException {
+        if (!valid) throw new IOException(message);
     }
 
     private static void writeNullableString(DataOutputStream out, String value) throws IOException {

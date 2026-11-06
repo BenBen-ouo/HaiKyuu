@@ -8,6 +8,7 @@ import model.GameConfig;
 import model.GameModel;
 import model.SideRules;
 import model.ball.Ball;
+import model.ball.BallTrajectory;
 import model.player.BackPlayer;
 import model.player.Player;
 import model.player.PlayerPhysics;
@@ -44,34 +45,28 @@ public class ServeBallController {
         model.setLastHitTeam(redSide);
         model.ball.stopRotation();
         model.ball.useSlowFloorBounceSpin();
-        setBallVelocity(serveType.baseVx * direction, serveType.baseVy);
+        setRandomizedVelocity(serveType.horizontalSpeed * direction, serveType.verticalVelocity);
     }
 
     public void tossJumpServe(boolean redSide) {
         Ball ball = model.ball;
-        double apexY = GameConfig.SETTER_SET_APEX_Y;
-        double gravity = GameConfig.GRAVITY;
-        int framesToApex = Math.max(1, (int) Math.ceil(
-                (-1 + Math.sqrt(1 + 8 * (ball.y - apexY) / gravity)) / 2));
-        ball.vy = (apexY - ball.y) / framesToApex
-                - gravity * (framesToApex + 1) / 2;
-        double linearTerm = ball.vy + gravity / 2;
-        double landingFrames = (-linearTerm + Math.sqrt(linearTerm * linearTerm
-                + 2 * gravity * (GameConfig.JUMP_SERVE_TOSS_LANDING_Y - ball.y))) / gravity;
         BackPlayer server = redSide ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
         double targetX = server.plannedAttackHitBoxCenterAtApex();
-        ball.vx = (targetX - ball.x) / Math.max(1, landingFrames);
+        BallTrajectory.Velocity velocity = BallTrajectory.throughTarget(ball.x, ball.y, targetX,
+                GameConfig.JUMP_SERVE_TOSS_LANDING_Y, GameConfig.SETTER_SET_APEX_Y, GameConfig.GRAVITY);
+        ball.vx = velocity.x();
+        ball.vy = velocity.y();
         ball.stopRotation();
         ball.useSlowFloorBounceSpin();
     }
 
     public void hitJumpServe(boolean redSide, boolean shortArc, boolean slowHorizontal,
                              boolean longArc) {
-        double speedX = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_VX : GameConfig.SERVE_JUMP_VX;
-        double speedY = shortArc ? GameConfig.SERVE_JUMP_SHORT_VY
-                : longArc ? GameConfig.SERVE_JUMP_LONG_VY : GameConfig.SERVE_JUMP_VY;
-        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
-        model.ball.vy = speedY;
+        double horizontalSpeed = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
+        double verticalVelocity = shortArc ? GameConfig.SERVE_JUMP_SHORT_VELOCITY_Y
+                : longArc ? GameConfig.SERVE_JUMP_LONG_VELOCITY_Y : GameConfig.SERVE_JUMP_VELOCITY_Y;
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * horizontalSpeed;
+        model.ball.vy = verticalVelocity;
         model.ball.setRotationSpeed(redSide ? GameConfig.SPIKE_SPIN_SPEED : -GameConfig.SPIKE_SPIN_SPEED);
         model.ball.useFastFloorBounceSpin();
         model.setLastHitTeam(redSide);
@@ -94,9 +89,9 @@ public class ServeBallController {
         return redSide ? GameConfig.RED_SERVE_BALL_OFFSET_Y : GameConfig.BLUE_SERVE_BALL_OFFSET_Y;
     }
 
-    private void setBallVelocity(double baseVx, double baseVy) {
-        model.ball.vx = baseVx + randomRange(GameConfig.SERVE_RANDOM_VX_RANGE);
-        model.ball.vy = baseVy + randomRange(GameConfig.SERVE_RANDOM_VY_RANGE);
+    private void setRandomizedVelocity(double velocityX, double velocityY) {
+        model.ball.vx = velocityX + randomRange(GameConfig.SERVE_RANDOM_VX_RANGE);
+        model.ball.vy = velocityY + randomRange(GameConfig.SERVE_RANDOM_VY_RANGE);
     }
 
     private double randomRange(double range) {

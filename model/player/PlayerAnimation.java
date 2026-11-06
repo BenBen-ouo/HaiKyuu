@@ -56,9 +56,12 @@ public class PlayerAnimation {
     /**
      * 網路快照指定的圖片必須立即取代本地舊動畫，避免下一幀被舊序列覆蓋。
      */
-    public void applyNetworkAsset(String assetName) {
+    public void applyNetworkAsset(String assetName, int frameIndex) {
         show(assetName);
+        this.frameIndex = frameIndex;
     }
+
+    public int getFrameIndex() { return frameIndex; }
 
     public void update() {
         if (!playing) {

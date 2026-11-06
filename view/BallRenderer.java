@@ -5,7 +5,6 @@
 package view;
 
 import java.awt.*;
-import model.ball.Ball;
 
 public class BallRenderer {
     private final AssetLoader assets;
@@ -14,21 +13,19 @@ public class BallRenderer {
         this.assets = assets;
     }
 
-    public void draw(Graphics2D g, Ball ball) {
-        draw(g, ball, ball.x, ball.y, ball.rotationDegrees);
-    }
-
-    /** 球物理仍使用 Ball；畫面座標可由網路校正層暫時覆蓋。 */
-    public void draw(Graphics2D g, Ball ball, double renderX, double renderY, double renderRotationDegrees) {
+    public void draw(Graphics2D g, RenderFrame.BallImage ball) {
+        double renderX = ball.x();
+        double renderY = ball.y();
+        double renderRotationDegrees = ball.rotationDegrees();
         Image image = assets.get("mikasa.png");
 
         if (image == null) {
             return;
         }
 
-        int diameter = (int) (ball.radius * 2);
-        int x = (int) (renderX - ball.radius);
-        int y = (int) (renderY - ball.radius);
+        int diameter = (int) (ball.radius() * 2);
+        int x = (int) (renderX - ball.radius());
+        int y = (int) (renderY - ball.radius());
 
         Graphics2D rotatedGraphics = (Graphics2D) g.create();
         rotatedGraphics.rotate(Math.toRadians(renderRotationDegrees), renderX, renderY);

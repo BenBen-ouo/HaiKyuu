@@ -194,10 +194,6 @@ public class ServeHandler {
         }
     }
 
-    public void updateAfterBall() {
-        // 拋球落地由 RallyScorer 判發球犯規；這裡不改變 Server 的球路。
-    }
-
     public void finishFrame() {
         serveLaunchedThisFrame = false;
     }

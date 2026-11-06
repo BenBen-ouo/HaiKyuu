@@ -7,8 +7,8 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class QuickAttacker extends Player {
-    private boolean previousQuickAttack = false;
+public final class QuickAttacker extends Player {
+    private boolean previousMbActionPressed = false;
     private int countedBlockJumps;
     private boolean opponentFirstTouchSeen;
     public final BlockHitBox blockHitBox;
@@ -23,7 +23,7 @@ public class QuickAttacker extends Player {
     @Override
     public void resetToInitial() {
         super.resetToInitial();
-        previousQuickAttack = false;
+        previousMbActionPressed = false;
         resetBlockJumpCount();
     }
 
@@ -54,13 +54,13 @@ public class QuickAttacker extends Player {
     @Override
     public void update(TeamInput input) {
         clearAttackAttempt();
-        boolean justPressedQuick = input.quickAttack && !previousQuickAttack;
+        boolean justPressedQuick = input.mbActionPressed && !previousMbActionPressed;
         if (input.opponentHasFirstRegularTouch) opponentFirstTouchSeen = true;
 
         vx = 0;
 
         if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING) {
-            if (isHeldAttackReady(input.quickAttack, justPressedQuick)
+            if (isHeldAttackReady(input.mbActionPressed, justPressedQuick)
                     && input.canResolveAttack && !input.attackLocked && input.lastHitter != this
                     && isBallInAttackBox(input)) {
                 queueAttackAttempt();
@@ -68,24 +68,24 @@ public class QuickAttacker extends Player {
 
             applyGravity();
             updateActionAnimation();
-            previousQuickAttack = input.quickAttack;
+            previousMbActionPressed = input.mbActionPressed;
             return;
         }
 
         if (action == PlayerAction.BLOCK) {
             applyGravity();
             updateActionAnimation();
-            previousQuickAttack = input.quickAttack;
+            previousMbActionPressed = input.mbActionPressed;
             return;
         }
 
         if (justPressedQuick) {
             if (input.hasFirstRegularTouch) {
                 startAttackReady(0);
-                vy = GameConfig.QUICK_ATTACKER_JUMP_SPEED;
+                vy = GameConfig.MB_JUMP_VELOCITY_Y;
             } else {
                 startBlockAnimation();
-                vy = GameConfig.QUICK_ATTACKER_JUMP_SPEED
+                vy = GameConfig.MB_JUMP_VELOCITY_Y
                         * (opponentFirstTouchSeen && countedBlockJumps > 0
                                 ? GameConfig.MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER : 1.0);
                 if (opponentFirstTouchSeen) countedBlockJumps++;
@@ -97,11 +97,11 @@ public class QuickAttacker extends Player {
         if (!jumping && action == PlayerAction.IDLE) {
             animation.show(teamAsset(input.hasFirstRegularTouch ? "MB ready attack" : "MB"));
         }
-        previousQuickAttack = input.quickAttack;
+        previousMbActionPressed = input.mbActionPressed;
     }
 
     public boolean isHeadBlockHitBoxActive() {
-        return jumping && action == PlayerAction.BLOCK && isShowingActionFrame("block1");
+        return jumping && (getBlockPhase() == BlockPhase.RAISING || getBlockPhase() == BlockPhase.RETRACTING);
     }
 
     public HitBox activeBlockHitBox() {

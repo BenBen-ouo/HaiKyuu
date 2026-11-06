@@ -10,10 +10,9 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import model.GameConfig;
-import network.NetworkView;
 
 public class NetworkStatusRenderer {
-    public void draw(Graphics2D g, NetworkView networkView) {
+    public void draw(Graphics2D g, RenderFrame.Connection networkView) {
         if (networkView == null) {
             return;
         }
@@ -21,8 +20,8 @@ public class NetworkStatusRenderer {
         drawResetMessage(g, networkView);
     }
 
-    private void drawConnectionMessage(Graphics2D g, NetworkView networkView) {
-        String text = networkView.getConnectionMessage();
+    private void drawConnectionMessage(Graphics2D g, RenderFrame.Connection networkView) {
+        String text = networkView.message();
         g.setFont(new Font("Microsoft JhengHei", Font.BOLD, 20));
         FontMetrics metrics = g.getFontMetrics();
         int width = metrics.stringWidth(text) + 28;
@@ -30,8 +29,8 @@ public class NetworkStatusRenderer {
         int x = GameConfig.SCREEN_WIDTH / 2 - width / 2;
         int y = 55;
 
-        Color border = networkView.isConnected() ? new Color(30, 130, 70) : new Color(200, 80, 30);
-        Color fill = networkView.isConnected() ? new Color(225, 250, 232) : new Color(255, 236, 220);
+        Color border = networkView.connected() ? new Color(30, 130, 70) : new Color(200, 80, 30);
+        Color fill = networkView.connected() ? new Color(225, 250, 232) : new Color(255, 236, 220);
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f));
         g.setColor(fill);
         g.fillRoundRect(x, y, width, height, 16, 16);
@@ -42,8 +41,8 @@ public class NetworkStatusRenderer {
         g.drawString(text, x + 14, y + 9 + metrics.getAscent());
     }
 
-    private void drawResetMessage(Graphics2D g, NetworkView networkView) {
-        String text = networkView.getResetMessage();
+    private void drawResetMessage(Graphics2D g, RenderFrame.Connection networkView) {
+        String text = networkView.resetMessage();
         if (text == null) {
             return;
         }

@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReleaseReplacement.ps1')
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
 $workRoot = Join-Path $projectRoot '.release-build'
@@ -7,7 +8,7 @@ $releaseRoot = Join-Path $projectRoot 'release'
 $releaseApp = Join-Path $releaseRoot 'HaiKyuu'
 $releaseMarker = Join-Path $releaseApp '.haikyuu-generated'
 $versionSource = Get-Content -LiteralPath (Join-Path $projectRoot 'model\AppVersion.java') -Raw -Encoding UTF8
-$versionMatch = [regex]::Match($versionSource, 'LABEL\s*=\s*"(v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.-]+)?)"')
+$versionMatch = [regex]::Match($versionSource, 'LABEL\s*=\s*"(v[0-9]+\.[0-9]+\.[0-9]+)"')
 if (-not $versionMatch.Success) { throw 'Cannot read release version from model/AppVersion.java.' }
 $releaseZip = Join-Path $releaseRoot ('HaiKyuu-' + $versionMatch.Groups[1].Value + '.zip')
 
@@ -96,6 +97,9 @@ try {
         Assert-ReleaseNotRunning $releaseApp
     }
     if (Test-Path -LiteralPath $workRoot) {
+        if (Test-Path -LiteralPath (Join-Path $workRoot '.haikyuu-recovery-needed')) {
+            throw "Release recovery is pending. Preserve and inspect: $workRoot"
+        }
         if (-not (Test-Path -LiteralPath $workMarker)) {
             throw ".release-build has no generated marker. Inspect it first: $workRoot"
         }
@@ -113,9 +117,9 @@ try {
     Set-Content -LiteralPath $workMarker -Value 'HaiKyuu generated release build workspace' -Encoding UTF8
 
     Write-Host '1/6 Compiling game and tests...'
-    & $javac -encoding UTF-8 -d $classes Main.java
+    & $javac -Xlint:all -encoding UTF-8 -d $classes Main.java
     Assert-ToolSucceeded 'Game compilation'
-    & $javac -encoding UTF-8 -cp $classes -d $tests `
+    & $javac -Xlint:all -encoding UTF-8 -cp $classes -d $tests `
         tests\GameplayFlowTest.java tests\LauncherTest.java `
         tests\NetworkSyncTest.java tests\PackagingSmokeTest.java
     Assert-ToolSucceeded 'Test compilation'
@@ -126,6 +130,8 @@ try {
         & $java '-Djava.awt.headless=true' -cp $testClasspath $testClass
         Assert-ToolSucceeded $testClass
     }
+    & (Join-Path $projectRoot 'tests\ReleaseReplacementTest.ps1')
+    & (Join-Path $projectRoot 'tests\ArchitectureTest.ps1') -ClassesPath $classes -JdkBin $jdkBin
 
     Write-Host '3/6 Copying assets and building the standalone JAR...'
     $assetRoot = Join-Path $projectRoot 'assets'
@@ -195,25 +201,9 @@ try {
     Assert-SafePath $releaseApp | Out-Null
     $previousApp = Join-Path $workRoot 'previous-release'
     Assert-SafePath $previousApp | Out-Null
-    if (Test-Path -LiteralPath $releaseApp) {
-        if (-not (Test-Path -LiteralPath $releaseMarker)) {
-            throw "release/HaiKyuu has no generated marker. Inspect it first: $releaseApp"
-        }
-        Assert-ReleaseNotRunning $releaseApp
-        # Rename the complete old image first; a locked file cannot leave it half deleted.
-        Move-Item -LiteralPath $releaseApp -Destination $previousApp
-    }
-    try {
-        Move-Item -LiteralPath $stagedApp -Destination $releaseApp
-    } catch {
-        if ((Test-Path -LiteralPath $previousApp) -and
-                -not (Test-Path -LiteralPath $releaseApp)) {
-            Move-Item -LiteralPath $previousApp -Destination $releaseApp
-        }
-        throw
-    }
-    Assert-SafePath $releaseZip | Out-Null
-    Move-Item -LiteralPath $stagedZip -Destination $releaseZip -Force
+    if (Test-Path -LiteralPath $releaseApp) { Assert-ReleaseNotRunning $releaseApp }
+    Install-ReleasePair -ProjectRoot $projectRoot -StagedApp $stagedApp -StagedZip $stagedZip `
+        -ReleaseApp $releaseApp -ReleaseZip $releaseZip -RecoveryRoot $workRoot
     $oldZipPath = Join-Path $releaseRoot 'HaiKyuu-Windows.zip'
     Assert-SafePath $oldZipPath | Out-Null
     if (Test-Path -LiteralPath $oldZipPath) {
@@ -226,6 +216,10 @@ try {
             Write-Warning "New release is ready, but the previous image could not be removed: $previousApp"
         }
     }
+
+    $previousZip = Join-Path $workRoot 'previous-release.zip'
+    Assert-SafePath $previousZip | Out-Null
+    if (Test-Path -LiteralPath $previousZip) { Remove-Item -LiteralPath $previousZip -Force }
 
     if (Test-Path -LiteralPath $workMarker) {
         try {

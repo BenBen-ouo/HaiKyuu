@@ -164,6 +164,7 @@ public class Main {
     ) {
         GamePanel panel = new GamePanel(model, controller, networkView);
         panel.addKeyListener(keyboard);
+        panel.addFocusListener(keyboard);
 
         JFrame frame = new JFrame(title);
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);

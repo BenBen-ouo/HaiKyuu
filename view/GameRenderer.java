@@ -10,7 +10,9 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import model.GameConfig;
 import model.GameModel;
-import model.ball.NetHitBox;
+import java.awt.geom.Area;
+import java.awt.geom.Rectangle2D;
+import java.awt.geom.Ellipse2D;
 import network.NetworkView;
 
 public class GameRenderer {
@@ -21,7 +23,6 @@ public class GameRenderer {
     private final CourtRenderer courtRenderer = new CourtRenderer();
     private final PlayerRenderer playerRenderer = new PlayerRenderer(assets);
     private final BallRenderer ballRenderer = new BallRenderer(assets);
-    private final EffectRenderer effectRenderer = new EffectRenderer(assets);
     private final SpikeEffectRenderer spikeEffectRenderer = new SpikeEffectRenderer();
     private final MatchDisplay matchDisplay = new MatchDisplay();
 
@@ -34,27 +35,35 @@ public class GameRenderer {
     }
 
     public void render(Graphics2D g, GameModel model, boolean mirrorWorld, NetworkView networkView) {
+        render(g, RenderFrame.capture(model, networkView), mirrorWorld);
+    }
+
+    public void render(Graphics2D g, RenderFrame frame) {
+        render(g, frame, frame.mirrorWorld());
+    }
+
+    private void render(Graphics2D g, RenderFrame frame, boolean mirrorWorld) {
         g.setRenderingHint(
                 RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON
         );
 
         if (mirrorWorld) {
-            drawMirroredWorld(g, model, networkView);
+            drawMirroredWorld(g, frame);
         } else {
-            drawWorld(g, model, true, networkView);
+            drawWorld(g, frame, true);
         }
 
         // 比分、規則提示與比賽結束畫面永遠保持正常方向。
-        matchDisplay.draw(g, model, mirrorWorld);
+        matchDisplay.draw(g, frame.match(), mirrorWorld);
     }
 
-    private void drawMirroredWorld(Graphics2D g, GameModel model, NetworkView networkView) {
+    private void drawMirroredWorld(Graphics2D g, RenderFrame frame) {
         Graphics2D worldGraphics = (Graphics2D) g.create();
         try {
             worldGraphics.translate(GameConfig.SCREEN_WIDTH, 0);
             worldGraphics.scale(-1, 1);
-            drawWorld(worldGraphics, model, false, networkView);
+            drawWorld(worldGraphics, frame, false);
         } finally {
             worldGraphics.dispose();
         }
@@ -63,40 +72,36 @@ public class GameRenderer {
         courtRenderer.drawWorldBoundaryGuide(g);
     }
 
-    private void drawWorld(Graphics2D g, GameModel model, boolean drawWorldBoundaryGuide, NetworkView networkView) {
-        courtRenderer.draw(g, drawWorldBoundaryGuide, model.netFlashFrames);
-        drawNetHitBox(g, model.netHitBox);
+    private void drawWorld(Graphics2D g, RenderFrame frame, boolean drawWorldBoundaryGuide) {
+        courtRenderer.draw(g, drawWorldBoundaryGuide, frame.netFlashFrames());
+        drawNetHitBox(g, frame.net());
 
-        playerRenderer.drawTeamExceptBack(g, model.redTeam, true, networkView);
-        playerRenderer.drawTeamExceptBack(g, model.blueTeam, false, networkView);
-        playerRenderer.drawBackPlayer(g, model.redTeam, true, networkView);
-        playerRenderer.drawBackPlayer(g, model.blueTeam, false, networkView);
+        for (RenderFrame.PlayerImage player : frame.players()) playerRenderer.draw(g, player);
 
-        if (!model.isLockedScorePhase()) {
-            double ballX = networkView == null ? model.ball.x : networkView.getRenderedBallX(model.ball.x);
-            double ballY = networkView == null ? model.ball.y : networkView.getRenderedBallY(model.ball.y);
-            double ballRotation = networkView == null
-                    ? model.ball.rotationDegrees
-                    : networkView.getRenderedBallRotation(model.ball.rotationDegrees);
-            ballRenderer.draw(g, model.ball, ballX, ballY, ballRotation);
+        if (frame.ball().visible()) {
+            ballRenderer.draw(g, frame.ball());
         }
-        effectRenderer.draw(g, model.effects);
-        spikeEffectRenderer.draw(g, model.spikeEffect);
+        spikeEffectRenderer.draw(g, frame);
     }
 
-    private void drawNetHitBox(Graphics2D g, NetHitBox box) {
+    private void drawNetHitBox(Graphics2D g, RenderFrame.Net box) {
         if (!DebugSettings.areHitBoxesVisible()) {
             return;
         }
 
         Graphics2D debugGraphics = (Graphics2D) g.create();
         try {
+            double radius = box.topRadius();
+            Area shape = new Area(new Rectangle2D.Double(box.x(), box.y() + radius,
+                    box.width(), box.height() - radius));
+            shape.add(new Area(new Ellipse2D.Double(box.x() + box.width() / 2 - radius,
+                    box.y(), radius * 2, radius * 2)));
             debugGraphics.setColor(NET_HITBOX_FILL);
-            debugGraphics.fill(box.getShape());
+            debugGraphics.fill(shape);
 
             debugGraphics.setColor(NET_HITBOX_STROKE);
             debugGraphics.setStroke(new BasicStroke(2));
-            debugGraphics.draw(box.getShape());
+            debugGraphics.draw(shape);
         } finally {
             debugGraphics.dispose();
         }

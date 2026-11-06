@@ -83,7 +83,6 @@ public class DiveController {
         diveDirection = direction;
 
         player.diving = true;
-        player.attacking = false;
         player.jumping = false;
         player.vy = 0;
         player.y = GameConfig.FLOOR_Y - player.imageHeight;
@@ -104,7 +103,6 @@ public class DiveController {
         player.y = GameConfig.FLOOR_Y - player.imageHeight;
         player.vy = 0;
         player.jumping = false;
-        player.attacking = false;
     }
 
     private void endDive() {

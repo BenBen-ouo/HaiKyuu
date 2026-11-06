@@ -5,14 +5,10 @@
 package model;
 
 public final class SideRules {
-    // Setter 第三球嗆司球的目標：越過球網後位於對方大砲的位置。
+    // Setter 第三球嗆司球目標距離網子中心的正值；由隊伍方向鏡像。
     private static final double SETTER_THIRD_TOUCH_DISTANCE_FROM_NET = GameConfig.SCREEN_WIDTH * 0.05;
 
     private SideRules() {}
-
-    public static boolean isBallOnOwnSide(boolean redSide, double ballX) {
-        return redSide ? ballX <= GameConfig.NET_X : ballX >= GameConfig.NET_X;
-    }
 
     public static double directionTowardOpponent(boolean redSide) {
         return redSide ? 1.0 : -1.0;
@@ -22,7 +18,7 @@ public final class SideRules {
         return redSide ? 1 : -1;
     }
 
-    public static int horizontalDirectionFromBackInput(TeamInput input, boolean redSide) {
+    public static int horizontalDirectionFromBackInput(ControlInput input, boolean redSide) {
         if (input.backLeft && !input.backRight) {
             return -1;
         }

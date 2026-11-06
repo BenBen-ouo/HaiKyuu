@@ -7,6 +7,13 @@ package model.player;
 import model.GameConfig;
 
 public class PlayerActionAnimator {
+    private static final int RECEIVE_DURATION_FRAMES = 30;
+    private static final int SETTING_TRANSITION_FRAMES = 5;
+    private static final int SETTING_HOLD_FRAMES = 30;
+    private static final int DIVE_TRANSITION_FRAMES = 5;
+    private static final int SWING_TRANSITION_FRAMES = 5;
+    private static final int BLOCK_RAISING_FRAMES = 15;
+    private static final int BLOCK_EXTENDED_FRAMES = 30;
     private final Player player;
     private final PlayerAnimation animation;
 
@@ -23,50 +30,44 @@ public class PlayerActionAnimator {
         player.attackHitBox.disable();
         startGroundAction(PlayerAction.RECEIVING);
         player.vx = 0;
-        animation.play(AnimationSequences.frames(player, "receive"), AnimationSequences.durations(30));
+        animation.play(AnimationSequences.frames(player, "receive"), AnimationSequences.durations(RECEIVE_DURATION_FRAMES));
     }
 
     public void playSetting() {
         startGroundAction(PlayerAction.SETTING);
         animation.play(
                 AnimationSequences.frames(player, "setting1", "setting2", "setting1"),
-                AnimationSequences.durations(5, 30, 5)
+                AnimationSequences.durations(SETTING_TRANSITION_FRAMES, SETTING_HOLD_FRAMES, SETTING_TRANSITION_FRAMES)
         );
     }
 
     public void playAirSetting() {
         player.action = PlayerAction.AIR_SETTING;
-        player.attacking = false;
-        player.blocking = false;
         player.attackHitBox.disable();
         animation.play(
                 AnimationSequences.frames(player, "setting1", "setting2"),
-                AnimationSequences.durations(5, AnimationSequences.HOLD)
+                AnimationSequences.durations(SETTING_TRANSITION_FRAMES, AnimationSequences.HOLD)
         );
     }
 
     public void playDive() {
         player.attackHitBox.disable();
         player.action = PlayerAction.DIVE;
-        player.attacking = false;
-        player.blocking = false;
         animation.play(
                 AnimationSequences.frames(player, "dive1", "dive2", "dive3"),
-                AnimationSequences.durations(5, 5, AnimationSequences.HOLD)
+                AnimationSequences.durations(DIVE_TRANSITION_FRAMES, DIVE_TRANSITION_FRAMES, AnimationSequences.HOLD)
         );
     }
 
-    public void startAttackReady(double horizontalSpeed) {
+    public void startAttackReady(double velocityX) {
         player.mirrorImage = false;
         player.action = PlayerAction.ATTACK_READY;
-        player.attacking = true;
-        player.blocking = false;
         player.diving = false;
         player.attackHitBox.enable();
-        player.vx = horizontalSpeed;
-        player.vy = GameConfig.PLAYER_JUMP_SPEED;
+        player.vx = velocityX;
+        player.vy = GameConfig.BACK_JUMP_VELOCITY_Y;
         // 紀錄起跳時的 X 座標以便後續三米線判定（以圖片中心為基準）
-        player.jumpStartX = player.x + player.imageWidth / 2.0;
+        player.jumpStartCenterX = player.x + player.imageWidth / 2.0;
         player.jumping = true;
         animation.show(player.teamAsset("attack1"));
     }
@@ -74,39 +75,33 @@ public class PlayerActionAnimator {
     public void startAttackSwing() {
         player.mirrorImage = false;
         player.action = PlayerAction.ATTACK_SWING;
-        player.attacking = true;
-        player.blocking = false;
         player.attackHitBox.enable();
         animation.play(
                 AnimationSequences.frames(player, "attack2", "attack3"),
-                AnimationSequences.durations(5, AnimationSequences.HOLD)
+                AnimationSequences.durations(SWING_TRANSITION_FRAMES, AnimationSequences.HOLD)
         );
     }
 
     public void startBlock() {
         player.mirrorImage = false;
         player.action = PlayerAction.BLOCK;
-        player.blocking = true;
-        player.attacking = false;
         player.diving = false;
         player.attackHitBox.disable();
 
         if (!player.jumping) {
-            player.vy = GameConfig.PLAYER_JUMP_SPEED;
+            player.vy = GameConfig.BACK_JUMP_VELOCITY_Y;
             player.jumping = true;
         }
 
         animation.play(
                 AnimationSequences.frames(player, "block1", "block2", "block1"),
-                AnimationSequences.durations(15, 30, AnimationSequences.HOLD)
+                AnimationSequences.durations(BLOCK_RAISING_FRAMES, BLOCK_EXTENDED_FRAMES, AnimationSequences.HOLD)
         );
     }
 
     public void startRunApproach(int cycles) {
         player.mirrorImage = false;
         player.action = PlayerAction.RUN_APPROACH;
-        player.attacking = false;
-        player.blocking = false;
         player.diving = false;
         player.attackHitBox.disable();
         AnimationSequences.playRunCycles(animation, player, cycles);
@@ -132,8 +127,6 @@ public class PlayerActionAnimator {
     public void finishAction() {
         player.mirrorImage = false;
         player.action = PlayerAction.IDLE;
-        player.attacking = false;
-        player.blocking = false;
         player.attackHitBox.disable();
         animation.stopToIdle();
     }
@@ -149,8 +142,6 @@ public class PlayerActionAnimator {
     private void startGroundAction(PlayerAction action) {
         player.mirrorImage = false;
         player.action = action;
-        player.attacking = false;
-        player.blocking = false;
         player.attackHitBox.disable();
     }
 

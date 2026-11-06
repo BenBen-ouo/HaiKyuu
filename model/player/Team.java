@@ -7,7 +7,7 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class Team {
+public final class Team {
     private static final double RECEIVE_HITBOX_RED_X = 30;
     private static final double RECEIVE_HITBOX_Y = 60;
     private static final double RECEIVE_HITBOX_WIDTH = 25;
@@ -159,10 +159,5 @@ public class Team {
         }
     }
 
-    /** 等待 Server 回合結果時，只延續角色既有動作與落地，不讀取新輸入。 */
-    public void updateWhileAwaitingAuthority() {
-        for (Player player : getPlayers()) {
-            player.updateWhileAwaitingAuthority();
-        }
-    }
+
 }
