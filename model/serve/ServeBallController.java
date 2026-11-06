@@ -8,6 +8,7 @@ import model.GameConfig;
 import model.GameModel;
 import model.SideRules;
 import model.ball.Ball;
+import model.ball.BallTrajectory;
 import model.player.BackPlayer;
 import model.player.Player;
 import model.player.PlayerPhysics;
@@ -49,18 +50,12 @@ public class ServeBallController {
 
     public void tossJumpServe(boolean redSide) {
         Ball ball = model.ball;
-        double apexY = GameConfig.SETTER_SET_APEX_Y;
-        double gravity = GameConfig.GRAVITY;
-        int framesToApex = Math.max(1, (int) Math.ceil(
-                (-1 + Math.sqrt(1 + 8 * (ball.y - apexY) / gravity)) / 2));
-        ball.vy = (apexY - ball.y) / framesToApex
-                - gravity * (framesToApex + 1) / 2;
-        double linearTerm = ball.vy + gravity / 2;
-        double landingFrames = (-linearTerm + Math.sqrt(linearTerm * linearTerm
-                + 2 * gravity * (GameConfig.JUMP_SERVE_TOSS_LANDING_Y - ball.y))) / gravity;
         BackPlayer server = redSide ? model.redTeam.backPlayer : model.blueTeam.backPlayer;
         double targetX = server.plannedAttackHitBoxCenterAtApex();
-        ball.vx = (targetX - ball.x) / Math.max(1, landingFrames);
+        BallTrajectory.Velocity velocity = BallTrajectory.throughTarget(ball.x, ball.y, targetX,
+                GameConfig.JUMP_SERVE_TOSS_LANDING_Y, GameConfig.SETTER_SET_APEX_Y, GameConfig.GRAVITY);
+        ball.vx = velocity.x();
+        ball.vy = velocity.y();
         ball.stopRotation();
         ball.useSlowFloorBounceSpin();
     }

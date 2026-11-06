@@ -19,10 +19,9 @@ public final class PlayerPhysics {
         player.vx = 0;
         player.vy = 0;
         player.jumping = false;
-        player.attacking = false;
-        player.blocking = false;
         player.diving = false;
         player.mirrorImage = false;
+        player.jumpStartCenterX = Double.NaN;
     }
 
     public static void applyGravity(Player player) {
@@ -51,7 +50,7 @@ public final class PlayerPhysics {
         player.jumping = false;
         player.diving = false;
         // 重置起跳座標，避免殘留影響三米線判定
-        player.jumpStartX = Double.NaN;
+        player.jumpStartCenterX = Double.NaN;
     }
 
     private static void clampToMovementBounds(Player player) {

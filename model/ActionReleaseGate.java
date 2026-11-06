@@ -5,16 +5,16 @@ final class ActionReleaseGate {
     private boolean backJump;
     private boolean backDive;
     private boolean setterJump;
-    private boolean quickAttack;
-    private boolean wingAttack;
+    private boolean mbActionPressed;
+    private boolean wingActionPressed;
     private boolean serve;
 
     void observeLocked(TeamInput input) {
         backJump = input.backJump;
         backDive = input.backDive;
         setterJump = input.setterJump;
-        quickAttack = input.quickAttack;
-        wingAttack = input.wingAttack;
+        mbActionPressed = input.mbActionPressed;
+        wingActionPressed = input.wingActionPressed;
         serve = input.servePressed;
     }
 
@@ -22,15 +22,15 @@ final class ActionReleaseGate {
         if (!input.backJump) backJump = false;
         if (!input.backDive) backDive = false;
         if (!input.setterJump) setterJump = false;
-        if (!input.quickAttack) quickAttack = false;
-        if (!input.wingAttack) wingAttack = false;
+        if (!input.mbActionPressed) mbActionPressed = false;
+        if (!input.wingActionPressed) wingActionPressed = false;
         if (!input.servePressed) serve = false;
 
         if (backJump) input.backJump = false;
         if (backDive) input.backDive = false;
         if (setterJump) input.setterJump = false;
-        if (quickAttack) input.quickAttack = false;
-        if (wingAttack) input.wingAttack = false;
+        if (mbActionPressed) input.mbActionPressed = false;
+        if (wingActionPressed) input.wingActionPressed = false;
         if (serve) input.servePressed = false;
     }
 
@@ -38,8 +38,8 @@ final class ActionReleaseGate {
         backJump = false;
         backDive = false;
         setterJump = false;
-        quickAttack = false;
-        wingAttack = false;
+        mbActionPressed = false;
+        wingActionPressed = false;
         serve = false;
     }
 }

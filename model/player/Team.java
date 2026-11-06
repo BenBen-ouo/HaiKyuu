@@ -159,10 +159,5 @@ public class Team {
         }
     }
 
-    /** 等待 Server 回合結果時，只延續角色既有動作與落地，不讀取新輸入。 */
-    public void updateWhileAwaitingAuthority() {
-        for (Player player : getPlayers()) {
-            player.updateWhileAwaitingAuthority();
-        }
-    }
+
 }

@@ -14,13 +14,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class ServerPlayerSlot {
+    private static final int MAX_PENDING_INPUT_SAMPLES = 16;
+
     final boolean redSide;
     final long clientNonce;
     final long sessionToken = ThreadLocalRandom.current().nextLong();
-    final AtomicInteger latestInputMask = new AtomicInteger();
-    final AtomicInteger pendingPressedMask = new AtomicInteger();
-    final AtomicInteger lastInputSequence = new AtomicInteger(-1);
-    final AtomicInteger latestScheduledServerTick = new AtomicInteger();
+    private final Deque<Integer> pendingInputMasks = new ArrayDeque<>();
+    private int lastInputSequence = -1;
+    private int lastReceivedInputMask;
+    private int heldInputMask;
+    private boolean inputOverflowed;
     final AtomicInteger lastControlSequence = new AtomicInteger();
     final AtomicLong lastHeardNanos = new AtomicLong(System.nanoTime());
     private final TreeMap<Integer, ServerControlCommand> pendingControls = new TreeMap<>();
@@ -58,17 +61,22 @@ final class ServerPlayerSlot {
         return nowNanos - lastHeardNanos.get() > timeoutNanos;
     }
 
-    void acceptInput(UdpCodec.InputFrame input) {
+    synchronized void acceptInput(UdpCodec.InputFrame input) {
         markHeard();
-        if (input.sequence <= lastInputSequence.get()) {
+        if (input.sequence <= lastInputSequence || inputOverflowed) {
             return;
         }
 
-        lastInputSequence.set(input.sequence);
-        latestScheduledServerTick.set(input.scheduledServerTick);
-        int previousMask = latestInputMask.getAndSet(input.inputMask);
-        int pressedSinceLastFrame = input.inputMask & ~previousMask;
-        pendingPressedMask.getAndAccumulate(pressedSinceLastFrame, (current, pressed) -> current | pressed);
+        lastInputSequence = input.sequence;
+        // 相同的持續輸入不占佇列；動作及其修正鍵保留原樣本，不跨時間 OR。
+        if (input.inputMask != lastReceivedInputMask) {
+            if (pendingInputMasks.size() == MAX_PENDING_INPUT_SAMPLES) {
+                inputOverflowed = true;
+                return;
+            }
+            pendingInputMasks.addLast(input.inputMask);
+            lastReceivedInputMask = input.inputMask;
+        }
         gameplayReady = true;
     }
 
@@ -84,8 +92,14 @@ final class ServerPlayerSlot {
         ) == null;
     }
 
-    int takeInputMaskForTick() {
-        return latestInputMask.get() | pendingPressedMask.getAndSet(0);
+    synchronized int takeInputMaskForTick() {
+        Integer sample = pendingInputMasks.pollFirst();
+        if (sample != null) heldInputMask = sample;
+        return heldInputMask;
+    }
+
+    synchronized boolean hasInputOverflowed() {
+        return inputOverflowed;
     }
 
     int getLastControlSequence() {

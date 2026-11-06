@@ -20,6 +20,10 @@ public class AttackHitBox {
     }
 
     public void set(double offsetX, double offsetY, double width, double height) {
+        if (!Double.isFinite(offsetX) || !Double.isFinite(offsetY)
+                || !Double.isFinite(width) || !Double.isFinite(height) || width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Invalid attack hitbox geometry");
+        }
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.width = width;

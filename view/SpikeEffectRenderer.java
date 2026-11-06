@@ -33,12 +33,12 @@ public class SpikeEffectRenderer {
     private BufferedImage smokeLayer;
     private BufferedImage blurredSmoke;
 
-    public void draw(Graphics2D g, SpikeEffect spikeEffect) {
-        drawTrail(g, spikeEffect.getTrailPoints());
-        drawSmoke(g, spikeEffect.getSmokeParticles());
+    public void draw(Graphics2D g, RenderFrame frame) {
+        drawTrail(g, frame.trail());
+        drawSmoke(g, frame.smoke());
     }
 
-    private void drawTrail(Graphics2D g, List<SpikeEffect.TrailPoint> points) {
+    private void drawTrail(Graphics2D g, List<RenderFrame.TrailPoint> points) {
         if (points.size() < 2) {
             return;
         }
@@ -51,11 +51,11 @@ public class SpikeEffectRenderer {
             );
 
             for (int i = 0; i < points.size() - 1; i++) {
-                SpikeEffect.TrailPoint first = points.get(i);
-                SpikeEffect.TrailPoint second = points.get(i + 1);
+                RenderFrame.TrailPoint first = points.get(i);
+                RenderFrame.TrailPoint second = points.get(i + 1);
 
                 // 不把紅、藍兩隊不同扣球的軌跡接成一條線。
-                if (first.isRedTeam != second.isRedTeam) {
+                if (first.isRedTeam() != second.isRedTeam()) {
                     continue;
                 }
 
@@ -65,7 +65,7 @@ public class SpikeEffectRenderer {
                 }
 
                 Color baseColor = Color.getHSBColor(
-                        first.isRedTeam ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE,
+                        first.isRedTeam() ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE,
                         SpikeEffect.TRAIL_SATURATION,
                         SpikeEffect.TRAIL_BRIGHTNESS
                 );
@@ -77,17 +77,17 @@ public class SpikeEffectRenderer {
         }
     }
 
-    private double averageLifeRatio(SpikeEffect.TrailPoint first, SpikeEffect.TrailPoint second) {
+    private double averageLifeRatio(RenderFrame.TrailPoint first, RenderFrame.TrailPoint second) {
         return (
-                (double) first.remainingFrames / first.maxFrames
-                        + (double) second.remainingFrames / second.maxFrames
+                (double) first.remainingFrames() / first.maxFrames()
+                        + (double) second.remainingFrames() / second.maxFrames()
         ) / 2.0;
     }
 
     private void drawTrailSegment(
             Graphics2D g,
-            SpikeEffect.TrailPoint first,
-            SpikeEffect.TrailPoint second,
+            RenderFrame.TrailPoint first,
+            RenderFrame.TrailPoint second,
             Color baseColor,
             double lifeRatio,
             float baseStrokeWidth,
@@ -104,10 +104,10 @@ public class SpikeEffectRenderer {
                 BasicStroke.CAP_ROUND,
                 BasicStroke.JOIN_ROUND
         ));
-        g.drawLine((int) first.x, (int) first.y, (int) second.x, (int) second.y);
+        g.drawLine((int) first.x(), (int) first.y(), (int) second.x(), (int) second.y());
     }
 
-    private void drawSmoke(Graphics2D g, List<SpikeEffect.SmokeParticle> smokeParticles) {
+    private void drawSmoke(Graphics2D g, List<RenderFrame.Smoke> smokeParticles) {
         if (smokeParticles.isEmpty()) {
             return;
         }
@@ -122,7 +122,7 @@ public class SpikeEffectRenderer {
                     RenderingHints.KEY_ANTIALIASING,
                     RenderingHints.VALUE_ANTIALIAS_ON
             );
-            for (SpikeEffect.SmokeParticle particle : smokeParticles) {
+            for (RenderFrame.Smoke particle : smokeParticles) {
                 drawSmokeParticle(smokeGraphics, particle);
             }
         } finally {
@@ -140,23 +140,23 @@ public class SpikeEffectRenderer {
         }
     }
 
-    private void drawSmokeParticle(Graphics2D g, SpikeEffect.SmokeParticle particle) {
-        double lifeRatio = (double) particle.remainingFrames / particle.maxFrames;
+    private void drawSmokeParticle(Graphics2D g, RenderFrame.Smoke particle) {
+        double lifeRatio = (double) particle.remainingFrames() / particle.maxFrames();
         if (lifeRatio <= 0) {
             return;
         }
 
         float baseAlpha = (float) (0.20 * lifeRatio);
-        float radius = (float) particle.currentRadius;
-        float centerX = (float) particle.x;
-        float centerY = (float) particle.y;
+        float radius = (float) particle.currentRadius();
+        float centerX = (float) particle.x();
+        float centerY = (float) particle.y();
 
-        for (int i = 0; i < particle.blobCount; i++) {
-            float blobRadius = radius * particle.br[i];
-            float blobX = centerX + particle.ox[i];
-            float blobY = centerY + particle.oy[i];
-            g.setPaint(createSmokeGradient(blobX, blobY, blobRadius, baseAlpha, particle.ba[i]));
-            g.fill(createSmokeShape(particle, i, blobX, blobY, blobRadius));
+        for (RenderFrame.SmokeBlob blob : particle.blobs()) {
+            float blobRadius = radius * blob.radiusMultiplier();
+            float blobX = centerX + blob.offsetX();
+            float blobY = centerY + blob.offsetY();
+            g.setPaint(createSmokeGradient(blobX, blobY, blobRadius, baseAlpha, blob.alphaMultiplier()));
+            g.fill(createSmokeShape(blob, blobX, blobY, blobRadius));
         }
     }
 
@@ -182,18 +182,17 @@ public class SpikeEffectRenderer {
     }
 
     private Shape createSmokeShape(
-            SpikeEffect.SmokeParticle particle,
-            int blobIndex,
+            RenderFrame.SmokeBlob blob,
             float blobX,
             float blobY,
             float blobRadius
     ) {
-        float[] offsets = particle.shapeOffset[blobIndex];
+        List<Float> offsets = blob.shape();
         Path2D.Float shape = new Path2D.Float();
 
-        for (int pointIndex = 0; pointIndex < offsets.length; pointIndex++) {
-            double angle = 2.0 * Math.PI * pointIndex / offsets.length;
-            float multiplier = offsets[pointIndex];
+        for (int pointIndex = 0; pointIndex < offsets.size(); pointIndex++) {
+            double angle = 2.0 * Math.PI * pointIndex / offsets.size();
+            float multiplier = offsets.get(pointIndex);
             float x = blobX + (float) Math.cos(angle) * blobRadius * multiplier;
             float y = blobY + (float) Math.sin(angle) * blobRadius * multiplier * 0.6f;
 
@@ -206,7 +205,7 @@ public class SpikeEffectRenderer {
 
         shape.closePath();
         AffineTransform rotation = AffineTransform.getRotateInstance(
-                particle.rot[blobIndex],
+                blob.rotationRadians(),
                 blobX,
                 blobY
         );

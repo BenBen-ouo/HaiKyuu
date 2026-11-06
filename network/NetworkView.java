@@ -17,34 +17,13 @@ public interface NetworkView extends AutoCloseable {
 
     boolean isSessionEnded();
 
-    /** 球的畫面座標與角度直接使用目前的權威狀態。 */
-    default double getRenderedBallX(double authoritativeX) {
-        return authoritativeX;
-    }
+    double getRenderedPlayerX(Player player);
 
-    default double getRenderedBallY(double authoritativeY) {
-        return authoritativeY;
-    }
+    double getRenderedPlayerY(Player player);
 
-    default double getRenderedBallRotation(double authoritativeRotationDegrees) {
-        return authoritativeRotationDegrees;
-    }
+    String getRenderedPlayerAsset(Player player);
 
-    default double getRenderedPlayerX(Player player) {
-        return player.x;
-    }
-
-    default double getRenderedPlayerY(Player player) {
-        return player.y;
-    }
-
-    default String getRenderedPlayerAsset(Player player) {
-        return player.assetName;
-    }
-
-    default boolean getRenderedPlayerMirror(Player player) {
-        return player.mirrorImage;
-    }
+    boolean getRenderedPlayerMirror(Player player);
 
     @Override
     void close();

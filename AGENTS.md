@@ -137,7 +137,7 @@
 - 使用專案既有入口；先確認 `java`、`javac` 來自同一套可用 JDK。若不在 PATH，查驗 `JAVA_HOME` 或目前環境的 JDK，再用完整路徑執行，不把個人電腦絕對路徑寫入專案。
 - PowerShell 的 Java 系統屬性參數要加引號，例如 `'-Djava.awt.headless=true'`。
 - 相關 Java 程式與測試的編譯／基本回歸入口如下；每一步失敗即停止並記錄原因：
-- 執行涉及 `GameClient`／socket 的測試前先確認不會接觸正在遊玩的 Server；目前基本 `NetworkSyncTest` 也會向本機 UDP 5001 發出 HELLO，並非只有 `loopback` 模式會連線。隔離缺口修復前，不在本機有現行對局時執行這類測試。
+- 基本 `NetworkSyncTest` 使用記憶體傳輸，不建立真實 Client socket；`loopback` 使用動態分配的測試連接埠，不接觸正式 UDP 5001。新增網路測試也必須隔離傳輸／連接埠，並驗證結束後資源釋放。
 
 ```powershell
 javac -encoding UTF-8 -d .\build Main.java tests\GameplayFlowTest.java tests\NetworkSyncTest.java tests\LauncherTest.java tests\PackagingSmokeTest.java
@@ -148,7 +148,7 @@ foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'Launche
 }
 ```
 
-- 網路整合另用 `java '-Djava.awt.headless=true' -cp .\build network.NetworkSyncTest loopback`；先確認 UDP 5001 沒有正在遊玩的 Server，不影響既有對局。
+- 網路整合另用 `java '-Djava.awt.headless=true' -cp .\build network.NetworkSyncTest loopback`，測試自行取得可用連接埠。
 - 完整發行驗證入口為 `build-release.bat --no-pause`，會重建本機產物；只有打包相關工作或明確需要時才執行。
 - `PackagingSmokeTest` 需傳入圖片清單，並在沒有外部素材的目錄驗證 JAR；不要無參數執行後將其失敗當成遊戲缺陷。
 - 依變更選擇定點測試、回歸、整合與人工實測；文件／低風險外觀微調不強制跑完整遊戲及打包。
@@ -185,27 +185,34 @@ foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'Launche
 
 ## 11. 已知審查待辦：不得當成已修復或合理 baseline
 
-以下是前次審查的追蹤入口，不是本規範已完成的修復。承接相關工作時重新驗證；完成後刪除對應待辦或更新證據，不擴張無關任務。
+本節追蹤已確認的問題；勾選只代表對應範圍已實作並有指定證據，不代表所有模式均經人工實測。2026-11-06 重構的變更與驗證記錄見 [REFACTOR_PLAN §9](REFACTOR_PLAN.md#9-實作與驗證紀錄)。同幀碰撞優先順序保留；公平性調整另議。
 
-使用者已要求將前次與補查的缺陷一併列入後續重構／修復範圍；仍依 §2 確認具體批次與驗證計畫，不重複詢問已確認的範圍。同幀多重碰撞的優先順序本輪先保留現況，建立行為案例避免重構意外改序；是否調整公平性另議，保留現況不代表已證明公平。
+- [x] 畫面改為 `RenderFrame` 深層不可變資料，由更新邊界發布，不共用可變特效集合。
+- [x] `ServerPlayerSlot` 依序取完整輸入樣本，保留放開／重按，不跨時間 OR；積壓超限明確中止。
+- [x] Client 中止後 close 仍釋放資源；Server 未 run 即 close、Client 初始化傳送失敗及關閉執行緒均有案例。
+- [x] 同 X 可達球路不再產生橫速；計算已集中於 `model.ball.BallTrajectory`。真正不可達目標的降級政策仍待確認。
+- [x] 焦點遺失清鍵；連線建立、等待對手時的失聯及既有進行中逾時使用相同時鐘責任。
+- [x] 固定 tick 補跑有界；更新例外結束對局資源並回報。
+- [x] Client 成功空中舉球與扣球動畫均等待 Server 確認。
+- [x] 移除舊 Client 完整回合預測分支、重複公開觸球計數與部分重設入口；整場 restart 統一於 GameModel。
+- [x] 刪除無使用者的落點預測、側別輸入、舊圖片特效、空 updateAfterBall、僅寫入的排程 tick，以及無責任的 AttackContext。
+- [x] 命名、動畫／特效常數及設定合法性整理；動作鍵不再命名成攻擊命中，起跳 Y 分量與起跳中心明確命名。
+- [x] 攔網階段依型別與序列位置判斷，圖片檔名不再決定碰撞；階段及圖片共同同步。
+- [x] app-image 與 ZIP 替換失敗會回復；回復未完成或意外中止時保留標記，阻止下次建置清除現場。
+- [x] 後排攻擊保存本次起跳中心，落地當幀仍能完成三米線判決；空中舉球維持不套用。
+- [x] Client RESET 先清理整場狀態再套權威資料，消除舊煙霧／軌跡。
+- [x] 拒絕無效事件／控制列舉、非有限／超範圍物理數值、非法尺寸、不完整隊伍及無效攔網階段。
+- [x] 診斷 writer 失敗後停用並清空；滿載訊息由背景執行緒至多回報一次。
+- [x] 基本網路測試的真實 HELLO 已移除；整合測試使用獨立連接埠並檢查釋放。
 
-- [ ] 更新／繪圖共用可變特效清單的競爭：`GamePanel`、`SpikeEffectRenderer`、`SpikeEffect`。
-- [ ] `ServerPlayerSlot` 合併不同時間的按鍵，可能產生實際未同時按住的球路組合。
-- [ ] `GameClient` 中止後再 `close()` 可能未關閉 socket；初始化、關閉與背景執行緒的完整生命週期仍需核對。
-- [ ] `PhysicsUtils.calculateVelocityToTarget()` 的垂直目標會落入非零橫速的預設球路。
-- [ ] 缺少失去焦點時清除按鍵，以及連線建立／等待階段的完整逾時策略。
-- [ ] 更新落後後缺少補跑上限；未預期例外的處理與診斷責任待整理。
-- [ ] 空中舉球與扣球的 Client 成功動畫確認政策不一致。
-- [ ] `GameModel` 留有舊 Client 預測分支、重複計數與重設責任；需核對正式呼叫鏈後清理。
-- [ ] 無使用者或無實際效果的內容：`BallLandingPredictor`、`HIGH_NET_SYNC_MAX_BALL_Y`、球場側別輸入欄位、舊特效入口、空的 `updateAfterBall()`、僅寫入的排程 tick，以及未使用的 `AttackContext` 建立結果。
-- [ ] 名稱、分散的可調數值、以圖片檔名判斷狀態、失真註解及寫死可調值的測試需逐步整理。
-- [ ] 發行資料夾與 ZIP 替換失敗時的整體回復仍不完整。
-- [ ] 後排落地當幀仍允許攻擊，但 `PlayerPhysics` 先清除 `jumpStartX`，造成 `RallyContactHandler` 漏判起跳三米線違規；需保留判決所需的本次起跳資料直到判定完成。
-- [ ] 網路 RESET 套用 `Packet.CompactState` 時，未完整清除 Client 舊煙霧／軌跡；一般狀態校正與整場重設須有不同的清理責任。
-- [ ] `UdpCodec` 將無效事件／控制列舉分別替代為 `SCORE`／`CANCEL_RESET`，應拒絕無效輸入，不能選取另一個有效操作。
-- [ ] `NetworkStateCodec` 缺少物理數值的有限性／範圍及狀態完整性驗證，NaN 可通過球快照編解碼；不得把位元組可解析等同資料有效。
-- [ ] `TimingDiagnostics.writeLoop()` 失敗退出後未清除可用狀態，後續仍累積訊息並於佇列滿時重複輸出；需明確的停用／恢復策略。
-- [ ] 基本 `NetworkSyncTest.testNewRulesAndConfirmedLanding()` 建立真實 `GameClient` 並發出 HELLO，可能干擾本機正在等待玩家的 Server；需隔離測試傳輸及對局連接埠，並核對測試結束的資源清理。
+人工 GUI、雙機區網、無 Java 環境與長時間壓力測試的限制，以執行紀錄為準；不得由上述勾選推定通過。
+
+補查仍待收尾，不能由已完成批次推定以下項目全面符合：
+
+- [ ] `SpikeEffectRenderer` 仍有函式內的可調線寬／透明度；`MatchDisplay` 重複建立字型與配色；純繪圖 HSB 常數仍放在 `SpikeEffect`。
+- [ ] `GameModel.applyNetworkRallyContactState()` 仍有十多個參數；角色、球路等部分名稱的速度／分量語意尚可更精確。
+- [ ] 不可達球路仍回傳既有降級值，沒有明確的失敗結果；非垂直定速率估算僅驗證選定的離散容差案例。
+- [ ] 完整模組循環、所有狀態的中斷／重設矩陣、長時間運行與所有呼叫關係，尚無完整驗證；既有編譯警告尚未全部處理。
 
 ## 12. 交付與操作界線
 

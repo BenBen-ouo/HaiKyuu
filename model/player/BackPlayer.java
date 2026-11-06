@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public class BackPlayer extends Player {
-    private static final double BACK_ATTACK_AIR_SPEED = 2.8;
+    private static final double BACK_JUMP_MAX_HORIZONTAL_SPEED = 2.8;
 
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;
@@ -30,7 +30,8 @@ public class BackPlayer extends Player {
                 && (action == PlayerAction.IDLE || action == PlayerAction.RUN_LOOP)
                 && !input.backJump && !input.backDive;
         runHeldFrames = canRun && direction != 0
-                ? (direction == runDirection ? runHeldFrames + 1 : 1) : 0;
+                ? (direction == runDirection
+                        ? Math.min(runHeldFrames + 1, GameConfig.BACK_RUN_FOURTH_STAGE_END_FRAMES + 1) : 1) : 0;
         runDirection = runHeldFrames == 0 ? 0 : direction;
         boolean actionPressed = input.backJump || input.backDive;
         boolean justPressedAction = actionPressed && !previousBackAction;
@@ -71,7 +72,6 @@ public class BackPlayer extends Player {
         }
 
         vx = 0;
-        attacking = false;
 
         if (input.backJump && justPressedAction && !jumping) {
             startBackAttack();
@@ -88,25 +88,6 @@ public class BackPlayer extends Player {
         applyGravity();
         updateActionAnimation();
         previousBackAction = actionPressed;
-    }
-
-    @Override
-    public void updateWhileAwaitingAuthority() {
-        clearAttackAttempt();
-        if (diveController.isActive()) {
-            diveController.update(false);
-            updateActionAnimation();
-            return;
-        }
-
-        if (action == PlayerAction.AIR_SETTING && jumping) {
-            vx = jumpAirSpeed;
-            applyGravity();
-            updateActionAnimation();
-            return;
-        }
-
-        super.updateWhileAwaitingAuthority();
     }
 
     /** Team 設定一般 hitBox 後呼叫，保存此角色的固定站立碰撞框。 */
@@ -143,7 +124,7 @@ public class BackPlayer extends Player {
         if (isHeldAttackReady(input.backJump || input.backDive, justPressedAction)
                 && input.lastHitter != this
                 && isBallInAttackBox(input)) {
-            if (input.canBackAirSet && canAirSetWith(input)) {
+            if (input.canResolveAttack && input.canBackAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
             } else if (input.canResolveAttack && !input.attackLocked) {
                 queueAttackAttempt();
@@ -184,8 +165,12 @@ public class BackPlayer extends Player {
     }
 
     private void moveHorizontally(TeamInput input) {
-        double speed = runHeldFrames > GameConfig.BACK_RUN_ACCELERATION_FRAMES
-                ? GameConfig.BACK_RUN_FAST_SPEED : GameConfig.PLAYER_SPEED;
+        double speed;
+        if (runHeldFrames <= GameConfig.BACK_RUN_FIRST_STAGE_END_FRAMES) speed = GameConfig.BACK_RUN_START_SPEED;
+        else if (runHeldFrames <= GameConfig.BACK_RUN_SECOND_STAGE_END_FRAMES) speed = GameConfig.BACK_RUN_SECOND_STAGE_SPEED;
+        else if (runHeldFrames <= GameConfig.BACK_RUN_THIRD_STAGE_END_FRAMES) speed = GameConfig.BACK_RUN_THIRD_STAGE_SPEED;
+        else if (runHeldFrames <= GameConfig.BACK_RUN_FOURTH_STAGE_END_FRAMES) speed = GameConfig.BACK_RUN_FOURTH_STAGE_SPEED;
+        else speed = GameConfig.BACK_RUN_MAX_SPEED;
         if (input.backLeft) {
             vx -= speed;
         }
@@ -210,7 +195,7 @@ public class BackPlayer extends Player {
         // 線後方維持原上限；速度只在起跳時決定，空中不重新計算。
         double center = x + imageWidth / 2.0;
         double line = GameConfig.NET_X + (redSide ? -1 : 1) * GameConfig.THREE_METER_PX;
-        double speed = BACK_ATTACK_AIR_SPEED;
+        double speed = BACK_JUMP_MAX_HORIZONTAL_SPEED;
         if (redSide ? center >= line : center <= line) {
             double setterCenter = redSide
                     ? GameConfig.NET_X + GameConfig.RED_SETTER_OFFSET_X + imageWidth / 2.0
@@ -218,7 +203,7 @@ public class BackPlayer extends Player {
             double attackFront = redSide
                     ? center + (attackHitBox.offsetX + attackHitBox.width - imageWidth / 2.0)
                     : center + (attackHitBox.offsetX - imageWidth / 2.0);
-            speed = Math.max(0, Math.min(BACK_ATTACK_AIR_SPEED,
+            speed = Math.max(0, Math.min(BACK_JUMP_MAX_HORIZONTAL_SPEED,
                     (redSide ? setterCenter - attackFront : attackFront - setterCenter)
                             / framesToApex()));
         }
@@ -226,7 +211,7 @@ public class BackPlayer extends Player {
     }
 
     private int framesToApex() {
-        return Math.max(1, (int) Math.ceil(-GameConfig.PLAYER_JUMP_SPEED / GameConfig.GRAVITY) - 1);
+        return Math.max(1, (int) Math.ceil(-GameConfig.BACK_JUMP_VELOCITY_Y / GameConfig.GRAVITY) - 1);
     }
 
     /** 快照還原時保留本次起跳速度，避免 Client 下一幀改回舊速度。 */

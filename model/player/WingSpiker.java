@@ -1,6 +1,6 @@
 /*
 主攻手 WS 的角色邏輯，包含助跑、起跳、空中攻擊揮臂與落地回位。
-目前只處理攻擊動畫流程，真正扣球改變球速之後再從碰撞邏輯接入。
+成功碰球與球路由 RallyContactHandler 判定；角色只提出當幀請求。
 */
 package model.player;
 
@@ -13,7 +13,7 @@ public class WingSpiker extends Player {
 
     private final double homeX;
     private final DiveController diveController;
-    private boolean previousWingAttack = false;
+    private boolean previousWingActionPressed = false;
     private boolean resumeReturnAfterReceive;
 
     public WingSpiker(String assetName, double x, double y, boolean redSide) {
@@ -26,22 +26,22 @@ public class WingSpiker extends Player {
     public void resetToInitial() {
         super.resetToInitial();
         diveController.cancel();
-        previousWingAttack = false;
+        previousWingActionPressed = false;
         resumeReturnAfterReceive = false;
     }
 
     @Override
     public void update(TeamInput input) {
         clearAttackAttempt();
-        boolean justPressedAttack = input.wingAttack && !previousWingAttack;
+        boolean justPressedAttack = input.wingActionPressed && !previousWingActionPressed;
 
         if (diveController.isActive()) {
-            diveController.update(input.wingAttack);
+            diveController.update(input.wingActionPressed);
             updateActionAnimation();
             if (!diveController.isActive()) {
                 startReturnToHome();
             }
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         }
 
@@ -53,26 +53,26 @@ public class WingSpiker extends Player {
                 resumeReturnAfterReceive = false;
                 startReturnToHome();
             }
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         }
 
         if (action == PlayerAction.RUN_APPROACH) {
             updateApproachRun(input);
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         }
 
         if (action == PlayerAction.ATTACK_READY || action == PlayerAction.ATTACK_SWING
                 || action == PlayerAction.AIR_SETTING) {
             updateAttackInAir(justPressedAttack, input);
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         }
 
         if (action == PlayerAction.RUN_RETURN) {
             updateReturnToHome();
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         }
 
@@ -80,9 +80,9 @@ public class WingSpiker extends Player {
 
         if (justPressedAttack && !input.hasFirstRegularTouch
                 && diveController.tryStartTowardNet(true)) {
-            diveController.update(input.wingAttack);
+            diveController.update(input.wingActionPressed);
             updateActionAnimation();
-            previousWingAttack = input.wingAttack;
+            previousWingActionPressed = input.wingActionPressed;
             return;
         } else if (justPressedAttack) {
             startRunApproachAnimation(2);
@@ -90,7 +90,7 @@ public class WingSpiker extends Player {
 
         applyGravity();
         updateActionAnimation();
-        previousWingAttack = input.wingAttack;
+        previousWingActionPressed = input.wingActionPressed;
     }
 
     private void updateApproachRun(TeamInput input) {
@@ -100,15 +100,15 @@ public class WingSpiker extends Player {
 
         if (!animation.isPlaying()) {
             startAttackReady(0);
-            vy = GameConfig.WING_SPIKER_JUMP_SPEED;
+            vy = GameConfig.WS_JUMP_VELOCITY_Y;
         }
     }
 
     private void updateAttackInAir(boolean justPressedAttack, TeamInput input) {
-        if (isHeldAttackReady(input.wingAttack, justPressedAttack)
+        if (isHeldAttackReady(input.wingActionPressed, justPressedAttack)
                 && input.lastHitter != this
                 && isBallInAttackBox(input)) {
-            if (input.canWingAirSet && canAirSetWith(input)) {
+            if (input.canResolveAttack && input.canWingAirSet && canAirSetWith(input)) {
                 startAirSettingAnimation();
             } else if (input.canResolveAttack && !input.attackLocked) {
                 queueAttackAttempt();
@@ -128,8 +128,6 @@ public class WingSpiker extends Player {
 
     private void startReturnToHome() {
         action = PlayerAction.RUN_RETURN;
-        attacking = false;
-        blocking = false;
         attackHitBox.disable();
         vx = 0;
         startRunLoopAnimation();
@@ -161,8 +159,6 @@ public class WingSpiker extends Player {
     public boolean isDefaultHitBoxActive() {
         return (action == PlayerAction.IDLE || action == PlayerAction.DIVE || action == PlayerAction.RUN_RETURN)
                 && !jumping
-                && !attacking
-                && !blocking
                 && (diving || action == PlayerAction.RUN_RETURN || Math.abs(vx) < 0.001)
                 && Math.abs(vy) < 0.001;
     }

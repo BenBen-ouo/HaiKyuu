@@ -13,10 +13,6 @@ public final class GameConfig {
     // 所有本機與網路模式共用的遊戲更新頻率。
     public static final int TICKS_PER_SECOND = 60;
 
-    // 預留給之後依球高度加強網路校正；目前尚未由同步流程使用。
-    // 座標 y 越小代表球越高。
-    public static final double HIGH_NET_SYNC_MAX_BALL_Y = 450.0;
-
     // 視窗外可活動區域：球與玩家可以超出畫面，但不可超出這些世界邊界。
     public static final double WORLD_LEFT = -240;
     public static final double WORLD_RIGHT = SCREEN_WIDTH + 240;
@@ -34,15 +30,23 @@ public final class GameConfig {
     public static final double BLUE_QUICK_SET_APEX_X = 609;
     public static final double QUICK_SET_APEX_Y = 420;
 
-    public static final double PLAYER_SPEED = 4.3;
-    public static final double BACK_RUN_FAST_SPEED = 6.5;
-    public static final int BACK_RUN_ACCELERATION_FRAMES = 30;
+    // 後排地面同方向連續移動：0.1／0.3／0.5／0.7 秒後升階；速度單位為像素／tick。
+    public static final double BACK_RUN_START_SPEED = 4.0;
+    public static final double BACK_RUN_SECOND_STAGE_SPEED = 4.5;
+    public static final double BACK_RUN_THIRD_STAGE_SPEED = 5.0;
+    public static final double BACK_RUN_FOURTH_STAGE_SPEED = 5.5;
+    public static final double BACK_RUN_MAX_SPEED = 6.0;
+    public static final int BACK_RUN_FIRST_STAGE_END_FRAMES = TICKS_PER_SECOND / 10;
+    public static final int BACK_RUN_SECOND_STAGE_END_FRAMES = TICKS_PER_SECOND * 3 / 10;
+    public static final int BACK_RUN_THIRD_STAGE_END_FRAMES = TICKS_PER_SECOND * 5 / 10;
+    public static final int BACK_RUN_FOURTH_STAGE_END_FRAMES = TICKS_PER_SECOND * 7 / 10;
     // 起跳初始 vy；負值代表向上。各角色可獨立調整。
-    public static final double PLAYER_JUMP_SPEED = -9.0;
-    public static final double SETTER_JUMP_SPEED = -6.3;
-    public static final double QUICK_ATTACKER_JUMP_SPEED = -7.8;
+    // 世界 Y 向下：以下起跳速度分量均為負值，單位像素／tick。
+    public static final double BACK_JUMP_VELOCITY_Y = -9.0;
+    public static final double SETTER_JUMP_VELOCITY_Y = -6.3;
+    public static final double MB_JUMP_VELOCITY_Y = -7.8;
     public static final double MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER = 0.9;
-    public static final double WING_SPIKER_JUMP_SPEED = -7.8;
+    public static final double WS_JUMP_VELOCITY_Y = -7.8;
     public static final double DIVE_SPEED = 5.0;
 
     public static final double BALL_RADIUS = 12;
@@ -143,7 +147,7 @@ public final class GameConfig {
     public static final double BLUE_SERVE_BALL_X = SCREEN_WIDTH - BALL_RADIUS;
     public static final double BLUE_SERVE_BALL_OFFSET_Y = -5;
 
-    // 發球球速，可依手感調整。
+    // 發球 X 是正值速率，由隊伍方向轉成 vx；Y 是帶符號世界速度，負值往上。
     public static final double SERVE_NORMAL_VX = 9;
     public static final double SERVE_NORMAL_VY = -12;
     public static final double SERVE_CEILING_VX = 5.1;
@@ -168,4 +172,44 @@ public final class GameConfig {
     // 發球隨機誤差範圍
     public static final double SERVE_RANDOM_VX_RANGE = 0.7;
     public static final double SERVE_RANDOM_VY_RANGE = 0.5;
+
+    /** 啟動時拒絕會讓物理或動畫計算失效的設定；不限制合法調參手感。 */
+    public static void validate() {
+        requirePositive("screen and physics", SCREEN_WIDTH, SCREEN_HEIGHT, TICKS_PER_SECOND,
+                GRAVITY, BALL_RADIUS, PLAYER_IMAGE_WIDTH, PLAYER_IMAGE_HEIGHT, NET_WIDTH, NET_HEIGHT);
+        requirePositive("court dimensions", WORLD_RIGHT - WORLD_LEFT, FLOOR_Y - WORLD_TOP,
+                COURT_RIGHT_X - COURT_LEFT_X, COURT_LINE_WIDTH, THREE_METER_PX);
+        requirePositive("jump velocity magnitude", -BACK_JUMP_VELOCITY_Y, -SETTER_JUMP_VELOCITY_Y,
+                -MB_JUMP_VELOCITY_Y, -WS_JUMP_VELOCITY_Y);
+        requirePositive("block multiplier", MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER);
+        requireNonNegative("movement and bounce", BACK_RUN_START_SPEED, BACK_RUN_SECOND_STAGE_SPEED,
+                BACK_RUN_THIRD_STAGE_SPEED, BACK_RUN_FOURTH_STAGE_SPEED, BACK_RUN_MAX_SPEED,
+                BALL_BOUNCE, NET_SIDE_BOUNCE, NET_TOP_BOUNCE, BLOCK_HEAD_BOUNCE, BLOCK_HITBOX_BOUNCE);
+        if (BACK_RUN_FIRST_STAGE_END_FRAMES <= 0
+                || BACK_RUN_FIRST_STAGE_END_FRAMES >= BACK_RUN_SECOND_STAGE_END_FRAMES
+                || BACK_RUN_SECOND_STAGE_END_FRAMES >= BACK_RUN_THIRD_STAGE_END_FRAMES
+                || BACK_RUN_THIRD_STAGE_END_FRAMES >= BACK_RUN_FOURTH_STAGE_END_FRAMES
+                || BACK_RUN_START_SPEED > BACK_RUN_SECOND_STAGE_SPEED
+                || BACK_RUN_SECOND_STAGE_SPEED > BACK_RUN_THIRD_STAGE_SPEED
+                || BACK_RUN_THIRD_STAGE_SPEED > BACK_RUN_FOURTH_STAGE_SPEED
+                || BACK_RUN_FOURTH_STAGE_SPEED > BACK_RUN_MAX_SPEED) {
+            throw new IllegalArgumentException("Invalid back-row acceleration stages");
+        }
+        if (NET_FLASH_COUNT <= 0
+                || NET_FLASH_FRAMES < 2 * NET_FLASH_COUNT) {
+            throw new IllegalArgumentException("Invalid action or flash duration");
+        }
+    }
+
+    private static void requirePositive(String group, double... values) {
+        for (double value : values) {
+            if (!Double.isFinite(value) || value <= 0) throw new IllegalArgumentException("Invalid " + group);
+        }
+    }
+
+    private static void requireNonNegative(String group, double... values) {
+        for (double value : values) {
+            if (!Double.isFinite(value) || value < 0) throw new IllegalArgumentException("Invalid " + group);
+        }
+    }
 }

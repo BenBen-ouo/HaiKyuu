@@ -12,7 +12,7 @@ import java.awt.*;
 import model.*;
 
 public class MatchDisplay {
-    public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
+    public void draw(Graphics2D g, RenderFrame.Match model, boolean bluePerspective) {
         g.setColor(Color.GRAY);
         g.setFont(new Font("Arial", Font.PLAIN, 14));
         FontMetrics versionMetrics = g.getFontMetrics();
@@ -24,8 +24,8 @@ public class MatchDisplay {
         String scoreText = model.isPracticeMode()
                 ? (model.isPracticeRedServing() ? "右方練習模式" : "左方練習模式")
                 : bluePerspective
-                        ? model.blueScore + " : " + model.redScore
-                        : model.redScore + " : " + model.blueScore;
+                        ? model.blueScore() + " : " + model.redScore()
+                        : model.redScore() + " : " + model.blueScore();
         g.setColor(Color.BLACK);
         g.setFont(model.isPracticeMode()
                 ? new Font("Microsoft JhengHei", Font.PLAIN, 22)
@@ -34,8 +34,8 @@ public class MatchDisplay {
         g.drawString(scoreText, (GameConfig.SCREEN_WIDTH - scoreMetrics.stringWidth(scoreText)) / 2, 44);
 
         // 若比賽結束，顯示勝利框 (圓角、以贏家顏色)
-        if (model.matchOver && model.transientMessageTimer <= 0) {
-            String msg = (model.matchWinnerRed != null && model.matchWinnerRed) ? "RED WINS" : "BLUE WINS";
+        if (model.matchOver() && model.transientMessageTimer() <= 0) {
+            String msg = (model.matchWinnerRed() != null && model.matchWinnerRed()) ? "RED WINS" : "BLUE WINS";
             g.setFont(new Font("Arial", Font.BOLD, 48));
             FontMetrics fm = g.getFontMetrics();
             int w = fm.stringWidth(msg);
@@ -45,8 +45,8 @@ public class MatchDisplay {
             // 顏色以勝隊為主
             Color borderColor = Color.BLACK;
             Color fillColor = Color.WHITE;
-            if (model.matchWinnerRed != null) {
-                if (model.matchWinnerRed) {
+            if (model.matchWinnerRed() != null) {
+                if (model.matchWinnerRed()) {
                     borderColor = new Color(200, 30, 30);
                     fillColor = new Color(255, 220, 220);
                 } else {
@@ -89,8 +89,8 @@ public class MatchDisplay {
         }
 
         // 顯示暫時訊息（IN/OUT/TOUCH OUT/後排三米線）
-        if (model.transientMessage != null && model.transientMessageTimer > 0) {
-            String msg = model.transientMessage;
+        if (model.transientMessage() != null && model.transientMessageTimer() > 0) {
+            String msg = model.transientMessage();
             // 固定框大小，基於勝利字型寬度
             Font winnerFont = new Font("Microsoft JhengHei", Font.BOLD, 48);
             FontMetrics wfm = g.getFontMetrics(winnerFont);
@@ -107,8 +107,8 @@ public class MatchDisplay {
             // 顏色決定
             Color borderColor = Color.BLACK;
             Color fillColor = Color.WHITE;
-            if (model.transientMessageIsRed != null) {
-                if (model.transientMessageIsRed) {
+            if (model.transientMessageIsRed() != null) {
+                if (model.transientMessageIsRed()) {
                     borderColor = new Color(200, 30, 30);
                     fillColor = new Color(255, 220, 220);
                 } else {
