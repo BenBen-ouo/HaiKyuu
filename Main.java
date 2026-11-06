@@ -150,7 +150,7 @@ public class Main {
         KeyboardController keyboard = new KeyboardController();
         GameController controller = new GameController(model, keyboard);
         showWindow(model, keyboard, controller, null, null,
-                practiceMode ? "HaiKyuu!! - " + (practiceRedServing ? "藍隊練習模式" : "紅隊練習模式")
+                practiceMode ? "HaiKyuu!! - " + (practiceRedServing ? "右方練習模式" : "左方練習模式")
                         : "HaiKyuu!! - 本地雙人");
     }
 
@@ -164,6 +164,7 @@ public class Main {
     ) {
         GamePanel panel = new GamePanel(model, controller, networkView);
         panel.addKeyListener(keyboard);
+        panel.addFocusListener(keyboard);
 
         JFrame frame = new JFrame(title);
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);

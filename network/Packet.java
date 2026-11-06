@@ -1,11 +1,14 @@
 /*
 UDP 遊戲資料定義。
-TeamInput 會壓成 bitmask；即時快照傳球、球員與觸球狀態，裁決階段只在可靠事件中傳送。
+ControlInput 會壓成 bitmask；即時快照傳球、球員與觸球狀態，裁決階段只在可靠事件中傳送。
 */
 package network;
 
+import java.util.List;
+
 import model.GameModel;
-import model.TeamInput;
+import model.rally.RallyContactSnapshot;
+import model.ControlInput;
 import model.ball.Ball;
 import model.player.Player;
 import model.player.BackPlayer;
@@ -21,22 +24,25 @@ public final class Packet {
     public static final int INPUT_BACK_JUMP = 1 << 2;
     public static final int INPUT_BACK_DIVE = 1 << 3;
     public static final int INPUT_SETTER_JUMP = 1 << 4;
-    public static final int INPUT_QUICK_ATTACK = 1 << 5;
+    public static final int INPUT_MB_ACTION = 1 << 5;
     public static final int INPUT_AIR_SET_MODIFIER = 1 << 6;
-    public static final int INPUT_WING_ATTACK = 1 << 7;
+    public static final int INPUT_WS_ACTION = 1 << 7;
     public static final int INPUT_SPIKE_FLAT = 1 << 8;
     public static final int INPUT_SPIKE_SHORT = 1 << 9;
     public static final int INPUT_SPIKE_LOB = 1 << 10;
     public static final int INPUT_SERVE = 1 << 11;
     private static final int INPUT_SERVE_TYPE_SHIFT = 12;
     private static final int INPUT_SERVE_TYPE_MASK = 0x3 << INPUT_SERVE_TYPE_SHIFT;
+    private static final PlayerAction[] PLAYER_ACTIONS = PlayerAction.values();
+    private static final ServeType[] SERVE_TYPES = ServeType.values();
+    private static final ServeState[] SERVE_STATES = ServeState.values();
 
     private Packet() {
     }
 
     /*
      * 可靠 COLLISION_EVENT 的事件類型。
-     * 只保留目前指定的事件；攔網、撞網等額外事件暫不加入。
+     * 落地煙霧與碰網閃爍由權威事件確認。
      */
     public enum EventType {
         SERVE,
@@ -48,19 +54,20 @@ public final class Packet {
         RESET,
         FLOW,
         AIR_SET_CONTACT,
-        JUMP_TOSS
+        JUMP_TOSS,
+        NET_CONTACT
     }
 
-    public static int encodeInput(TeamInput input) {
+    public static int encodeInput(ControlInput input) {
         int mask = 0;
         if (input.backLeft) mask |= INPUT_BACK_LEFT;
         if (input.backRight) mask |= INPUT_BACK_RIGHT;
         if (input.backJump) mask |= INPUT_BACK_JUMP;
         if (input.backDive) mask |= INPUT_BACK_DIVE;
         if (input.setterJump) mask |= INPUT_SETTER_JUMP;
-        if (input.quickAttack) mask |= INPUT_QUICK_ATTACK;
+        if (input.mbActionPressed) mask |= INPUT_MB_ACTION;
         if (input.airSetModifier) mask |= INPUT_AIR_SET_MODIFIER;
-        if (input.wingAttack) mask |= INPUT_WING_ATTACK;
+        if (input.wingActionPressed) mask |= INPUT_WS_ACTION;
         if (input.spikeFlat) mask |= INPUT_SPIKE_FLAT;
         if (input.spikeShort) mask |= INPUT_SPIKE_SHORT;
         if (input.spikeLob) mask |= INPUT_SPIKE_LOB;
@@ -70,23 +77,23 @@ public final class Packet {
         return mask | ((serveType & 0x3) << INPUT_SERVE_TYPE_SHIFT);
     }
 
-    public static TeamInput decodeInput(int mask) {
-        TeamInput input = new TeamInput();
+    public static ControlInput decodeInput(int mask) {
+        ControlInput input = new ControlInput();
         input.backLeft = (mask & INPUT_BACK_LEFT) != 0;
         input.backRight = (mask & INPUT_BACK_RIGHT) != 0;
         input.backJump = (mask & INPUT_BACK_JUMP) != 0;
         input.backDive = (mask & INPUT_BACK_DIVE) != 0;
         input.setterJump = (mask & INPUT_SETTER_JUMP) != 0;
-        input.quickAttack = (mask & INPUT_QUICK_ATTACK) != 0;
+        input.mbActionPressed = (mask & INPUT_MB_ACTION) != 0;
         input.airSetModifier = (mask & INPUT_AIR_SET_MODIFIER) != 0;
-        input.wingAttack = (mask & INPUT_WING_ATTACK) != 0;
+        input.wingActionPressed = (mask & INPUT_WS_ACTION) != 0;
         input.spikeFlat = (mask & INPUT_SPIKE_FLAT) != 0;
         input.spikeShort = (mask & INPUT_SPIKE_SHORT) != 0;
         input.spikeLob = (mask & INPUT_SPIKE_LOB) != 0;
         input.servePressed = (mask & INPUT_SERVE) != 0;
 
         int typeOrdinal = (mask & INPUT_SERVE_TYPE_MASK) >>> INPUT_SERVE_TYPE_SHIFT;
-        ServeType[] types = ServeType.values();
+        ServeType[] types = SERVE_TYPES;
         input.serveType = typeOrdinal < types.length ? types[typeOrdinal] : ServeType.NORMAL;
         return input;
     }
@@ -100,10 +107,12 @@ public final class Packet {
         public final int collisionRevision;
         public final boolean spikeTrailActive;
         public final boolean spikeTrailRedSide;
+        public final int netFlashFrames;
 
         public WorldSnapshot(BallState ball, TeamState redTeam, TeamState blueTeam,
                              RallyContactState rallyContacts,
-                             int collisionRevision, boolean spikeTrailActive, boolean spikeTrailRedSide) {
+                             int collisionRevision, boolean spikeTrailActive, boolean spikeTrailRedSide,
+                             int netFlashFrames) {
             this.ball = ball;
             this.redTeam = redTeam;
             this.blueTeam = blueTeam;
@@ -111,6 +120,7 @@ public final class Packet {
             this.collisionRevision = collisionRevision;
             this.spikeTrailActive = spikeTrailActive;
             this.spikeTrailRedSide = spikeTrailRedSide;
+            this.netFlashFrames = netFlashFrames;
         }
 
         public static WorldSnapshot from(GameModel model, int collisionRevision) {
@@ -121,7 +131,7 @@ public final class Packet {
                     RallyContactState.from(model),
                     collisionRevision,
                     model.spikeEffect.isSpikeTrailActive(),
-                    model.spikeEffect.getCurrentSpikeIsRed()
+                    model.spikeEffect.getCurrentSpikeIsRed(), model.netFlashFrames
             );
         }
     }
@@ -141,50 +151,38 @@ public final class Packet {
         public final boolean blueSetterTouchedFirst;
         public final boolean redBlockUsed;
         public final boolean blueBlockUsed;
+        public final boolean redAttackLocked;
+        public final boolean blueAttackLocked;
 
-        public RallyContactState(int redHitCount, int blueHitCount,
-                                 int redLastHitterIndex, int blueLastHitterIndex,
-                                 int lastHitTeamCode, boolean lastTouchWasBlock,
-                                 boolean serveReceptionComplete,
-                                 boolean redSetterTouched, boolean blueSetterTouched,
-                                 boolean redSetterTouchedFirst, boolean blueSetterTouchedFirst,
-                                 boolean redBlockUsed, boolean blueBlockUsed) {
-            this.redHitCount = redHitCount;
-            this.blueHitCount = blueHitCount;
-            this.redLastHitterIndex = redLastHitterIndex;
-            this.blueLastHitterIndex = blueLastHitterIndex;
-            this.lastHitTeamCode = lastHitTeamCode;
-            this.lastTouchWasBlock = lastTouchWasBlock;
-            this.serveReceptionComplete = serveReceptionComplete;
-            this.redSetterTouched = redSetterTouched;
-            this.blueSetterTouched = blueSetterTouched;
-            this.redSetterTouchedFirst = redSetterTouchedFirst;
-            this.blueSetterTouchedFirst = blueSetterTouchedFirst;
-            this.redBlockUsed = redBlockUsed;
-            this.blueBlockUsed = blueBlockUsed;
+        public RallyContactState(RallyContactSnapshot snapshot) {
+            redHitCount = snapshot.red().hitCount();
+            blueHitCount = snapshot.blue().hitCount();
+            redLastHitterIndex = snapshot.red().lastHitterIndex();
+            blueLastHitterIndex = snapshot.blue().lastHitterIndex();
+            lastHitTeamCode = encodeNullableBoolean(snapshot.lastHitTeam());
+            lastTouchWasBlock = snapshot.lastTouchWasBlock();
+            serveReceptionComplete = snapshot.serveReceptionComplete();
+            redSetterTouched = snapshot.red().setterTouched();
+            blueSetterTouched = snapshot.blue().setterTouched();
+            redSetterTouchedFirst = snapshot.red().setterTouchedFirst();
+            blueSetterTouchedFirst = snapshot.blue().setterTouchedFirst();
+            redBlockUsed = snapshot.red().blockUsed();
+            blueBlockUsed = snapshot.blue().blockUsed();
+            redAttackLocked = snapshot.red().attackLocked();
+            blueAttackLocked = snapshot.blue().attackLocked();
         }
 
         public static RallyContactState from(GameModel model) {
-            return new RallyContactState(
-                    model.redHitCount, model.blueHitCount,
-                    model.getLastHitterIndexForNetwork(true), model.getLastHitterIndexForNetwork(false),
-                    encodeNullableBoolean(model.getLastHitTeam()),
-                    model.wasLastTouchBlockForNetwork(), model.isServeReceptionComplete(),
-                    model.hasSetterTouched(true), model.hasSetterTouched(false),
-                    model.wasSetterTouchedFirst(true), model.wasSetterTouchedFirst(false),
-                    model.hasBlocked(true), model.hasBlocked(false)
-            );
+            return new RallyContactState(model.captureRallyContacts());
         }
 
         public void applyTo(GameModel model) {
-            model.applyNetworkRallyContactState(
-                    redHitCount, blueHitCount, decodeNullableBoolean(lastHitTeamCode),
-                    lastTouchWasBlock, serveReceptionComplete,
-                    redLastHitterIndex, blueLastHitterIndex,
-                    redSetterTouched, blueSetterTouched,
-                    redSetterTouchedFirst, blueSetterTouchedFirst,
-                    redBlockUsed, blueBlockUsed
-            );
+            model.applyNetworkRallyContactState(new RallyContactSnapshot(
+                    new RallyContactSnapshot.TeamContacts(redHitCount, redLastHitterIndex, redSetterTouched,
+                            redSetterTouchedFirst, redBlockUsed, redAttackLocked),
+                    new RallyContactSnapshot.TeamContacts(blueHitCount, blueLastHitterIndex, blueSetterTouched,
+                            blueSetterTouchedFirst, blueBlockUsed, blueAttackLocked),
+                    decodeNullableBoolean(lastHitTeamCode), lastTouchWasBlock, serveReceptionComplete));
         }
     }
 
@@ -209,6 +207,8 @@ public final class Packet {
         public final int transientMessageColorCode;
         public final boolean pendingTouchOut;
         public final int pendingTouchOutWinnerCode;
+        public final int netFlashFrames;
+        public final boolean landingSmoke;
 
         public CompactState(
                 BallState ball,
@@ -227,7 +227,8 @@ public final class Packet {
                 int transientMessageTimer,
                 int transientMessageColorCode,
                 boolean pendingTouchOut,
-                int pendingTouchOutWinnerCode
+                int pendingTouchOutWinnerCode,
+                int netFlashFrames, boolean landingSmoke
         ) {
             this.ball = ball;
             this.redTeam = redTeam;
@@ -246,6 +247,8 @@ public final class Packet {
             this.transientMessageColorCode = transientMessageColorCode;
             this.pendingTouchOut = pendingTouchOut;
             this.pendingTouchOutWinnerCode = pendingTouchOutWinnerCode;
+            this.netFlashFrames = netFlashFrames;
+            this.landingSmoke = landingSmoke;
         }
 
         public static CompactState from(GameModel model) {
@@ -266,7 +269,8 @@ public final class Packet {
                     model.transientMessageTimer,
                     encodeNullableBoolean(model.transientMessageIsRed),
                     model.pendingTouchOut,
-                    encodeNullableBoolean(model.pendingTouchOutWinner)
+                    encodeNullableBoolean(model.pendingTouchOutWinner),
+                    model.netFlashFrames, model.landingSmokeThisFrame
             );
         }
 
@@ -280,6 +284,7 @@ public final class Packet {
         }
 
         private void applyTo(GameModel model, boolean preserveAnimations) {
+            model.netFlashFrames = netFlashFrames;
             ball.applyTo(model.ball);
             if (preserveAnimations) {
                 redTeam.applyMotionTo(model.redTeam);
@@ -299,14 +304,11 @@ public final class Packet {
             model.pendingTouchOut = pendingTouchOut;
             model.pendingTouchOutWinner = decodeNullableBoolean(pendingTouchOutWinnerCode);
 
-            ServeState[] states = ServeState.values();
-            ServeState serveState = serveStateOrdinal >= 0 && serveStateOrdinal < states.length
-                    ? states[serveStateOrdinal]
-                    : ServeState.WAITING_FOR_SERVE;
+            ServeState[] states = SERVE_STATES;
+            ServeState serveState = states[serveStateOrdinal];
             model.getServeHandler().applyNetworkState(serveState, redServing);
             rallyContacts.applyTo(model);
             model.applyNetworkRallyPhase(rallyOver, deadBallTimer);
-            model.resumeNetworkPrediction();
         }
     }
 
@@ -367,10 +369,10 @@ public final class Packet {
     }
 
     public static final class TeamState {
-        public final PlayerState[] players;
+        public final List<PlayerState> players;
 
         public TeamState(PlayerState[] players) {
-            this.players = players;
+            this.players = List.of(players);
         }
 
         public static TeamState from(Team team) {
@@ -384,15 +386,15 @@ public final class Packet {
 
         public void applyTo(Team team) {
             Player[] targets = team.getPlayers();
-            for (int i = 0; i < targets.length && i < players.length; i++) {
-                players[i].applyTo(targets[i]);
+            for (int i = 0; i < targets.length && i < players.size(); i++) {
+                players.get(i).applyTo(targets[i]);
             }
         }
 
         public void applyMotionTo(Team team) {
             Player[] targets = team.getPlayers();
-            for (int i = 0; i < targets.length && i < players.length; i++) {
-                players[i].applyMotionTo(targets[i]);
+            for (int i = 0; i < targets.length && i < players.size(); i++) {
+                players.get(i).applyMotionTo(targets[i]);
             }
         }
     }
@@ -404,12 +406,11 @@ public final class Packet {
         public final double vx;
         public final double vy;
         public final boolean jumping;
-        public final boolean attacking;
-        public final boolean blocking;
         public final boolean diving;
         public final boolean mirrorImage;
-        public final double jumpStartX;
+        public final double jumpStartCenterX;
         public final int actionOrdinal;
+        public final int animationFrameIndex;
         public final boolean attackHitBoxEnabled;
         public final int countedBlockJumps;
         public final boolean opponentFirstTouchSeen;
@@ -430,12 +431,11 @@ public final class Packet {
                 double vx,
                 double vy,
                 boolean jumping,
-                boolean attacking,
-                boolean blocking,
                 boolean diving,
                 boolean mirrorImage,
-                double jumpStartX,
+                double jumpStartCenterX,
                 int actionOrdinal,
+                int animationFrameIndex,
                 boolean attackHitBoxEnabled,
                 int countedBlockJumps,
                 boolean opponentFirstTouchSeen,
@@ -453,12 +453,11 @@ public final class Packet {
             this.vx = vx;
             this.vy = vy;
             this.jumping = jumping;
-            this.attacking = attacking;
-            this.blocking = blocking;
             this.diving = diving;
             this.mirrorImage = mirrorImage;
-            this.jumpStartX = jumpStartX;
+            this.jumpStartCenterX = jumpStartCenterX;
             this.actionOrdinal = actionOrdinal;
+            this.animationFrameIndex = animationFrameIndex;
             this.attackHitBoxEnabled = attackHitBoxEnabled;
             this.countedBlockJumps = countedBlockJumps;
             this.opponentFirstTouchSeen = opponentFirstTouchSeen;
@@ -479,12 +478,11 @@ public final class Packet {
                     player.vx,
                     player.vy,
                     player.jumping,
-                    player.attacking,
-                    player.blocking,
                     player.diving,
                     player.mirrorImage,
-                    player.jumpStartX,
+                    player.jumpStartCenterX,
                     player.getAction().ordinal(),
+                    player.getAnimationFrameIndex(),
                     player.attackHitBox.enabled,
                     player instanceof QuickAttacker mb ? mb.getCountedBlockJumps() : 0,
                     player instanceof QuickAttacker mb ? mb.hasSeenOpponentFirstTouch() : false,
@@ -505,12 +503,10 @@ public final class Packet {
                 return;
             }
 
-            PlayerAction[] actions = PlayerAction.values();
+            PlayerAction[] actions = PLAYER_ACTIONS;
             player.applyNetworkAction(
-                    actionOrdinal >= 0 && actionOrdinal < actions.length
-                            ? actions[actionOrdinal]
-                            : PlayerAction.IDLE,
-                    assetName
+                    actions[actionOrdinal],
+                    assetName, animationFrameIndex
             );
         }
 
@@ -521,16 +517,14 @@ public final class Packet {
             player.vx = vx;
             player.vy = vy;
             player.jumping = jumping;
-            player.attacking = attacking;
-            player.blocking = blocking;
             player.diving = diving;
             player.mirrorImage = mirrorImage;
-            player.jumpStartX = jumpStartX;
+            player.jumpStartCenterX = jumpStartCenterX;
             if (player instanceof QuickAttacker mb) {
                 mb.applyBlockJumpState(countedBlockJumps, opponentFirstTouchSeen);
             }
             if (player instanceof BackPlayer backPlayer && jumping) {
-                backPlayer.syncJumpAirSpeed(vx);
+                backPlayer.applyJumpVelocityX(vx);
             }
             player.hitBox.set(
                     hitBoxOffsetX,
@@ -541,16 +535,11 @@ public final class Packet {
                     hitBoxArcHeight,
                     hitBoxRotationDegrees
             );
-            PlayerAction[] actions = PlayerAction.values();
-            PlayerAction serverAction = actionOrdinal >= 0 && actionOrdinal < actions.length
-                    ? actions[actionOrdinal]
-                    : PlayerAction.IDLE;
+            PlayerAction[] actions = PLAYER_ACTIONS;
+            PlayerAction serverAction = actions[actionOrdinal];
             if (player instanceof QuickAttacker || player.getAction() != serverAction
-                    || !player.isAssetCompatibleWith(serverAction)
-                    || (!player.isAnimationPlaying() && !player.assetName.equals(assetName))) {
-                player.applyNetworkAction(serverAction, assetName);
-            } else {
-                player.setActionForNetwork(serverAction);
+                    || !player.isAnimationPlaying()) {
+                player.applyNetworkAction(serverAction, assetName, animationFrameIndex);
             }
 
             if (attackHitBoxEnabled) {

@@ -11,7 +11,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
 import model.GameConfig;
 
-public class NetHitBox {
+public final class NetHitBox {
     private double centerX;
     private double topY;
     private double width;
@@ -31,6 +31,10 @@ public class NetHitBox {
     }
 
     public void set(double centerX, double topY, double width, double height) {
+        if (!Double.isFinite(centerX) || !Double.isFinite(topY)
+                || !Double.isFinite(width) || !Double.isFinite(height) || width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Invalid net hitbox geometry");
+        }
         this.centerX = centerX;
         this.topY = topY;
         this.width = width;

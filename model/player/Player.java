@@ -24,31 +24,30 @@ public abstract class Player {
     public int imageHeight = GameConfig.PLAYER_IMAGE_HEIGHT;
     public HitBox hitBox;
 
-    // 預留給之後扣球判斷使用；目前不參與球的碰撞。
+    // 扣球與空中舉球使用的攻擊區域。
     public AttackHitBox attackHitBox;
 
     public boolean jumping;
-    public boolean attacking;
-    public boolean blocking;
     public boolean diving;
     public boolean redSide;
     public boolean mirrorImage = false;
 
     // 當次跳起的起跳 X 座標（用於判定三米線違規）
-    public double jumpStartX = Double.NaN;
+    public double jumpStartCenterX = Double.NaN;
     protected final PlayerAnimation animation;
     protected final PlayerActionAnimator actionAnimator;
     protected PlayerAction action = PlayerAction.IDLE;
     private boolean attackAttemptThisFrame;
     private boolean ballInAttackHitBoxWhenSwingStarted;
     private boolean attackAttemptStartedInAir;
+    private double attackTakeoffCenterX = Double.NaN;
     private boolean heldAttackQueued;
     private boolean airSetAttemptThisFrame;
 
     public double minX = GameConfig.WORLD_LEFT;
     public double maxX = GameConfig.WORLD_RIGHT;
 
-    public Player(String assetName, double x, double y, boolean redSide) {
+    Player(String assetName, double x, double y, boolean redSide) {
         this.assetName = assetName;
         this.x = x;
         this.y = y;
@@ -67,6 +66,7 @@ public abstract class Player {
         attackAttemptThisFrame = false;
         ballInAttackHitBoxWhenSwingStarted = false;
         attackAttemptStartedInAir = false;
+        attackTakeoffCenterX = Double.NaN;
         heldAttackQueued = false;
         airSetAttemptThisFrame = false;
         PlayerPhysics.resetToInitial(this);
@@ -87,20 +87,20 @@ public abstract class Player {
     }
 
     public boolean isBlockHitBoxActive() {
-        return action == PlayerAction.BLOCK && isShowingActionFrame("block2");
+        return getBlockPhase() == BlockPhase.HANDS_EXTENDED;
     }
 
-    protected boolean isShowingActionFrame(String actionName) {
-        return assetName.equals(teamAsset(actionName));
+    public BlockPhase getBlockPhase() {
+        if (action != PlayerAction.BLOCK) return BlockPhase.INACTIVE;
+        return switch (animation.getFrameIndex()) {
+            case 0 -> BlockPhase.RAISING;
+            case 1 -> BlockPhase.HANDS_EXTENDED;
+            case 2 -> BlockPhase.RETRACTING;
+            default -> BlockPhase.INACTIVE;
+        };
     }
 
-    public double getHitBoxCenterX() {
-        return hitBox.getCenterX();
-    }
-
-    public double getHitBoxCenterY() {
-        return hitBox.getCenterY();
-    }
+    public int getAnimationFrameIndex() { return animation.getFrameIndex(); }
 
     public boolean isAttackReady() {
         return action == PlayerAction.ATTACK_READY;
@@ -108,14 +108,6 @@ public abstract class Player {
 
     public boolean isAttackSwinging() {
         return action == PlayerAction.ATTACK_SWING;
-    }
-
-    public boolean isReceiving() {
-        return action == PlayerAction.RECEIVING;
-    }
-
-    public boolean isSetting() {
-        return action == PlayerAction.SETTING;
     }
 
     public boolean isMovementLockedByAnimation() {
@@ -134,9 +126,9 @@ public abstract class Player {
         actionAnimator.playDive();
     }
 
-    protected void startAttackReady(double horizontalSpeed) {
+    protected void startAttackReady(double velocityX) {
         heldAttackQueued = false;
-        actionAnimator.startAttackReady(horizontalSpeed);
+        actionAnimator.startAttackReady(velocityX);
     }
 
     public void startAttackSwingAnimation() {
@@ -150,6 +142,12 @@ public abstract class Player {
     protected void queueAttackAttempt() {
         attackAttemptThisFrame = true;
         attackAttemptStartedInAir = jumping;
+        attackTakeoffCenterX = jumpStartCenterX;
+    }
+
+    /** 當幀提出請求時的起跳中心；落地清除物理狀態後仍可完成犯規判決。 */
+    public double getAttackTakeoffCenterX() {
+        return Double.isNaN(attackTakeoffCenterX) ? jumpStartCenterX : attackTakeoffCenterX;
     }
 
     public boolean hasAirSetAttemptThisFrame() {
@@ -190,6 +188,9 @@ public abstract class Player {
 
     /** 球移動前確認本幀開始揮臂時已與攻擊框重疊，不以球移動後的位置補判。 */
     public void captureAttackAttemptBallOverlap(Ball ball) {
+        if (attackAttemptThisFrame && jumping && Double.isNaN(attackTakeoffCenterX)) {
+            attackTakeoffCenterX = jumpStartCenterX;
+        }
         ballInAttackHitBoxWhenSwingStarted = attackAttemptThisFrame
                 && (ballInAttackHitBoxWhenSwingStarted || attackHitBox.intersectsBall(ball));
     }
@@ -198,6 +199,7 @@ public abstract class Player {
         attackAttemptThisFrame = false;
         ballInAttackHitBoxWhenSwingStarted = false;
         attackAttemptStartedInAir = false;
+        attackTakeoffCenterX = Double.NaN;
         airSetAttemptThisFrame = false;
     }
 
@@ -217,17 +219,6 @@ public abstract class Player {
         actionAnimator.updateActionState();
     }
 
-    /**
-     * Client 等待 Server 回合結果時，只延續既有角色動作的視覺與落地。
-     * 不讀取新的玩家輸入，也不自行開始新的角色動作。
-     */
-    public void updateWhileAwaitingAuthority() {
-        clearAttackAttempt();
-        vx = 0;
-        applyGravity();
-        updateActionAnimation();
-    }
-
     protected void finishAction() {
         actionAnimator.finishAction();
     }
@@ -245,35 +236,15 @@ public abstract class Player {
         return action;
     }
 
-    public void setActionForNetwork(PlayerAction action) {
-        this.action = action == null ? PlayerAction.IDLE : action;
-    }
-
     /**
      * 套用 Server 快照指定的動作與圖片，並停止本地尚未結束的動畫序列。
      * 避免舊動畫在下一幀覆蓋 Server 已同步的角色畫面。
      */
-    public void applyNetworkAction(PlayerAction action, String assetName) {
+    public void applyNetworkAction(PlayerAction action, String assetName, int frameIndex) {
         this.action = action == null ? PlayerAction.IDLE : action;
         if (assetName != null && !assetName.isBlank()) {
-            animation.applyNetworkAsset(assetName);
+            animation.applyNetworkAsset(assetName, frameIndex);
         }
-    }
-
-    public boolean isAssetCompatibleWith(PlayerAction serverAction) {
-        String name = assetName;
-        return switch (serverAction) {
-            case IDLE -> !name.contains(" run") && !name.contains(" dive")
-                    && !name.contains(" attack") && !name.contains(" block")
-                    && !name.contains(" setting") && !name.contains(" receive");
-            case RUN_APPROACH, RUN_LOOP, RUN_RETURN -> name.contains(" run");
-            case ATTACK_READY -> name.contains(" attack1");
-            case ATTACK_SWING -> name.contains(" attack2") || name.contains(" attack3");
-            case BLOCK -> name.contains(" block");
-            case DIVE -> name.contains(" dive");
-            case SETTING, AIR_SETTING -> name.contains(" setting");
-            case RECEIVING -> name.contains(" receive");
-        };
     }
 
     public boolean isAnimationPlaying() {

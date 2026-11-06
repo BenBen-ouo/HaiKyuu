@@ -20,12 +20,28 @@ import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.util.List;
 import model.GameConfig;
-import model.effect.SpikeEffect;
 
 public class SpikeEffectRenderer {
+    private static final float RED_HUE = 0.0f;
+    private static final float BLUE_HUE = 0.61f;
+    private static final float TRAIL_SATURATION = 0.9f;
+    private static final float TRAIL_BRIGHTNESS = 1.0f;
+    private static final float TRAIL_OUTER_WIDTH_PX = 12.0f;
+    private static final float TRAIL_INNER_WIDTH_PX = 5.0f;
+    private static final int TRAIL_OUTER_ALPHA = 100;
+    private static final int TRAIL_INNER_ALPHA = 225;
+    private static final float SMOKE_LAYER_ALPHA = 0.6f;
+    private static final double SMOKE_PARTICLE_ALPHA = 0.20;
+    private static final float SMOKE_CENTER_SHADE = 0.18f;
+    private static final float SMOKE_EDGE_SHADE = 0.12f;
+    private static final float SMOKE_EDGE_ALPHA_MULTIPLIER = 0.5f;
+    private static final float SMOKE_VERTICAL_SCALE = 0.6f;
+    private static final int BLUR_KERNEL_SIZE = 5;
+    private static final int[] GAUSSIAN_WEIGHTS = {1, 4, 6, 4, 1};
+    private static final float GAUSSIAN_WEIGHT_SUM = 256f;
     private static final float[] GRADIENT_DISTANCES = {0.0f, 0.6f, 1.0f};
     private final ConvolveOp smokeBlur = new ConvolveOp(
-            new Kernel(5, 5, createGaussianKernel()),
+            new Kernel(BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE, createGaussianKernel()),
             ConvolveOp.EDGE_NO_OP,
             null
     );
@@ -33,12 +49,12 @@ public class SpikeEffectRenderer {
     private BufferedImage smokeLayer;
     private BufferedImage blurredSmoke;
 
-    public void draw(Graphics2D g, SpikeEffect spikeEffect) {
-        drawTrail(g, spikeEffect.getTrailPoints());
-        drawSmoke(g, spikeEffect.getSmokeParticles());
+    public void draw(Graphics2D g, RenderFrame frame) {
+        drawTrail(g, frame.trail());
+        drawSmoke(g, frame.smoke());
     }
 
-    private void drawTrail(Graphics2D g, List<SpikeEffect.TrailPoint> points) {
+    private void drawTrail(Graphics2D g, List<RenderFrame.TrailPoint> points) {
         if (points.size() < 2) {
             return;
         }
@@ -51,11 +67,11 @@ public class SpikeEffectRenderer {
             );
 
             for (int i = 0; i < points.size() - 1; i++) {
-                SpikeEffect.TrailPoint first = points.get(i);
-                SpikeEffect.TrailPoint second = points.get(i + 1);
+                RenderFrame.TrailPoint first = points.get(i);
+                RenderFrame.TrailPoint second = points.get(i + 1);
 
                 // 不把紅、藍兩隊不同扣球的軌跡接成一條線。
-                if (first.isRedTeam != second.isRedTeam) {
+                if (first.isRedTeam() != second.isRedTeam()) {
                     continue;
                 }
 
@@ -65,29 +81,29 @@ public class SpikeEffectRenderer {
                 }
 
                 Color baseColor = Color.getHSBColor(
-                        first.isRedTeam ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE,
-                        SpikeEffect.TRAIL_SATURATION,
-                        SpikeEffect.TRAIL_BRIGHTNESS
+                        first.isRedTeam() ? RED_HUE : BLUE_HUE,
+                        TRAIL_SATURATION,
+                        TRAIL_BRIGHTNESS
                 );
-                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, 12.0f, 100);
-                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, 5.0f, 225);
+                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, TRAIL_OUTER_WIDTH_PX, TRAIL_OUTER_ALPHA);
+                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, TRAIL_INNER_WIDTH_PX, TRAIL_INNER_ALPHA);
             }
         } finally {
             trailGraphics.dispose();
         }
     }
 
-    private double averageLifeRatio(SpikeEffect.TrailPoint first, SpikeEffect.TrailPoint second) {
+    private double averageLifeRatio(RenderFrame.TrailPoint first, RenderFrame.TrailPoint second) {
         return (
-                (double) first.remainingFrames / first.maxFrames
-                        + (double) second.remainingFrames / second.maxFrames
+                (double) first.remainingFrames() / first.maxFrames()
+                        + (double) second.remainingFrames() / second.maxFrames()
         ) / 2.0;
     }
 
     private void drawTrailSegment(
             Graphics2D g,
-            SpikeEffect.TrailPoint first,
-            SpikeEffect.TrailPoint second,
+            RenderFrame.TrailPoint first,
+            RenderFrame.TrailPoint second,
             Color baseColor,
             double lifeRatio,
             float baseStrokeWidth,
@@ -104,10 +120,10 @@ public class SpikeEffectRenderer {
                 BasicStroke.CAP_ROUND,
                 BasicStroke.JOIN_ROUND
         ));
-        g.drawLine((int) first.x, (int) first.y, (int) second.x, (int) second.y);
+        g.drawLine((int) first.x(), (int) first.y(), (int) second.x(), (int) second.y());
     }
 
-    private void drawSmoke(Graphics2D g, List<SpikeEffect.SmokeParticle> smokeParticles) {
+    private void drawSmoke(Graphics2D g, List<RenderFrame.Smoke> smokeParticles) {
         if (smokeParticles.isEmpty()) {
             return;
         }
@@ -122,7 +138,7 @@ public class SpikeEffectRenderer {
                     RenderingHints.KEY_ANTIALIASING,
                     RenderingHints.VALUE_ANTIALIAS_ON
             );
-            for (SpikeEffect.SmokeParticle particle : smokeParticles) {
+            for (RenderFrame.Smoke particle : smokeParticles) {
                 drawSmokeParticle(smokeGraphics, particle);
             }
         } finally {
@@ -133,30 +149,30 @@ public class SpikeEffectRenderer {
 
         Graphics2D outputGraphics = (Graphics2D) g.create();
         try {
-            outputGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
+            outputGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, SMOKE_LAYER_ALPHA));
             outputGraphics.drawImage(blurredSmoke, 0, 0, null);
         } finally {
             outputGraphics.dispose();
         }
     }
 
-    private void drawSmokeParticle(Graphics2D g, SpikeEffect.SmokeParticle particle) {
-        double lifeRatio = (double) particle.remainingFrames / particle.maxFrames;
+    private void drawSmokeParticle(Graphics2D g, RenderFrame.Smoke particle) {
+        double lifeRatio = (double) particle.remainingFrames() / particle.maxFrames();
         if (lifeRatio <= 0) {
             return;
         }
 
-        float baseAlpha = (float) (0.20 * lifeRatio);
-        float radius = (float) particle.currentRadius;
-        float centerX = (float) particle.x;
-        float centerY = (float) particle.y;
+        float baseAlpha = (float) (SMOKE_PARTICLE_ALPHA * lifeRatio);
+        float radius = (float) particle.currentRadius();
+        float centerX = (float) particle.x();
+        float centerY = (float) particle.y();
 
-        for (int i = 0; i < particle.blobCount; i++) {
-            float blobRadius = radius * particle.br[i];
-            float blobX = centerX + particle.ox[i];
-            float blobY = centerY + particle.oy[i];
-            g.setPaint(createSmokeGradient(blobX, blobY, blobRadius, baseAlpha, particle.ba[i]));
-            g.fill(createSmokeShape(particle, i, blobX, blobY, blobRadius));
+        for (RenderFrame.SmokeBlob blob : particle.blobs()) {
+            float blobRadius = radius * blob.radiusMultiplier();
+            float blobX = centerX + blob.offsetX();
+            float blobY = centerY + blob.offsetY();
+            g.setPaint(createSmokeGradient(blobX, blobY, blobRadius, baseAlpha, blob.alphaMultiplier()));
+            g.fill(createSmokeShape(blob, blobX, blobY, blobRadius));
         }
     }
 
@@ -168,8 +184,8 @@ public class SpikeEffectRenderer {
             float alphaMultiplier
     ) {
         Color[] colors = {
-                new Color(0.18f, 0.18f, 0.18f, baseAlpha * alphaMultiplier),
-                new Color(0.12f, 0.12f, 0.12f, baseAlpha * alphaMultiplier * 0.5f),
+                new Color(SMOKE_CENTER_SHADE, SMOKE_CENTER_SHADE, SMOKE_CENTER_SHADE, baseAlpha * alphaMultiplier),
+                new Color(SMOKE_EDGE_SHADE, SMOKE_EDGE_SHADE, SMOKE_EDGE_SHADE, baseAlpha * alphaMultiplier * SMOKE_EDGE_ALPHA_MULTIPLIER),
                 new Color(0f, 0f, 0f, 0f)
         };
         return new RadialGradientPaint(
@@ -182,20 +198,19 @@ public class SpikeEffectRenderer {
     }
 
     private Shape createSmokeShape(
-            SpikeEffect.SmokeParticle particle,
-            int blobIndex,
+            RenderFrame.SmokeBlob blob,
             float blobX,
             float blobY,
             float blobRadius
     ) {
-        float[] offsets = particle.shapeOffset[blobIndex];
+        List<Float> offsets = blob.shape();
         Path2D.Float shape = new Path2D.Float();
 
-        for (int pointIndex = 0; pointIndex < offsets.length; pointIndex++) {
-            double angle = 2.0 * Math.PI * pointIndex / offsets.length;
-            float multiplier = offsets[pointIndex];
+        for (int pointIndex = 0; pointIndex < offsets.size(); pointIndex++) {
+            double angle = 2.0 * Math.PI * pointIndex / offsets.size();
+            float multiplier = offsets.get(pointIndex);
             float x = blobX + (float) Math.cos(angle) * blobRadius * multiplier;
-            float y = blobY + (float) Math.sin(angle) * blobRadius * multiplier * 0.6f;
+            float y = blobY + (float) Math.sin(angle) * blobRadius * multiplier * SMOKE_VERTICAL_SCALE;
 
             if (pointIndex == 0) {
                 shape.moveTo(x, y);
@@ -206,7 +221,7 @@ public class SpikeEffectRenderer {
 
         shape.closePath();
         AffineTransform rotation = AffineTransform.getRotateInstance(
-                particle.rot[blobIndex],
+                blob.rotationRadians(),
                 blobX,
                 blobY
         );
@@ -235,13 +250,12 @@ public class SpikeEffectRenderer {
     }
 
     private static float[] createGaussianKernel() {
-        int[] gaussianValues = {1, 4, 6, 4, 1};
-        float[] kernelValues = new float[25];
+        float[] kernelValues = new float[BLUR_KERNEL_SIZE * BLUR_KERNEL_SIZE];
 
-        for (int row = 0; row < 5; row++) {
-            for (int column = 0; column < 5; column++) {
-                kernelValues[row * 5 + column] =
-                        (gaussianValues[row] * gaussianValues[column]) / 256f;
+        for (int row = 0; row < BLUR_KERNEL_SIZE; row++) {
+            for (int column = 0; column < BLUR_KERNEL_SIZE; column++) {
+                kernelValues[row * BLUR_KERNEL_SIZE + column] =
+                        (GAUSSIAN_WEIGHTS[row] * GAUSSIAN_WEIGHTS[column]) / GAUSSIAN_WEIGHT_SUM;
             }
         }
         return kernelValues;

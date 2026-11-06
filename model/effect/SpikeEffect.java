@@ -1,5 +1,5 @@
 /*
-定義扣球特效資料，包含扣球軌跡與落地煙霧粒子的生命週期管理，並提供 HSB 色彩配置。
+定義扣球軌跡與落地煙霧粒子的資料及生命週期。
 */
 package model.effect;
 
@@ -8,12 +8,12 @@ import java.util.Iterator;
 import java.util.List;
 
 public class SpikeEffect {
-    // HSB 顏色設定（供後續調整亮度）
-    // 預設紅隊使用 Hue 0.0（紅色），藍隊使用 Hue 0.61（藍色）
-    public static float RED_HUE = 0.0f;
-    public static float BLUE_HUE = 0.61f;
-    public static float TRAIL_SATURATION = 0.9f;
-    public static float TRAIL_BRIGHTNESS = 1.0f;
+    private static final int MAX_TRAIL_POINTS = 40;
+    private static final int TRAIL_DURATION_FRAMES = 10;
+    private static final double SMOKE_START_RADIUS = 25;
+    private static final double SMOKE_MAX_RADIUS = 55;
+    private static final int SMOKE_DURATION_FRAMES = 50;
+    private static final double SMOKE_INITIAL_VELOCITY_Y = -0.3;
 
     public static class TrailPoint {
         public double x, y;
@@ -137,23 +137,20 @@ public class SpikeEffect {
         if (!spikeTrailActive) return;
 
         // 限制軌跡點數量以避免大量分配與繪製開銷
-        final int MAX_TRAIL_POINTS = 40;
         if (trailPoints.size() >= MAX_TRAIL_POINTS) {
             // 移除最舊的點以保持長度恆定
             trailPoints.remove(0);
         }
 
         // 減少每個點的生命長度以降低持續繪製成本
-        trailPoints.add(new TrailPoint(x, y, 10, currentSpikeIsRed));
+        trailPoints.add(new TrailPoint(x, y, TRAIL_DURATION_FRAMES, currentSpikeIsRed));
     }
 
     public void spawnSmoke(double x, double y) {
         // 只產生一個煙霧圖層，移除先前的粒子後直接在落地點淡出
         smokeParticles.clear();
-        double startRad = 25;
-        double maxRad = 55;
-        int maxFr = 50;
-        smokeParticles.add(new SmokeParticle(x, y, 0, -0.3, startRad, maxRad, maxFr));
+        smokeParticles.add(new SmokeParticle(x, y, 0, SMOKE_INITIAL_VELOCITY_Y,
+                SMOKE_START_RADIUS, SMOKE_MAX_RADIUS, SMOKE_DURATION_FRAMES));
     }
 
     public void update() {

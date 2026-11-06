@@ -13,6 +13,10 @@ public class RallyScorer {
     private static final int MOVABLE_SCORE_FRAMES = 60;
     private static final int LOCKED_SCORE_FRAMES = 30;
     private static final int SCORE_FRAMES = MOVABLE_SCORE_FRAMES + LOCKED_SCORE_FRAMES;
+    // 首次給分由 handlePoint 統一為 SCORE_FRAMES；同幀覆寫沿用既有時序。
+    public static final int MESSAGE_OVERRIDE_FRAMES = 42;
+    private static final int POINTS_TO_WIN = 25;
+    private static final int REQUIRED_LEAD = 2;
 
     private final GameModel model;
     private boolean rallyOver = false;
@@ -64,7 +68,6 @@ public class RallyScorer {
                 model.getServeHandler().positionServerForServe();
                 model.ball.vx = 0;
                 model.ball.vy = 0;
-                model.effects.clear();
                 model.spikeEffect.clear();
                 model.observeLockedActions(redInput, blueInput);
             }
@@ -83,11 +86,11 @@ public class RallyScorer {
     /** 賽末得分後沿用相同物理與操作，直到重新開始；不進入下一球。 */
     public void updateFinishedMatch(TeamInput redInput, TeamInput blueInput) {
         updatePostPointMotion(redInput, blueInput);
+        model.updateTransientMessage();
     }
 
     private void updatePostPointMotion(TeamInput redInput, TeamInput blueInput) {
         model.updatePostPointBall();
-        model.effects.update();
         if (model.spikeEffect.isSpikeTrailActive()) {
             model.spikeEffect.addTrailPoint(model.ball.x, model.ball.y);
         }
@@ -96,7 +99,7 @@ public class RallyScorer {
 
         if (model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y
                 && model.spikeEffect.isSpikeTrailActive()) {
-            model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+            model.spawnLandingSmoke();
             model.spikeEffect.stopSpikeTrail();
         }
     }
@@ -104,7 +107,7 @@ public class RallyScorer {
     public void checkBallLanding() {
         if (!rallyOver && model.ball.y + model.ball.radius >= GameConfig.FLOOR_Y) {
             if (model.spikeEffect.isSpikeTrailActive()) {
-                model.spikeEffect.spawnSmoke(model.ball.x, GameConfig.FLOOR_Y);
+                model.spawnLandingSmoke();
                 model.spikeEffect.stopSpikeTrail();
             }
             boolean serveNotReceived = !model.isServeReceptionComplete();
@@ -134,7 +137,7 @@ public class RallyScorer {
             if (!isInNow) {
                 // 確認為 TOUCH OUT（落地仍在界外）
                 model.transientMessage = "TOUCH OUT";
-                model.transientMessageTimer = 42; // 0.7s
+                model.transientMessageTimer = MESSAGE_OVERRIDE_FRAMES;
                 model.transientMessageIsRed = winner;
                 handlePoint(winner != null && winner);
                 return;
@@ -151,7 +154,7 @@ public class RallyScorer {
         );
         // 顯示得分方式 IN / OUT，並且以得分隊配色顯示
         model.transientMessage = isIn ? "IN" : "OUT";
-        model.transientMessageTimer = 42; // 0.7s
+        model.transientMessageTimer = MESSAGE_OVERRIDE_FRAMES;
         model.transientMessageIsRed = redWins;
 
         handlePoint(redWins);
@@ -166,7 +169,7 @@ public class RallyScorer {
     public void awardPointWithMessage(boolean redWins, String message) {
         // 設置顯示文字與顏色（由 model 存放，由 MatchDisplay 繪製）
         model.transientMessage = message;
-        model.transientMessageTimer = 42; // 0.7s
+        model.transientMessageTimer = MESSAGE_OVERRIDE_FRAMES;
         model.transientMessageIsRed = redWins;
         handlePoint(redWins);
     }
@@ -189,19 +192,24 @@ public class RallyScorer {
             }
 
             // 檢查比賽勝利（25 分制，需領先 2 分）
-            if ((model.redScore >= 25 || model.blueScore >= 25) && Math.abs(model.redScore - model.blueScore) >= 2) {
+            if ((model.redScore >= POINTS_TO_WIN || model.blueScore >= POINTS_TO_WIN)
+                    && Math.abs(model.redScore - model.blueScore) >= REQUIRED_LEAD) {
                 model.matchOver = true;
                 model.matchWinnerRed = model.redScore > model.blueScore;
                 deadBallTimer = 0;
             }
         }
 
-        if (!model.matchOver && model.transientMessage != null) {
+        if (model.transientMessage != null) {
             model.transientMessageTimer = SCORE_FRAMES;
         }
     }
 
     private void prepareNextServe() {
+        model.pendingTouchOut = false;
+        model.pendingTouchOutWinner = null;
+        model.redAttackLocked = false;
+        model.blueAttackLocked = false;
         rallyOver = false;
         model.getServeHandler().setWaitingForServe(true);
         model.resetCounters();

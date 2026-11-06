@@ -1,30 +1,43 @@
 /*
-負責監聽鍵盤按下與放開，並轉換成紅隊與藍隊的 TeamInput。
+負責監聽鍵盤按下與放開，並轉換成紅隊與藍隊的 ControlInput。
 所有角色操作鍵、發球鍵與發球類型都從這裡整理成模型可讀的資料。
 */
 package controller;
 
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.FocusListener;
+import java.awt.event.FocusEvent;
 import java.util.HashSet;
 import java.util.Set;
-import model.TeamInput;
+import model.ControlInput;
 import model.serve.ServeType;
 
-public class KeyboardController implements KeyListener {
+public class KeyboardController implements KeyListener, FocusListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
     private boolean previousHitBoxTogglePressed;
 
-    public synchronized TeamInput getRedInput() {
-        TeamInput input = new TeamInput();
+    @Override
+    public synchronized void focusLost(FocusEvent event) {
+        pressedKeys.clear();
+        previousHitBoxTogglePressed = false;
+    }
+
+    @Override
+    public void focusGained(FocusEvent event) {
+        // 重新取得焦點時，等待實際按鍵事件，不恢復舊的按住狀態。
+    }
+
+    public synchronized ControlInput getRedInput() {
+        ControlInput input = new ControlInput();
 
         input.backLeft = isPressed(KeyEvent.VK_A);
         input.backRight = isPressed(KeyEvent.VK_D);
         input.backJump = isPressed(KeyEvent.VK_SPACE);
         input.backDive = isPressed(KeyEvent.VK_SPACE);
         input.setterJump = isPressed(KeyEvent.VK_K);
-        input.quickAttack = isPressed(KeyEvent.VK_L);
-        input.wingAttack = isPressed(KeyEvent.VK_J);
+        input.mbActionPressed = isPressed(KeyEvent.VK_L);
+        input.wingActionPressed = isPressed(KeyEvent.VK_J);
         input.airSetModifier = isPressed(KeyEvent.VK_A) && isPressed(KeyEvent.VK_D);
         input.spikeFlat = isPressed(KeyEvent.VK_D);
         input.spikeShort = isPressed(KeyEvent.VK_S);
@@ -35,16 +48,16 @@ public class KeyboardController implements KeyListener {
         return input;
     }
 
-    public synchronized TeamInput getBlueInput() {
-        TeamInput input = new TeamInput();
+    public synchronized ControlInput getBlueInput() {
+        ControlInput input = new ControlInput();
 
         input.backLeft = isPressed(KeyEvent.VK_LEFT);
         input.backRight = isPressed(KeyEvent.VK_RIGHT);
         input.backJump = isPressed(KeyEvent.VK_NUMPAD0);
         input.backDive = isPressed(KeyEvent.VK_NUMPAD0);
         input.setterJump = isPressed(KeyEvent.VK_NUMPAD5);
-        input.quickAttack = isPressed(KeyEvent.VK_NUMPAD4);
-        input.wingAttack = isPressed(KeyEvent.VK_NUMPAD6);
+        input.mbActionPressed = isPressed(KeyEvent.VK_NUMPAD6);
+        input.wingActionPressed = isPressed(KeyEvent.VK_NUMPAD4);
         input.airSetModifier = isPressed(KeyEvent.VK_LEFT) && isPressed(KeyEvent.VK_RIGHT);
         input.spikeFlat = isPressed(KeyEvent.VK_LEFT);
         input.spikeShort = isPressed(KeyEvent.VK_DOWN);
@@ -55,8 +68,8 @@ public class KeyboardController implements KeyListener {
         input.backJump = input.backJump || isPressed(KeyEvent.VK_U);
         input.backDive = input.backDive || isPressed(KeyEvent.VK_U);
         input.setterJump = input.setterJump || isPressed(KeyEvent.VK_8);
-        input.quickAttack = input.quickAttack || isPressed(KeyEvent.VK_7);
-        input.wingAttack = input.wingAttack || isPressed(KeyEvent.VK_9);
+        input.mbActionPressed = input.mbActionPressed || isPressed(KeyEvent.VK_9);
+        input.wingActionPressed = input.wingActionPressed || isPressed(KeyEvent.VK_7);
         input.servePressed = input.servePressed || isPressed(KeyEvent.VK_U);
 
         input.serveType = getBlueServeType(input);
@@ -94,7 +107,7 @@ public class KeyboardController implements KeyListener {
         return ServeType.NORMAL;
     }
 
-    private ServeType getBlueServeType(TeamInput input) {
+    private ServeType getBlueServeType(ControlInput input) {
         if (input.spikeLob) {
             return ServeType.CEILING;
         }

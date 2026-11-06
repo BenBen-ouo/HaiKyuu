@@ -12,12 +12,11 @@ import java.io.IOException;
 
 public final class UdpCodec {
     private static final int MAGIC = 0x484B5555; // HKUU
-    private static final short VERSION = 9;
+    private static final short VERSION = 11;
 
     private static final byte TYPE_HELLO = 1;
     private static final byte TYPE_WELCOME = 2;
     private static final byte TYPE_INPUT = 3;
-    private static final byte TYPE_REMOTE_INPUT = 4;
     private static final byte TYPE_EVENT = 5;
     private static final byte TYPE_CONTROL = 6;
     private static final byte TYPE_CONTROL_STATUS = 7;
@@ -64,25 +63,11 @@ public final class UdpCodec {
     public static final class InputFrame implements Decoded {
         public final long token;
         public final int sequence;
-        public final int scheduledServerTick;
         public final int inputMask;
 
-        private InputFrame(long token, int sequence, int scheduledServerTick, int inputMask) {
+        private InputFrame(long token, int sequence, int inputMask) {
             this.token = token;
             this.sequence = sequence;
-            this.scheduledServerTick = scheduledServerTick;
-            this.inputMask = inputMask;
-        }
-    }
-
-    public static final class RemoteInputFrame implements Decoded {
-        public final long token;
-        public final int serverTick;
-        public final int inputMask;
-
-        private RemoteInputFrame(long token, int serverTick, int inputMask) {
-            this.token = token;
-            this.serverTick = serverTick;
             this.inputMask = inputMask;
         }
     }
@@ -203,19 +188,10 @@ public final class UdpCodec {
         });
     }
 
-    public static byte[] input(long token, int sequence, int scheduledServerTick, int inputMask) throws IOException {
+    public static byte[] input(long token, int sequence, int inputMask) throws IOException {
         return write(TYPE_INPUT, out -> {
             out.writeLong(token);
             out.writeInt(sequence);
-            out.writeInt(scheduledServerTick);
-            out.writeInt(inputMask);
-        });
-    }
-
-    public static byte[] remoteInput(long token, int serverTick, int inputMask) throws IOException {
-        return write(TYPE_REMOTE_INPUT, out -> {
-            out.writeLong(token);
-            out.writeInt(serverTick);
             out.writeInt(inputMask);
         });
     }
@@ -255,6 +231,7 @@ public final class UdpCodec {
             NetworkStateCodec.writeRallyContacts(out, snapshot.rallyContacts);
             out.writeBoolean(snapshot.spikeTrailActive);
             out.writeBoolean(snapshot.spikeTrailRedSide);
+            out.writeInt(snapshot.netFlashFrames);
         });
     }
 
@@ -303,7 +280,7 @@ public final class UdpCodec {
                 return null;
             }
 
-            return switch (in.readByte()) {
+            Decoded decoded = switch (in.readByte()) {
                 case TYPE_HELLO -> new Hello(in.readLong());
                 case TYPE_WELCOME -> new Welcome(
                         in.readLong(),
@@ -312,8 +289,7 @@ public final class UdpCodec {
                         in.readInt(),
                         NetworkStateCodec.readState(in)
                 );
-                case TYPE_INPUT -> new InputFrame(in.readLong(), in.readInt(), in.readInt(), in.readInt());
-                case TYPE_REMOTE_INPUT -> new RemoteInputFrame(in.readLong(), in.readInt(), in.readInt());
+                case TYPE_INPUT -> new InputFrame(in.readLong(), in.readInt(), in.readInt());
                 case TYPE_EVENT -> new Event(
                         in.readLong(),
                         in.readInt(),
@@ -333,31 +309,36 @@ public final class UdpCodec {
                     int serverTick = in.readInt();
                     int sequence = in.readInt();
                     int revision = in.readInt();
-                    yield new WorldSnapshotFrame(token, serverTick, sequence, new Packet.WorldSnapshot(
+                    Packet.WorldSnapshot snapshot = new Packet.WorldSnapshot(
                             NetworkStateCodec.readBall(in),
                             NetworkStateCodec.readTeam(in),
                             NetworkStateCodec.readTeam(in),
                             NetworkStateCodec.readRallyContacts(in),
                             revision,
                             in.readBoolean(),
-                            in.readBoolean()
-                    ));
+                            in.readBoolean(), in.readInt()
+                    );
+                    if (snapshot.netFlashFrames < 0) throw new IOException("Invalid net flash duration");
+                    yield new WorldSnapshotFrame(token, serverTick, sequence, snapshot);
                 }
                 default -> null;
             };
+            return in.available() == 0 ? decoded : null;
         } catch (IOException | RuntimeException ignored) {
             return null;
         }
     }
 
-    private static Packet.EventType readEventType(int ordinal) {
+    private static Packet.EventType readEventType(int ordinal) throws IOException {
         Packet.EventType[] values = Packet.EventType.values();
-        return ordinal >= 0 && ordinal < values.length ? values[ordinal] : Packet.EventType.SCORE;
+        if (ordinal < 0 || ordinal >= values.length) throw new IOException("Invalid event type");
+        return values[ordinal];
     }
 
-    private static ControlAction readControlAction(int ordinal) {
+    private static ControlAction readControlAction(int ordinal) throws IOException {
         ControlAction[] values = ControlAction.values();
-        return ordinal >= 0 && ordinal < values.length ? values[ordinal] : ControlAction.CANCEL_RESET;
+        if (ordinal < 0 || ordinal >= values.length) throw new IOException("Invalid control action");
+        return values[ordinal];
     }
 
     private static byte[] write(byte type, Writer writer) throws IOException {

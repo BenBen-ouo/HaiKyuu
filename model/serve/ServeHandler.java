@@ -186,15 +186,12 @@ public class ServeHandler {
                 model.resetCounters();
                 model.resetBlockJumpCounts();
                 model.resetServeReception();
+                model.lockAttack(redServing);
             }
         }
         if (state == ServeState.SERVE_LAUNCHED && isServerOnGround()) {
             state = ServeState.IN_PLAY;
         }
-    }
-
-    public void updateAfterBall() {
-        // 拋球落地由 RallyScorer 判發球犯規；這裡不改變 Server 的球路。
     }
 
     public void finishFrame() {

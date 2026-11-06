@@ -1,143 +1,111 @@
-/*
-集中管理比賽相關的中間畫面顯示：
-- 頂部分數
-- 中央暫時訊息（IN / OUT / TOUCH OUT / 後排三米線）
-- 比賽結束的勝利畫面
-
-將顯示邏輯從 GameRenderer 抽出，方便維護與重用。
-*/
 package view;
 
-import java.awt.*;
-import model.*;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Composite;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.Stroke;
+import model.AppVersion;
+import model.GameConfig;
 
-public class MatchDisplay {
-    public void draw(Graphics2D g, GameModel model, boolean bluePerspective) {
+/** 讀取畫面快照，繪製版本、比分、得分原因與賽末結果。 */
+public final class MatchDisplay {
+    private static final Font VERSION_FONT = new Font("Arial", Font.PLAIN, 14);
+    private static final Font SCORE_FONT = new Font("Arial", Font.BOLD, 24);
+    private static final Font PRACTICE_FONT = new Font("Microsoft JhengHei", Font.PLAIN, 22);
+    private static final Font VICTORY_FONT = new Font("Arial", Font.BOLD, 48);
+    private static final Font JUDGMENT_MEASURE_FONT = new Font("Microsoft JhengHei", Font.BOLD, 48);
+    private static final Font JUDGMENT_FONT = new Font("Microsoft JhengHei", Font.BOLD, 36);
+    private static final Font RESTART_HINT_FONT = new Font("Microsoft JhengHei", Font.PLAIN, 20);
+    private static final Color RED_BORDER = new Color(200, 30, 30);
+    private static final Color RED_FILL = new Color(255, 220, 220);
+    private static final Color BLUE_BORDER = new Color(30, 80, 200);
+    private static final Color BLUE_FILL = new Color(220, 230, 255);
+    private static final AlphaComposite PANEL_COMPOSITE =
+            AlphaComposite.getInstance(AlphaComposite.SRC_OVER, .9f);
+    private static final BasicStroke PANEL_STROKE = new BasicStroke(4f);
+    private static final int VERSION_RIGHT_MARGIN_PX = 12;
+    private static final int VERSION_BASELINE_Y = 20;
+    private static final int SCORE_BASELINE_Y = 44;
+    private static final int PANEL_PADDING_X_PX = 16;
+    private static final int PANEL_EXTRA_HEIGHT_PX = 36;
+    private static final int PANEL_ARC_PX = 28;
+    private static final int RESTART_HINT_GAP_PX = 20;
+    private static final String VICTORY_MEASURE_TEXT = "RED WINS";
+    private static final String RESTART_HINT = "Press R to restart";
+
+    public void draw(Graphics2D g, RenderFrame.Match match, boolean bluePerspective) {
         g.setColor(Color.GRAY);
-        g.setFont(new Font("Arial", Font.PLAIN, 14));
-        FontMetrics versionMetrics = g.getFontMetrics();
+        g.setFont(VERSION_FONT);
         g.drawString(AppVersion.LABEL,
-                GameConfig.SCREEN_WIDTH - versionMetrics.stringWidth(AppVersion.LABEL) - 12,
-                20);
+                GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(AppVersion.LABEL)
+                        - VERSION_RIGHT_MARGIN_PX, VERSION_BASELINE_Y);
 
-        // 練習模式不顯示比分；一般對局依觀看隊伍排序。
-        String scoreText = model.isPracticeMode()
-                ? (model.isPracticeRedServing() ? "藍隊練習模式" : "紅隊練習模式")
-                : bluePerspective
-                        ? model.blueScore + " : " + model.redScore
-                        : model.redScore + " : " + model.blueScore;
+        String score = match.isPracticeMode()
+                ? (match.isPracticeRedServing() ? "右方練習模式" : "左方練習模式")
+                : bluePerspective ? match.blueScore() + " : " + match.redScore()
+                        : match.redScore() + " : " + match.blueScore();
         g.setColor(Color.BLACK);
-        g.setFont(model.isPracticeMode()
-                ? new Font("Microsoft JhengHei", Font.PLAIN, 22)
-                : new Font("Arial", Font.BOLD, 24));
-        FontMetrics scoreMetrics = g.getFontMetrics();
-        g.drawString(scoreText, (GameConfig.SCREEN_WIDTH - scoreMetrics.stringWidth(scoreText)) / 2, 44);
+        g.setFont(match.isPracticeMode() ? PRACTICE_FONT : SCORE_FONT);
+        g.drawString(score, (GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(score)) / 2,
+                SCORE_BASELINE_Y);
 
-        // 若比賽結束，顯示勝利框 (圓角、以贏家顏色)
-        if (model.matchOver) {
-            String msg = (model.matchWinnerRed != null && model.matchWinnerRed) ? "RED WINS" : "BLUE WINS";
-            g.setFont(new Font("Arial", Font.BOLD, 48));
-            FontMetrics fm = g.getFontMetrics();
-            int w = fm.stringWidth(msg);
-            int x = GameConfig.SCREEN_WIDTH / 2 - w / 2;
-            int y = GameConfig.SCREEN_HEIGHT / 2;
-
-            // 顏色以勝隊為主
-            Color borderColor = Color.BLACK;
-            Color fillColor = Color.WHITE;
-            if (model.matchWinnerRed != null) {
-                if (model.matchWinnerRed) {
-                    borderColor = new Color(200, 30, 30);
-                    fillColor = new Color(255, 220, 220);
-                } else {
-                    borderColor = new Color(30, 80, 200);
-                    fillColor = new Color(220, 230, 255);
-                }
-            }
-
-            Composite orig = g.getComposite();
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f));
-            g.setColor(fillColor);
-            int rx = x - 16;
-            int ry = y - fm.getAscent();
-            int rw = w + 32;
-            int rh = fm.getAscent() + 36;
-            int arc = 28;
-            g.fillRoundRect(rx, ry, rw, rh, arc, arc);
-            g.setComposite(orig);
-
-            Stroke origSt = g.getStroke();
-            g.setStroke(new BasicStroke(4f));
-            g.setColor(borderColor);
-            g.drawRoundRect(rx, ry, rw, rh, arc, arc);
-            g.setStroke(origSt);
-
-            g.setColor(Color.BLACK);
-            g.drawString(msg, x, y + fm.getAscent() / 2);
-
-            // 顯示重開提示
-            String hint = "Press R to restart";
-            g.setFont(new Font("Microsoft JhengHei", Font.PLAIN, 20));
-            FontMetrics hf = g.getFontMetrics();
-            int hw = hf.stringWidth(hint);
-            int hx = GameConfig.SCREEN_WIDTH / 2 - hw / 2;
-            int hy = y + fm.getAscent() + 20;
-            g.drawString(hint, hx, hy);
-
-            // 在 matchOver 時，不顯示其他 transient 訊息
-            return;
+        if (match.matchOver() && match.transientMessageTimer() <= 0) {
+            drawVictory(g, match.matchWinnerRed());
+        } else if (match.transientMessage() != null && match.transientMessageTimer() > 0) {
+            drawJudgment(g, match.transientMessage(), match.transientMessageIsRed());
         }
+    }
 
-        // 顯示暫時訊息（IN/OUT/TOUCH OUT/後排三米線）
-        if (model.transientMessage != null && model.transientMessageTimer > 0) {
-            String msg = model.transientMessage;
-            // 固定框大小，基於勝利字型寬度
-            Font winnerFont = new Font("Microsoft JhengHei", Font.BOLD, 48);
-            FontMetrics wfm = g.getFontMetrics(winnerFont);
-            int winnerTextW = wfm.stringWidth("RED WINS");
-            int winnerBoxW = winnerTextW + 32;
-            int winnerBoxH = wfm.getAscent() + 36;
+    private void drawVictory(Graphics2D g, Boolean redWinner) {
+        String text = Boolean.TRUE.equals(redWinner) ? "RED WINS" : "BLUE WINS";
+        g.setFont(VICTORY_FONT);
+        FontMetrics metrics = g.getFontMetrics();
+        int width = metrics.stringWidth(text);
+        int x = GameConfig.SCREEN_WIDTH / 2 - width / 2;
+        int y = GameConfig.SCREEN_HEIGHT / 2;
+        drawPanel(g, new Rectangle(x - PANEL_PADDING_X_PX, y - metrics.getAscent(),
+                width + PANEL_PADDING_X_PX * 2, metrics.getAscent() + PANEL_EXTRA_HEIGHT_PX), redWinner);
+        g.setColor(Color.BLACK);
+        g.drawString(text, x, y + metrics.getAscent() / 2);
 
-            int rx = GameConfig.SCREEN_WIDTH / 2 - winnerBoxW / 2;
-            int ry = GameConfig.SCREEN_HEIGHT / 2 - winnerBoxH / 2;
-            int rw = winnerBoxW;
-            int rh = winnerBoxH;
-            int arc = 28;
+        g.setFont(RESTART_HINT_FONT);
+        int hintX = GameConfig.SCREEN_WIDTH / 2 - g.getFontMetrics().stringWidth(RESTART_HINT) / 2;
+        g.drawString(RESTART_HINT, hintX, y + metrics.getAscent() + RESTART_HINT_GAP_PX);
+    }
 
-            // 顏色決定
-            Color borderColor = Color.BLACK;
-            Color fillColor = Color.WHITE;
-            if (model.transientMessageIsRed != null) {
-                if (model.transientMessageIsRed) {
-                    borderColor = new Color(200, 30, 30);
-                    fillColor = new Color(255, 220, 220);
-                } else {
-                    borderColor = new Color(30, 80, 200);
-                    fillColor = new Color(220, 230, 255);
-                }
-            }
+    private void drawJudgment(Graphics2D g, String text, Boolean redSide) {
+        FontMetrics measure = g.getFontMetrics(JUDGMENT_MEASURE_FONT);
+        int width = measure.stringWidth(VICTORY_MEASURE_TEXT) + PANEL_PADDING_X_PX * 2;
+        int height = measure.getAscent() + PANEL_EXTRA_HEIGHT_PX;
+        Rectangle bounds = new Rectangle(GameConfig.SCREEN_WIDTH / 2 - width / 2,
+                GameConfig.SCREEN_HEIGHT / 2 - height / 2, width, height);
+        drawPanel(g, bounds, redSide);
+        g.setFont(JUDGMENT_FONT);
+        FontMetrics metrics = g.getFontMetrics();
+        int x = bounds.x + (bounds.width - metrics.stringWidth(text)) / 2;
+        int baseline = bounds.y + (bounds.height - metrics.getAscent() - metrics.getDescent()) / 2
+                + metrics.getAscent();
+        g.setColor(Color.BLACK);
+        g.drawString(text, x, baseline);
+    }
 
-            Composite orig = g.getComposite();
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.9f));
-            g.setColor(fillColor);
-            g.fillRoundRect(rx, ry, rw, rh, arc, arc);
-            g.setComposite(orig);
-
-            Stroke origSt = g.getStroke();
-            g.setStroke(new BasicStroke(4f));
-            g.setColor(borderColor);
-            g.drawRoundRect(rx, ry, rw, rh, arc, arc);
-            g.setStroke(origSt);
-
-            // 中央置中文字
-            g.setFont(new Font("Microsoft JhengHei", Font.BOLD, 36));
-            FontMetrics fm = g.getFontMetrics();
-            int textW = fm.stringWidth(msg);
-            int tx = rx + (rw - textW) / 2;
-            int baseline = ry + (rh - (fm.getAscent() + fm.getDescent())) / 2 + fm.getAscent();
-
-            g.setColor(Color.BLACK);
-            g.drawString(msg, tx, baseline);
-        }
+    private void drawPanel(Graphics2D g, Rectangle bounds, Boolean redSide) {
+        Color fill = redSide == null ? Color.WHITE : redSide ? RED_FILL : BLUE_FILL;
+        Color border = redSide == null ? Color.BLACK : redSide ? RED_BORDER : BLUE_BORDER;
+        Composite originalComposite = g.getComposite();
+        g.setComposite(PANEL_COMPOSITE);
+        g.setColor(fill);
+        g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, PANEL_ARC_PX, PANEL_ARC_PX);
+        g.setComposite(originalComposite);
+        Stroke originalStroke = g.getStroke();
+        g.setStroke(PANEL_STROKE);
+        g.setColor(border);
+        g.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, PANEL_ARC_PX, PANEL_ARC_PX);
+        g.setStroke(originalStroke);
     }
 }

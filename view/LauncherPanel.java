@@ -17,6 +17,8 @@ import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
 public final class LauncherPanel extends JPanel {
+    @java.io.Serial
+    private static final long serialVersionUID = 1L;
     public interface Actions {
         void startLocal();
         void startPractice();
@@ -44,13 +46,16 @@ public final class LauncherPanel extends JPanel {
         localButton.addActionListener(event -> actions.startLocal());
         options.add(localButton);
 
-        JButton practiceButton = new JButton("紅隊練習模式");
+        JPanel practiceRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        practiceRow.setOpaque(false);
+        JButton practiceButton = new JButton("左方練習模式");
         practiceButton.addActionListener(event -> actions.startPractice());
-        options.add(practiceButton);
+        practiceRow.add(practiceButton);
 
-        JButton bluePracticeButton = new JButton("藍隊練習模式");
+        JButton bluePracticeButton = new JButton("右方練習模式");
         bluePracticeButton.addActionListener(event -> actions.startBluePractice());
-        options.add(bluePracticeButton);
+        practiceRow.add(bluePracticeButton);
+        options.add(practiceRow);
 
         JButton hostButton = new JButton("創立房間");
         hostButton.addActionListener(event -> showResult(actions.startHost()));

@@ -7,6 +7,8 @@ package model.ball;
 import model.GameConfig;
 
 public class Ball {
+    private static final double INITIAL_VELOCITY_X = 3.2;
+    private static final double INITIAL_VELOCITY_Y = -8.0;
     private enum NetCollisionSide {
         LEFT,
         RIGHT,
@@ -34,8 +36,8 @@ public class Ball {
         this.y = y;
         this.previousX = x;
         this.previousY = y;
-        this.vx = 3.2;
-        this.vy = -8.0;
+        this.vx = INITIAL_VELOCITY_X;
+        this.vy = INITIAL_VELOCITY_Y;
     }
 
     public void update() {

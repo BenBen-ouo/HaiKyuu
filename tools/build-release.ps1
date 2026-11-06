@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ReleaseReplacement.ps1')
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
 $workRoot = Join-Path $projectRoot '.release-build'
@@ -6,6 +7,10 @@ $workMarker = Join-Path $workRoot '.haikyuu-generated'
 $releaseRoot = Join-Path $projectRoot 'release'
 $releaseApp = Join-Path $releaseRoot 'HaiKyuu'
 $releaseMarker = Join-Path $releaseApp '.haikyuu-generated'
+$versionSource = Get-Content -LiteralPath (Join-Path $projectRoot 'model\AppVersion.java') -Raw -Encoding UTF8
+$versionMatch = [regex]::Match($versionSource, 'LABEL\s*=\s*"(v[0-9]+\.[0-9]+\.[0-9]+)"')
+if (-not $versionMatch.Success) { throw 'Cannot read release version from model/AppVersion.java.' }
+$releaseZip = Join-Path $releaseRoot ('HaiKyuu-' + $versionMatch.Groups[1].Value + '.zip')
 
 function Assert-SafePath([string]$target) {
     $full = [System.IO.Path]::GetFullPath($target).TrimEnd('\')
@@ -92,6 +97,9 @@ try {
         Assert-ReleaseNotRunning $releaseApp
     }
     if (Test-Path -LiteralPath $workRoot) {
+        if (Test-Path -LiteralPath (Join-Path $workRoot '.haikyuu-recovery-needed')) {
+            throw "Release recovery is pending. Preserve and inspect: $workRoot"
+        }
         if (-not (Test-Path -LiteralPath $workMarker)) {
             throw ".release-build has no generated marker. Inspect it first: $workRoot"
         }
@@ -109,9 +117,9 @@ try {
     Set-Content -LiteralPath $workMarker -Value 'HaiKyuu generated release build workspace' -Encoding UTF8
 
     Write-Host '1/6 Compiling game and tests...'
-    & $javac -encoding UTF-8 -d $classes Main.java
+    & $javac -Xlint:all -encoding UTF-8 -d $classes Main.java
     Assert-ToolSucceeded 'Game compilation'
-    & $javac -encoding UTF-8 -cp $classes -d $tests `
+    & $javac -Xlint:all -encoding UTF-8 -cp $classes -d $tests `
         tests\GameplayFlowTest.java tests\LauncherTest.java `
         tests\NetworkSyncTest.java tests\PackagingSmokeTest.java
     Assert-ToolSucceeded 'Test compilation'
@@ -122,6 +130,8 @@ try {
         & $java '-Djava.awt.headless=true' -cp $testClasspath $testClass
         Assert-ToolSucceeded $testClass
     }
+    & (Join-Path $projectRoot 'tests\ReleaseReplacementTest.ps1')
+    & (Join-Path $projectRoot 'tests\ArchitectureTest.ps1') -ClassesPath $classes -JdkBin $jdkBin
 
     Write-Host '3/6 Copying assets and building the standalone JAR...'
     $assetRoot = Join-Path $projectRoot 'assets'
@@ -151,7 +161,8 @@ try {
 
     Write-Host '5/6 Creating Windows app-image with bundled Java runtime...'
     & $jpackage --type app-image --name HaiKyuu --input $input `
-        --main-jar HaiKyuu.jar --main-class Main --dest $packageDest
+        --main-jar HaiKyuu.jar --main-class Main --dest $packageDest `
+        --app-version $versionMatch.Groups[1].Value.Substring(1)
     Assert-ToolSucceeded 'jpackage'
     $stagedApp = Join-Path $packageDest 'HaiKyuu'
     foreach ($required in @('HaiKyuu.exe', 'app\HaiKyuu.jar', 'runtime')) {
@@ -162,28 +173,37 @@ try {
     Set-Content -LiteralPath (Join-Path $stagedApp '.haikyuu-generated') `
         -Value 'HaiKyuu generated Windows app-image' -Encoding UTF8
 
-    Write-Host '6/6 Updating uncompressed release...'
+    Write-Host '6/6 Creating versioned ZIP and updating release...'
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression
+    $stagedZip = Join-Path $workRoot 'release.zip'
+    Assert-SafePath $stagedZip | Out-Null
+    $zipArchive = [System.IO.Compression.ZipFile]::Open($stagedZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in Get-ChildItem -LiteralPath $stagedApp -Recurse -File -Force) {
+            $relativePath = $file.FullName.Substring($stagedApp.Length).TrimStart('\').Replace('\', '/')
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zipArchive, $file.FullName, ('HaiKyuu/' + $relativePath),
+                [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally {
+        $zipArchive.Dispose()
+    }
+    $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($stagedZip)
+    try {
+        foreach ($required in @('HaiKyuu/HaiKyuu.exe', 'HaiKyuu/app/HaiKyuu.jar', 'HaiKyuu/runtime/lib/modules')) {
+            if ($null -eq $zipArchive.GetEntry($required)) { throw "ZIP is missing: $required" }
+        }
+    } finally {
+        $zipArchive.Dispose()
+    }
     New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
     Assert-SafePath $releaseApp | Out-Null
     $previousApp = Join-Path $workRoot 'previous-release'
     Assert-SafePath $previousApp | Out-Null
-    if (Test-Path -LiteralPath $releaseApp) {
-        if (-not (Test-Path -LiteralPath $releaseMarker)) {
-            throw "release/HaiKyuu has no generated marker. Inspect it first: $releaseApp"
-        }
-        Assert-ReleaseNotRunning $releaseApp
-        # Rename the complete old image first; a locked file cannot leave it half deleted.
-        Move-Item -LiteralPath $releaseApp -Destination $previousApp
-    }
-    try {
-        Move-Item -LiteralPath $stagedApp -Destination $releaseApp
-    } catch {
-        if ((Test-Path -LiteralPath $previousApp) -and
-                -not (Test-Path -LiteralPath $releaseApp)) {
-            Move-Item -LiteralPath $previousApp -Destination $releaseApp
-        }
-        throw
-    }
+    if (Test-Path -LiteralPath $releaseApp) { Assert-ReleaseNotRunning $releaseApp }
+    Install-ReleasePair -ProjectRoot $projectRoot -StagedApp $stagedApp -StagedZip $stagedZip `
+        -ReleaseApp $releaseApp -ReleaseZip $releaseZip -RecoveryRoot $workRoot
     $oldZipPath = Join-Path $releaseRoot 'HaiKyuu-Windows.zip'
     Assert-SafePath $oldZipPath | Out-Null
     if (Test-Path -LiteralPath $oldZipPath) {
@@ -197,6 +217,10 @@ try {
         }
     }
 
+    $previousZip = Join-Path $workRoot 'previous-release.zip'
+    Assert-SafePath $previousZip | Out-Null
+    if (Test-Path -LiteralPath $previousZip) { Remove-Item -LiteralPath $previousZip -Force }
+
     if (Test-Path -LiteralPath $workMarker) {
         try {
             Assert-SafePath $workRoot | Out-Null
@@ -208,6 +232,7 @@ try {
 
     Write-Host "Built: $releaseApp\HaiKyuu.exe"
     Write-Host "Distribute the whole uncompressed folder: $releaseApp"
+    Write-Host "GitHub Releases upload: $releaseZip"
     Write-Host 'Manual checks on a Java-free Windows PC and real LAN are still required.'
     exit 0
 } catch {

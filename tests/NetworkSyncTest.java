@@ -1,8 +1,12 @@
 package network;
 
 import java.net.InetAddress;
+import java.net.SocketException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import model.GameModel;
 import model.TeamInput;
 import model.player.PlayerAction;
@@ -12,12 +16,18 @@ import model.serve.ServeState;
 public final class NetworkSyncTest {
     public static void main(String[] args) throws Exception {
         testWorldSnapshotRoundTripAndOrdering();
+        testTypedRallyContactSnapshot();
         testBlockJumpCountSnapshot();
+        testBlockPhaseIsIndependentOfAssetName();
+        testClientAirSetWaitsForAuthority();
+        testBackRunStagesInClientPrediction();
+        testScoreLockResetsClientAcceleration();
         testRallyContactsWithoutReliableEvent();
         testReliableEventRestoresContactHistory();
         testReliableEventsStayInOrder();
         testServerKeepsUnacknowledgedEvents();
         testControlsStayInOrder();
+        testInputSamplesDoNotInventCombinations();
         testMotionSnapshotKeepsAnimationAlive();
         testAuthoritativeAttackSwingSnapshot();
         testMbSnapshotReconcilesActionAndAsset();
@@ -25,10 +35,113 @@ public final class NetworkSyncTest {
         testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
+        testNewRulesAndConfirmedLanding();
+        testCloseAfterRemoteAbort();
+        testClientInitializationFailureClosesTransport();
+        testInvalidPacketsAreRejected();
+        testResetClearsConfirmedEffects();
+        testConnectionTimeouts();
+        testDiagnosticFailureDisablesQueue();
+        testServerCloseBeforeRun();
         if (args.length > 0 && "loopback".equals(args[0])) {
             testLocalLoopback();
         }
+        awaitMatchWorkerShutdown();
         System.out.println("NetworkSyncTest passed");
+    }
+
+    private static void testScoreLockResetsClientAcceleration() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel client = new GameModel();
+            client.getServeHandler().setWaitingForServe(false);
+            var back = (redSide ? client.redTeam : client.blueTeam).backPlayer;
+            TeamInput run = new TeamInput();
+            run.backRight = redSide;
+            run.backLeft = !redSide;
+            for (int tick = 0; tick <= model.GameConfig.BACK_RUN_FOURTH_STAGE_END_FRAMES; tick++) {
+                client.updateForNetworkPrediction(run, redSide);
+            }
+            check(Math.abs(back.vx) == model.GameConfig.BACK_RUN_MAX_SPEED, "Client 先達到第五階速度");
+            // FLOW 事件會先歸位，再套用鎖定階段；即使沒有中間預測 tick 也須清理累計。
+            back.applyNetworkAction(PlayerAction.IDLE, back.assetName, 0);
+            client.applyNetworkRallyPhase(true, 30);
+            client.applyNetworkRallyPhase(false, 0);
+            client.updateForNetworkPrediction(run, redSide);
+            check(Math.abs(back.vx) == model.GameConfig.BACK_RUN_START_SPEED,
+                    "兩側 Client 下一球不沿用上一球的加速累計");
+        }
+    }
+
+    private static void testTypedRallyContactSnapshot() throws Exception {
+        var red = new model.rally.RallyContactSnapshot.TeamContacts(2, 1, true, true, false, true);
+        var blue = new model.rally.RallyContactSnapshot.TeamContacts(0, 2, false, false, true, false);
+        var contacts = new model.rally.RallyContactSnapshot(red, blue, false, true, true);
+        GameModel authoritative = new GameModel();
+        authoritative.applyNetworkRallyContactState(contacts);
+        check(authoritative.captureRallyContacts().equals(contacts),
+                "型別化回合資料一次套用，不交換紅藍欄位或漏掉接球／扣球鎖定");
+        GameModel client = new GameModel();
+        snapshot(1, 0, Packet.WorldSnapshot.from(authoritative, 0)).snapshot.rallyContacts.applyTo(client);
+        check(client.captureRallyContacts().equals(contacts), "回合資料經封包往返保持全部語意欄位");
+    }
+
+    private static void testBackRunStagesInClientPrediction() throws Exception {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel predicted = new GameModel();
+            predicted.getServeHandler().setWaitingForServe(false);
+            TeamInput run = new TeamInput();
+            run.backRight = redSide;
+            run.backLeft = !redSide;
+            var player = (redSide ? predicted.redTeam : predicted.blueTeam).backPlayer;
+            double[] speeds = {model.GameConfig.BACK_RUN_START_SPEED, model.GameConfig.BACK_RUN_SECOND_STAGE_SPEED,
+                    model.GameConfig.BACK_RUN_THIRD_STAGE_SPEED, model.GameConfig.BACK_RUN_FOURTH_STAGE_SPEED,
+                    model.GameConfig.BACK_RUN_MAX_SPEED};
+            double[] durationsSeconds = {.1, .2, .2, .2, .1};
+            for (int stage = 0; stage < speeds.length; stage++) {
+                double speed = speeds[stage];
+                predicted.updateForNetworkPrediction(Packet.decodeInput(Packet.encodeInput(run)), redSide);
+                check(Math.abs(player.vx) == speed, "兩側 Client 預測使用相同後排移速階段");
+                GameModel remote = new GameModel();
+                var state = snapshot(1, 0, Packet.WorldSnapshot.from(predicted, 0)).snapshot;
+                (redSide ? state.redTeam : state.blueTeam).applyMotionTo(redSide ? remote.redTeam : remote.blueTeam);
+                check((redSide ? remote.redTeam : remote.blueTeam).backPlayer.vx == player.vx,
+                        "每階段帶方向的移速可經權威快照傳遞");
+                int durationFrames = (int) Math.round(model.GameConfig.TICKS_PER_SECOND * durationsSeconds[stage]);
+                for (int tick = 1; tick < durationFrames; tick++) {
+                    predicted.updateForNetworkPrediction(run, redSide);
+                }
+            }
+        }
+    }
+
+    private static void testInputSamplesDoNotInventCombinations() throws Exception {
+        ServerPlayerSlot slot = new ServerPlayerSlot(true, 1, InetAddress.getLoopbackAddress(), 1);
+        TeamInput lob = new TeamInput();
+        lob.spikeLob = true;
+        TeamInput flat = new TeamInput();
+        flat.spikeFlat = true;
+        flat.wingActionPressed = true;
+        acceptInput(slot, 1, lob);
+        acceptInput(slot, 2, flat);
+        acceptInput(slot, 3, new TeamInput());
+        model.ControlInput first = Packet.decodeInput(slot.takeInputMaskForTick());
+        model.ControlInput second = Packet.decodeInput(slot.takeInputMaskForTick());
+        model.ControlInput released = Packet.decodeInput(slot.takeInputMaskForTick());
+        check(first.spikeLob && !first.spikeFlat && !second.spikeLob && second.spikeFlat && second.wingActionPressed,
+                "依序使用完整樣本，不合成不同時間的長吊球組合");
+        check(!released.wingActionPressed && slot.takeInputMaskForTick() == 0, "短按與放開保留，沒有樣本時延續最近狀態");
+        acceptInput(slot, 4, flat);
+        acceptInput(slot, 3, lob);
+        check(Packet.decodeInput(slot.takeInputMaskForTick()).wingActionPressed, "丟棄過期樣本，放開再按仍成立");
+        for (int i = 5; i < 100; i++) acceptInput(slot, i, flat);
+        check(!slot.hasInputOverflowed(), "同一持續按鍵的心跳不累積延遲");
+        for (int i = 100; i < 150; i++) acceptInput(slot, i, i % 2 == 0 ? lob : flat);
+        check(slot.hasInputOverflowed(), "異常輸入積壓明確回報，不默默遺失必要邊緣或無限累積");
+    }
+
+    private static void acceptInput(ServerPlayerSlot slot, int sequence, TeamInput input) throws Exception {
+        byte[] data = UdpCodec.input(slot.sessionToken, sequence, Packet.encodeInput(input));
+        slot.acceptInput((UdpCodec.InputFrame) UdpCodec.decode(data, data.length));
     }
 
     private static void testWorldSnapshotRoundTripAndOrdering() throws Exception {
@@ -39,8 +152,8 @@ public final class NetworkSyncTest {
         Packet.WorldSnapshot state = Packet.WorldSnapshot.from(model, 0);
         UdpCodec.WorldSnapshotFrame first = snapshot(1, 0, state);
         check(first.snapshot.ball.x == 312.5
-                        && first.snapshot.redTeam.players[1].x == 345.5
-                        && first.snapshot.blueTeam.players.length == 4
+                        && first.snapshot.redTeam.players.get(1).x == 345.5
+                        && first.snapshot.blueTeam.players.size() == 4
                         && first.snapshot.spikeTrailActive && first.snapshot.spikeTrailRedSide,
                 "即時快照包含球、雙方球員及純視覺軌跡狀態");
 
@@ -55,10 +168,63 @@ public final class NetworkSyncTest {
         check(inbox.offer(oldRevision, 1) == null, "舊碰撞版本不得覆蓋較新位置");
     }
 
+    private static void testBlockPhaseIsIndependentOfAssetName() throws Exception {
+        GameModel server = new GameModel();
+        TeamInput block = new TeamInput();
+        block.mbActionPressed = true;
+        var mb = server.redTeam.quickAttacker;
+        mb.update(block);
+        for (int i = 1; i < 15; i++) mb.update(new TeamInput());
+        check(mb.isBlockHitBoxActive(), "攔網伸手階段啟用手部框");
+        mb.assetName = "renamed-block-sprite.png";
+        check(mb.isBlockHitBoxActive(), "素材改名不改變攔網碰撞階段");
+        GameModel client = new GameModel();
+        snapshot(1, 0, Packet.WorldSnapshot.from(server, 0)).snapshot.redTeam.applyMotionTo(client.redTeam);
+        check(client.redTeam.quickAttacker.isBlockHitBoxActive()
+                        && client.redTeam.quickAttacker.assetName.equals(mb.assetName),
+                "攔網階段與圖片共同同步，不反推檔名");
+        Packet.PlayerState[] states = {Packet.PlayerState.from(mb)};
+        Packet.TeamState detached = new Packet.TeamState(states);
+        states[0] = null;
+        check(detached.players.get(0) != null, "封包隊伍不共享建構端的可變陣列");
+        boolean immutable = false;
+        try { detached.players.clear(); } catch (UnsupportedOperationException expected) { immutable = true; }
+        check(immutable, "封包發布後無法修改隊伍集合");
+    }
+
+    private static void testClientAirSetWaitsForAuthority() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            for (boolean wing : new boolean[]{true, false}) {
+                GameModel model = new GameModel();
+                model.getServeHandler().setRedServing(redSide);
+                model.getServeHandler().setWaitingForServe(false);
+                var own = redSide ? model.redTeam : model.blueTeam;
+                var opponent = redSide ? model.blueTeam : model.redTeam;
+                model.recordRegularHit(!redSide, opponent.backPlayer);
+                model.recordRegularHit(redSide, own.setter);
+                var player = wing ? own.wingSpiker : own.backPlayer;
+                player.applyNetworkAction(PlayerAction.ATTACK_READY, "test-ready.png", 0);
+                player.jumping = true;
+                player.y -= 80;
+                player.attackHitBox.enable();
+                model.ball.x = player.attackHitBox.getCenterX();
+                model.ball.y = player.attackHitBox.getCenterY();
+                TeamInput input = new TeamInput();
+                input.wingActionPressed = wing;
+                input.backJump = !wing;
+                input.airSetModifier = true;
+                double ballY = model.ball.y;
+                model.updateForNetworkPrediction(input, redSide);
+                check(player.getAction() != PlayerAction.AIR_SETTING && model.ball.y == ballY,
+                        "左右 WS／後排的成功空中舉球動畫與碰球均等待 Server 確認");
+            }
+        }
+    }
+
     private static void testBlockJumpCountSnapshot() throws Exception {
         GameModel server = new GameModel();
         TeamInput block = new TeamInput();
-        block.quickAttack = true;
+        block.mbActionPressed = true;
         block.opponentHasFirstRegularTouch = true;
         server.redTeam.quickAttacker.update(block);
         Packet.WorldSnapshot decoded = snapshot(1, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
@@ -80,8 +246,8 @@ public final class NetworkSyncTest {
             local.backDive = true;
             local.backRight = true; // 兩台 Client 均用 D 朝網。
             local.spikeFlat = true;
-            TeamInput decoded = Packet.decodeInput(Packet.encodeInput(local));
-            TeamInput world = redSide ? decoded : decoded.mirroredHorizontally();
+            model.ControlInput decoded = Packet.decodeInput(Packet.encodeInput(local));
+            model.ControlInput world = redSide ? decoded : decoded.mirroredHorizontally();
             server.update(redSide ? world : new TeamInput(), redSide ? new TeamInput() : world);
             check(server.getServeHandler().getState() == ServeState.JUMP_TOSS,
                     "紅藍連線輸入均可用 D+Space 開始跳發拋球");
@@ -269,14 +435,14 @@ public final class NetworkSyncTest {
     private static void testMbSnapshotReconcilesActionAndAsset() {
         GameModel local = new GameModel();
         TeamInput block = new TeamInput();
-        block.quickAttack = true;
+        block.mbActionPressed = true;
         local.redTeam.quickAttacker.update(block);
         check(local.redTeam.quickAttacker.getAction() == PlayerAction.BLOCK,
                 "本機 MB 預測為攔網");
 
         GameModel authoritative = new GameModel();
         TeamInput attack = new TeamInput();
-        attack.quickAttack = true;
+        attack.mbActionPressed = true;
         attack.hasFirstRegularTouch = true;
         authoritative.redTeam.quickAttacker.update(attack);
         Packet.PlayerState state = Packet.PlayerState.from(authoritative.redTeam.quickAttacker);
@@ -298,7 +464,7 @@ public final class NetworkSyncTest {
         input.backLeft = true;
         input.backJump = true;
         TeamInput blueWorldInput = input.mirroredHorizontally();
-        TeamInput decodedBlueInput = Packet.decodeInput(Packet.encodeInput(blueWorldInput));
+        model.ControlInput decodedBlueInput = Packet.decodeInput(Packet.encodeInput(blueWorldInput));
         check(decodedBlueInput.airSetModifier && decodedBlueInput.backJump
                         && decodedBlueInput.backRight && !decodedBlueInput.backLeft,
                 "藍方網路視角只翻轉水平移動，保留空中舉球與攻擊鍵");
@@ -306,17 +472,17 @@ public final class NetworkSyncTest {
         GameModel local = new GameModel();
         GameModel server = new GameModel();
         local.redTeam.backPlayer.assetName = "player 1 back.png";
-        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive2.png");
+        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive2.png", 1);
         Packet.PlayerState.from(server.redTeam.backPlayer).applyMotionTo(local.redTeam.backPlayer);
         check(local.redTeam.backPlayer.getAction() == PlayerAction.DIVE
                         && local.redTeam.backPlayer.assetName.contains("dive"),
                 "本機後排快照進入撲球時同步圖片");
-        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive3.png");
+        server.redTeam.backPlayer.applyNetworkAction(PlayerAction.DIVE, "player 1 dive3.png", 2);
         Packet.PlayerState.from(server.redTeam.backPlayer).applyMotionTo(local.redTeam.backPlayer);
         check(local.redTeam.backPlayer.assetName.equals("player 1 dive3.png"),
                 "本機撲球動畫被校正後仍跟隨 Server 後續圖片");
 
-        local.redTeam.wingSpiker.applyNetworkAction(PlayerAction.RUN_LOOP, "player 1 run1.png");
+        local.redTeam.wingSpiker.applyNetworkAction(PlayerAction.RUN_LOOP, "player 1 run1.png", 0);
         Packet.PlayerState.from(server.redTeam.wingSpiker).applyMotionTo(local.redTeam.wingSpiker);
         check(local.redTeam.wingSpiker.getAction() == PlayerAction.IDLE
                         && local.redTeam.wingSpiker.assetName.equals(server.redTeam.wingSpiker.assetName),
@@ -347,18 +513,57 @@ public final class NetworkSyncTest {
         client.ball.y = model.GameConfig.FLOOR_Y - client.ball.radius;
         client.syncNetworkVisualEffects(false, true);
         check(!client.spikeEffect.isSpikeTrailActive()
-                        && !client.spikeEffect.getSmokeParticles().isEmpty(),
-                "Server 軌跡結束且球落地時仍能顯示煙霧");
+                        && client.spikeEffect.getSmokeParticles().isEmpty(),
+                "僅快照到地板或軌跡關閉不能提前產生煙霧");
+    }
+
+    private static void testNewRulesAndConfirmedLanding() throws Exception {
+        GameModel server = new GameModel();
+        server.redAttackLocked = true;
+        server.blueAttackLocked = true;
+        server.netFlashFrames = 19;
+        Packet.WorldSnapshot decoded = snapshot(20, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
+        GameModel client = new GameModel();
+        decoded.rallyContacts.applyTo(client);
+        check(client.redAttackLocked && client.blueAttackLocked && decoded.netFlashFrames == 19,
+                "每 tick 快照包含兩隊扣球鎖定與碰網閃爍");
+
+        server.landingSmokeThisFrame = true;
+        server.ball.x = 321;
+        byte[] bytes = UdpCodec.event(7, 1, 20, Packet.EventType.LANDING, 0,
+                Packet.CompactState.from(server));
+        UdpCodec.Event landing = (UdpCodec.Event) UdpCodec.decode(bytes, bytes.length);
+        check(landing.state.landingSmoke && landing.state.netFlashFrames == 19,
+                "可靠事件包含落地煙霧確認與網子閃爍狀態");
+        MemoryTransport transport = new MemoryTransport();
+        try (GameClient connection = new GameClient(client, "memory", transport)) {
+            check(client.spikeEffect.getSmokeParticles().isEmpty(), "事件前沒有提前煙霧");
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(new GameModel()));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            transport.offer(landing);
+            pumpUntil(connection, () -> !client.spikeEffect.getSmokeParticles().isEmpty());
+            check(!client.spikeEffect.getSmokeParticles().isEmpty(),
+                    "即使快照先關閉軌跡，收到 LANDING 確認仍會播放煙霧");
+            client.spikeEffect.clear();
+            server.landingSmokeThisFrame = false;
+            bytes = UdpCodec.event(7, 2, 21, Packet.EventType.LANDING, 0, Packet.CompactState.from(server));
+            transport.offer((UdpCodec.Event) UdpCodec.decode(bytes, bytes.length));
+            pumpUntil(connection, () -> transport.eventAckCount() == 2);
+            check(client.spikeEffect.getSmokeParticles().isEmpty(), "無扣球軌跡的落地不產生煙霧");
+        }
     }
 
     private static void testLocalLoopback() throws Exception {
-        GameServer server = new GameServer();
+        GameServer server = new GameServer("127.0.0.1", 0);
+        int serverPort = server.getBoundPort();
         Thread serverThread = new Thread(server::run, "network-sync-test-server");
         serverThread.start();
         GameModel redModel = new GameModel();
         GameModel blueModel = new GameModel();
-        try (GameClient red = new GameClient(redModel, "127.0.0.1");
-             GameClient blue = new GameClient(blueModel, "127.0.0.1")) {
+        try (GameClient red = new GameClient(redModel, "127.0.0.1",
+                     new UdpClientTransport("127.0.0.1", server.getBoundPort()));
+             GameClient blue = new GameClient(blueModel, "127.0.0.1",
+                     new UdpClientTransport("127.0.0.1", server.getBoundPort()))) {
             TeamInput idle = new TeamInput();
             long deadline = System.nanoTime() + 3_000_000_000L;
             while ((!red.isConnected() || !blue.isConnected()) && System.nanoTime() < deadline) {
@@ -371,7 +576,7 @@ public final class NetworkSyncTest {
 
             GameModel authoritativeMb = new GameModel();
             TeamInput mbAttack = new TeamInput();
-            mbAttack.quickAttack = true;
+            mbAttack.mbActionPressed = true;
             mbAttack.hasFirstRegularTouch = true;
             authoritativeMb.blueTeam.quickAttacker.update(mbAttack);
             Packet.PlayerState.from(authoritativeMb.blueTeam.quickAttacker)
@@ -415,10 +620,10 @@ public final class NetworkSyncTest {
                 if (Math.abs(redModel.ball.x - serverBallX) < 0.01
                         && Math.abs(redModel.ball.y - serverBallY) < 0.01
                         && Math.abs(redModel.ball.rotationDegrees - serverBallRotation) < 0.01) {
-                    check(red.getRenderedBallX(redModel.ball.x) == redModel.ball.x
-                                    && red.getRenderedBallY(redModel.ball.y) == redModel.ball.y
-                                    && red.getRenderedBallRotation(redModel.ball.rotationDegrees)
-                                    == redModel.ball.rotationDegrees,
+                    view.RenderFrame frame = view.RenderFrame.capture(redModel, red);
+                    check(frame.ball().x() == redModel.ball.x
+                                    && frame.ball().y() == redModel.ball.y
+                                    && frame.ball().rotationDegrees() == redModel.ball.rotationDegrees,
                             "球心與旋轉角度在收到 Server 快照後立即顯示，不保留平滑偏移");
                     smallCorrectionReceived = true;
                     break;
@@ -442,7 +647,7 @@ public final class NetworkSyncTest {
 
             double wingStart = redModel.blueTeam.wingSpiker.x;
             TeamInput wingAction = new TeamInput();
-            wingAction.wingAttack = true;
+            wingAction.wingActionPressed = true;
             Set<String> observedAssets = new HashSet<>();
             for (int tick = 0; tick < 12; tick++) {
                 red.update(idle, false, false);
@@ -487,6 +692,212 @@ public final class NetworkSyncTest {
             server.close();
             serverThread.join(4_000);
             check(!serverThread.isAlive(), "Server 可正常結束");
+            try (var probe = new java.net.DatagramSocket(serverPort)) {
+                check(probe.getLocalPort() == serverPort, "對局結束後實際釋放 Server 連接埠");
+            }
+        }
+    }
+
+    private static void testServerCloseBeforeRun() throws Exception {
+        GameServer server = new GameServer("127.0.0.1", 0);
+        int port = server.getBoundPort();
+        server.close();
+        server.close();
+        server.run();
+        try (var probe = new java.net.DatagramSocket(port)) {
+            check(probe.getLocalPort() == port, "尚未 run 就 close 也釋放 Server socket，不能再次啟動");
+        }
+    }
+
+    private static void awaitMatchWorkerShutdown() throws Exception {
+        long deadline = System.nanoTime() + 4_000_000_000L;
+        boolean alive;
+        do {
+            alive = Thread.getAllStackTraces().keySet().stream()
+                    .anyMatch(thread -> thread.isAlive() && thread.getName().startsWith("haikyuu-udp-"));
+            if (alive) Thread.sleep(5);
+        } while (alive && System.nanoTime() < deadline);
+        check(!alive, "Client／Server 接收與重送執行緒在關閉期限內結束");
+    }
+
+    private static void testDiagnosticFailureDisablesQueue() throws Exception {
+        var messages = new java.util.concurrent.atomic.AtomicInteger();
+        var closed = new java.util.concurrent.atomic.AtomicBoolean();
+        java.io.Writer failedWriter = new java.io.Writer() {
+            @Override public void write(char[] chars, int start, int length) throws java.io.IOException {
+                throw new java.io.IOException("test failure");
+            }
+            @Override public void flush() {}
+            @Override public void close() { closed.set(true); }
+        };
+        try (DiagnosticLog log = new DiagnosticLog(new java.io.BufferedWriter(failedWriter),
+                message -> messages.incrementAndGet())) {
+            log.record("fail");
+            long deadline = System.nanoTime() + 2_000_000_000L;
+            while (log.isAvailable() && System.nanoTime() < deadline) Thread.sleep(1);
+            check(!log.isAvailable() && closed.get(), "寫入失敗後停用且關閉 writer");
+            for (int i = 0; i < 10_000; i++) log.record("ignored");
+            check(messages.get() == 1, "停用後不累積佇列或反覆輸出滿載訊息");
+        }
+    }
+
+    private static void testInvalidPacketsAreRejected() throws Exception {
+        byte[] control = UdpCodec.control(1, 1, UdpCodec.ControlAction.RESET_REQUEST);
+        control[control.length - 1] = 127;
+        check(UdpCodec.decode(control, control.length) == null, "無效控制不替代為取消重設");
+        byte[] event = UdpCodec.event(1, 1, 1, Packet.EventType.SCORE, 0, Packet.CompactState.from(new GameModel()));
+        // header(7) + token(8) + eventId(4) + tick(4) 後是事件列舉。
+        event[7 + 8 + 4 + 4] = 127;
+        check(UdpCodec.decode(event, event.length) == null, "無效事件不替代為得分");
+        for (double invalid : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            GameModel model = new GameModel();
+            model.ball.x = invalid;
+            byte[] data = UdpCodec.worldSnapshot(1, 1, 1, Packet.WorldSnapshot.from(model, 0));
+            check(UdpCodec.decode(data, data.length) == null, "拒絕非有限球座標");
+            model = new GameModel();
+            model.redTeam.setter.vy = invalid;
+            data = UdpCodec.worldSnapshot(1, 1, 1, Packet.WorldSnapshot.from(model, 0));
+            check(UdpCodec.decode(data, data.length) == null, "拒絕非有限角色速度");
+        }
+        GameModel model = new GameModel();
+        Packet.WorldSnapshot valid = Packet.WorldSnapshot.from(model, 0);
+        Packet.WorldSnapshot incomplete = new Packet.WorldSnapshot(valid.ball,
+                new Packet.TeamState(new Packet.PlayerState[0]), valid.blueTeam,
+                valid.rallyContacts, 0, false, false, 0);
+        byte[] data = UdpCodec.worldSnapshot(1, 1, 1, incomplete);
+        check(UdpCodec.decode(data, data.length) == null, "拒絕不完整隊伍，不能留下舊玩家狀態");
+        check(Double.isNaN(snapshot(1, 0, valid).snapshot.redTeam.players.get(0).jumpStartCenterX),
+                "沒有起跳時允許專屬的 NaN 標記");
+    }
+
+    private static void testResetClearsConfirmedEffects() throws Exception {
+        GameModel model = new GameModel();
+        MemoryTransport transport = new MemoryTransport();
+        try (GameClient client = new GameClient(model, "memory", transport)) {
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(new GameModel()));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            pumpUntil(client, () -> client.getConnectionMessage().contains("等待"));
+            model.spikeEffect.startSpikeTrail(true);
+            model.spikeEffect.addTrailPoint(300, 400);
+            model.spikeEffect.spawnSmoke(300, 600);
+            byte[] reset = UdpCodec.event(7, 1, 1, Packet.EventType.RESET, 0, Packet.CompactState.from(new GameModel()));
+            transport.offer(UdpCodec.decode(reset, reset.length));
+            pumpUntil(client, () -> transport.eventAckCount() == 1);
+            check(model.spikeEffect.getSmokeParticles().isEmpty() && model.spikeEffect.getTrailPoints().isEmpty()
+                            && !model.spikeEffect.isSpikeTrailActive(), "整場 RESET 清除舊煙霧與軌跡");
+        }
+    }
+
+    private static void testConnectionTimeouts() throws Exception {
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        MemoryTransport transport = new MemoryTransport();
+        try (GameClient client = new GameClient(new GameModel(), "memory", transport, clock::get)) {
+            clock.set(3_000_000_001L);
+            client.update(new TeamInput(), false, false);
+            check(client.isSessionEnded() && transport.isClosed(), "未收到 WELCOME 時也會逾時並清理資源");
+        }
+        clock.set(0);
+        transport = new MemoryTransport();
+        try (GameClient client = new GameClient(new GameModel(), "memory", transport, clock::get)) {
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(new GameModel()));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            pumpUntil(client, () -> client.getConnectionMessage().contains("等待"));
+            for (int second = 1; second <= 6; second++) {
+                clock.set(second * 1_000_000_000L);
+                boolean resetConfirmed = second % 2 == 1;
+                byte[] status = UdpCodec.controlStatus(7, second, 0, resetConfirmed, false);
+                transport.offer(UdpCodec.decode(status, status.length));
+                pumpUntil(client, () -> (client.getResetMessage() != null) == resetConfirmed);
+                check(!client.isSessionEnded(), "Server 持續回應時可等待另一位玩家");
+            }
+            clock.addAndGet(3_000_000_001L);
+            client.update(new TeamInput(), false, false);
+            check(client.isSessionEnded() && transport.isClosed(), "等待另一位玩家時 Server 失聯仍會逾時");
+        }
+    }
+
+    private static void testClientInitializationFailureClosesTransport() {
+        MemoryTransport transport = new MemoryTransport();
+        transport.failWrites = true;
+        try (GameClient client = new GameClient(new GameModel(), "memory", transport)) {
+            check(client.isSessionEnded() && transport.isClosed(), "初始 HELLO 傳送失敗會中止並釋放資源");
+        }
+    }
+
+    private static void testCloseAfterRemoteAbort() throws Exception {
+        MemoryTransport transport = new MemoryTransport();
+        GameClient client = new GameClient(new GameModel(), "memory", transport);
+        try {
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(new GameModel()));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            byte[] abort = UdpCodec.matchAborted(7, 1, "測試中止");
+            transport.offer(UdpCodec.decode(abort, abort.length));
+            pumpUntil(client, client::isSessionEnded);
+            client.close();
+            client.close();
+            check(transport.isClosed(), "收到中止後 close 仍關閉接收資源，且可重複呼叫");
+            check(client.getConnectionMessage().equals("測試中止"), "關閉不覆蓋原始中止原因");
+        } finally {
+            client.close();
+        }
+    }
+
+    private static void pumpUntil(GameClient client, BooleanSupplier condition) throws Exception {
+        long deadline = System.nanoTime() + 2_000_000_000L;
+        while (!condition.getAsBoolean() && System.nanoTime() < deadline) {
+            client.update(new TeamInput(), false, false);
+            Thread.sleep(1);
+        }
+        check(condition.getAsBoolean(), "Client 在期限內處理注入的資料");
+    }
+
+    /** 不建立 socket；保留阻塞接收、封包編碼及關閉解除阻塞的實際傳輸語意。 */
+    private static final class MemoryTransport implements ClientTransport {
+        private final Deque<UdpCodec.Decoded> incoming = new ArrayDeque<>();
+        private boolean closed;
+        private int acknowledgements;
+        private long clientNonce;
+        private boolean failWrites;
+
+        synchronized void offer(UdpCodec.Decoded packet) {
+            incoming.addLast(packet);
+            notifyAll();
+        }
+
+        synchronized int eventAckCount() {
+            return acknowledgements;
+        }
+
+        @Override
+        public synchronized void send(byte[] data) throws java.io.IOException {
+            if (closed || failWrites) throw new SocketException("test send failure");
+            if (UdpCodec.decode(data, data.length) instanceof UdpCodec.EventAck) acknowledgements++;
+            if (UdpCodec.decode(data, data.length) instanceof UdpCodec.Hello hello) clientNonce = hello.clientNonce;
+        }
+
+        @Override
+        public synchronized UdpCodec.Decoded receive() throws SocketException {
+            while (incoming.isEmpty() && !closed) {
+                try {
+                    wait();
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new SocketException("interrupted");
+                }
+            }
+            if (closed) throw new SocketException("closed");
+            return incoming.removeFirst();
+        }
+
+        @Override
+        public synchronized boolean isClosed() {
+            return closed;
+        }
+
+        @Override
+        public synchronized void close() {
+            closed = true;
+            notifyAll();
         }
     }
 

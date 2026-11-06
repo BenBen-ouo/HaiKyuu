@@ -41,6 +41,12 @@ public class HitBox {
                     double width, double height,
                     int arcWidth, int arcHeight,
                     double rotationDegrees) {
+        if (!Double.isFinite(offsetX) || !Double.isFinite(offsetY)
+                || !Double.isFinite(width) || !Double.isFinite(height)
+                || !Double.isFinite(rotationDegrees) || width <= 0 || height <= 0
+                || arcWidth < 0 || arcHeight < 0) {
+            throw new IllegalArgumentException("Invalid receive or block hitbox geometry");
+        }
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.width = width;

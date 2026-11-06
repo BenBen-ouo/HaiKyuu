@@ -17,7 +17,7 @@ public class Setter extends Player {
         vx = 0;
 
         if (input.setterJump && !jumping) {
-            vy = GameConfig.SETTER_JUMP_SPEED;
+            vy = GameConfig.SETTER_JUMP_VELOCITY_Y;
             jumping = true;
         }
 

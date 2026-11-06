@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.GameModel;
 import model.SideRules;
 import model.TeamInput;
-import model.ball.PhysicsUtils;
+import model.ball.BallTrajectory;
 import model.player.BackPlayer;
 import model.player.HitBox;
 import model.player.Player;
@@ -18,10 +18,14 @@ import model.player.Team;
 import model.player.WingSpiker;
 
 public class RallyContactHandler {
-    private static final double TO_SETTER_PASS_POWER = 13;
-    private static final double THIRD_TOUCH_PASS_POWER = 16;
-    private static final double Setter_THIRD_TOUCH_PASS_POWER = 13;
+    private static final double TO_SETTER_PASS_SPEED = 13;
+    private static final double THIRD_TOUCH_PASS_SPEED = 16;
+    private static final double SETTER_THIRD_TOUCH_PASS_SPEED = 13;
     private static final double BALL_UNSTUCK_DISTANCE = 6.0;
+    private static final double MIN_NORMAL_LENGTH = 0.001;
+    private static final double CENTER_CONTACT_NORMAL_Y = -0.2;
+    private static final double SETTER_TARGET_OFFSET_Y = 10;
+    private static final double THIRD_TOUCH_TARGET_HEIGHT = 50;
 
     private final GameModel model;
 
@@ -38,9 +42,9 @@ public class RallyContactHandler {
             if (!player.hasAirSetAttemptThisFrame() || player == model.getLastHitter(redSide)) {
                 continue;
             }
-            int framesToApex = framesToApex(GameConfig.SETTER_SET_APEX_Y);
             model.ball.vx = 0;
-            model.ball.vy = initialVyForApex(GameConfig.SETTER_SET_APEX_Y, framesToApex);
+            model.ball.vy = BallTrajectory.toApex(model.ball.y, GameConfig.SETTER_SET_APEX_Y,
+                    GameConfig.GRAVITY).velocityY();
             model.ball.stopRotation();
             model.ball.useSlowFloorBounceSpin();
             model.spikeEffect.stopSpikeTrail();
@@ -91,7 +95,7 @@ public class RallyContactHandler {
                 // 一般接球成功後，扣球軌跡結束。
                 model.spikeEffect.stopSpikeTrail();
 
-                handleTouchAnimation(player, hitCount, redSide);
+                handleTouchAnimation(player, hitCount);
                 model.recordRegularHit(redSide, player);
                 break;
             }
@@ -99,6 +103,7 @@ public class RallyContactHandler {
     }
 
     private boolean trySpikeContact(Team team, boolean redSide, TeamInput input, Player lastHitter) {
+        if (model.isAttackLocked(redSide)) return false;
         for (Player player : team.getPlayers()) {
             if (player == lastHitter) {
                 continue;
@@ -110,33 +115,28 @@ public class RallyContactHandler {
 
             // 接發方第一次一般觸球前，任一方用攻擊框碰到發球都屬發球犯規。
             if (!model.isServeReceptionComplete()) {
-                performSpike(createAttackContext(player, redSide), input);
+                performSpike(player, redSide, input);
                 model.awardPointWithMessage(!redSide, "發球犯規");
                 return true;
             }
 
             // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
             if (isBackRowThreeMeterFault(player, redSide)) {
-                AttackContext ctx = createAttackContext(player, redSide);
-                performSpike(ctx, input);
+                performSpike(player, redSide, input);
                 model.recordHit(redSide, player);
 
                 boolean awardRed = !redSide;
-                if (model.isResolvingRallyOutcomes()) {
-                    model.transientMessage = "後排三米線";
-                    model.transientMessageTimer = 42;
-                    model.transientMessageIsRed = awardRed;
-                    model.awardPoint(awardRed);
-                    // 確保扣球軌跡顯示（即使已給分，也要保留軌跡直到落地）
-                    model.spikeEffect.startSpikeTrail(ctx.redSide);
-                } else {
-                    model.awaitAuthoritativeRallyResult();
-                }
+                model.transientMessage = "後排三米線";
+                model.transientMessageTimer = RallyScorer.MESSAGE_OVERRIDE_FRAMES;
+                model.transientMessageIsRed = awardRed;
+                model.awardPoint(awardRed);
+                // 給分後保留已確認的扣球軌跡直到落地。
+                model.spikeEffect.startSpikeTrail(redSide);
                 return true;
             }
 
             // 合法扣球：保留 attack_way 的球路與旋轉邏輯。
-            performSpike(createAttackContext(player, redSide), input);
+            performSpike(player, redSide, input);
             model.recordHit(redSide, player);
             return true;
         }
@@ -149,18 +149,18 @@ public class RallyContactHandler {
             return false;
         }
 
-        double jumpStartX = ((BackPlayer) player).jumpStartX;
-        if (Double.isNaN(jumpStartX)) {
+        double jumpStartCenterX = player.getAttackTakeoffCenterX();
+        if (Double.isNaN(jumpStartCenterX)) {
             return false;
         }
 
         if (redSide) {
             // 紅隊在左側：起跳中心在線上或更靠近網子時違規。
-            return jumpStartX >= GameConfig.NET_X - GameConfig.THREE_METER_PX;
+            return jumpStartCenterX >= GameConfig.NET_X - GameConfig.THREE_METER_PX;
         }
 
         // 藍隊在右側：起跳中心在線上或更靠近網子時違規。
-        return jumpStartX <= GameConfig.NET_X + GameConfig.THREE_METER_PX;
+        return jumpStartCenterX <= GameConfig.NET_X + GameConfig.THREE_METER_PX;
     }
 
     private boolean canSpike(Player player) {
@@ -168,39 +168,39 @@ public class RallyContactHandler {
         return player.hasValidAttackAttemptThisFrame();
     }
 
-    private void performSpike(AttackContext context, TeamInput input) {
-        Player attacker = context.attacker;
+    private void performSpike(Player attacker, boolean redSide, TeamInput input) {
+        model.lockAttack(redSide);
 
         pushBallOutsideAttackHitBox(attacker);
         attacker.startAttackSwingAnimation();
-        setSpikeVelocity(context.redSide, input);
+        setSpikeVelocity(redSide, input);
 
-        model.spikeEffect.startSpikeTrail(context.redSide);
+        model.spikeEffect.startSpikeTrail(redSide);
 
         // 命中一次後立刻關閉攻擊 hitBox，避免同一次起跳落地前再次影響球。
         attacker.attackHitBox.disable();
     }
 
     private void setSpikeVelocity(boolean redSide, TeamInput input) {
-        double speedX = GameConfig.SPIKE_SPEED_X;
-        double speedY = GameConfig.SPIKE_SPEED_Y;
+        double horizontalSpeed = GameConfig.SPIKE_HORIZONTAL_SPEED;
+        double verticalVelocity = GameConfig.SPIKE_VELOCITY_Y;
 
         if (input.spikeLob && input.spikeFlat) {
-            speedX = GameConfig.LONG_LOB_SPIKE_SPEED_X;
-            speedY = GameConfig.LONG_LOB_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.LONG_LOB_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.LONG_LOB_SPIKE_VELOCITY_Y;
         } else if (input.spikeLob) {
-            speedX = GameConfig.LOB_SPIKE_SPEED_X;
-            speedY = GameConfig.LOB_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.LOB_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.LOB_SPIKE_VELOCITY_Y;
         } else if (input.spikeFlat) {
-            speedX = GameConfig.FLAT_SPIKE_SPEED_X;
-            speedY = GameConfig.FLAT_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.FLAT_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.FLAT_SPIKE_VELOCITY_Y;
         } else if (input.spikeShort) {
-            speedX = GameConfig.SHORT_SPIKE_SPEED_X;
-            speedY = GameConfig.SHORT_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.SHORT_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.SHORT_SPIKE_VELOCITY_Y;
         }
 
-        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
-        model.ball.vy = speedY;
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * horizontalSpeed;
+        model.ball.vy = verticalVelocity;
         model.ball.setRotationSpeed(spikeSpinSpeed(redSide, input));
 
         if (input.spikeLob) {
@@ -219,20 +219,23 @@ public class RallyContactHandler {
     }
 
     private boolean tryBlockRebound(Player player) {
-        if (!(player instanceof QuickAttacker blocker) || !blocker.isBlockHitBoxActive()) {
+        if (!(player instanceof QuickAttacker blocker)) {
             return false;
         }
+        HitBox blockBox = blocker.activeBlockHitBox();
+        if (blockBox == null) return false;
 
         if (model.hasBlocked(blocker.redSide)) {
             return false;
         }
 
-        if (!blocker.blockHitBox.intersectsBall(model.ball)) {
+        if (!blockBox.intersectsBall(model.ball)) {
             return false;
         }
 
-        pushBallOutsideHitBox(blocker.blockHitBox);
-        reflectBallFromBlock(blocker);
+        pushBallOutsideHitBox(blockBox);
+        reflectBallFromBlock(blocker, blockBox);
+        model.spikeEffect.clearSpikeTrail();
 
         // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
         model.ball.useFastFloorBounceSpin();
@@ -257,17 +260,13 @@ public class RallyContactHandler {
             model.resetTeamContacts(attackingTeam);
         }
 
-        // 攔網後保留扣球軌跡，直到落地或下一次一般接球才停止。
+        // 兩種攔網框共用同一份不計次的攔網紀錄。
         // 攔網接觸獨立記錄，固定不占用球隊的三次觸球次數。
         model.recordBlock(blocker.redSide, blocker);
 
-        // 攻擊方最後觸球、且反彈球預計出界時，延後到實際落地再依 touch out 給分。
-        if (attackingTeam != null
-                && attackingTeam != blocker.redSide
-                && BallLandingPredictor.willLandOutsideCourt(model.ball)) {
-            model.pendingTouchOut = true;
-            model.pendingTouchOutWinner = attackingTeam;
-        }
+        // 最後碰球為攔網時，依實際落地判 TOUCH OUT；下一次一般觸球／扣球會清除。
+        model.pendingTouchOut = true;
+        model.pendingTouchOutWinner = !blocker.redSide;
 
         return true;
     }
@@ -317,14 +316,13 @@ public class RallyContactHandler {
         }
     }
 
-    private void handleTouchAnimation(Player player, int hitCountBeforeTouch, boolean redSide) {
+    private void handleTouchAnimation(Player player, int hitCountBeforeTouch) {
         if (player instanceof Setter) {
             playSetterAnimationIfAllowed(player, hitCountBeforeTouch);
             return;
         }
 
         if (player.isAttackReady() || player.isAttackSwinging()) {
-            createAttackContext(player, redSide);
             return;
         }
 
@@ -342,10 +340,6 @@ public class RallyContactHandler {
         if (hitCountBeforeTouch <= 2) {
             player.playSettingAnimation();
         }
-    }
-
-    private AttackContext createAttackContext(Player player, boolean redSide) {
-        return new AttackContext(player, redSide);
     }
 
     private void pushBallOutsidePlayer(Player player) {
@@ -371,16 +365,16 @@ public class RallyContactHandler {
         model.ball.y += dy / length * BALL_UNSTUCK_DISTANCE;
     }
 
-    private void reflectBallFromBlock(QuickAttacker blocker) {
-        double normalX = model.ball.x - blocker.blockHitBox.getCenterX();
-        double normalY = model.ball.y - blocker.blockHitBox.getCenterY();
+    private void reflectBallFromBlock(QuickAttacker blocker, HitBox box) {
+        double normalX = model.ball.x - box.getCenterX();
+        double normalY = model.ball.y - box.getCenterY();
         double normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
 
-        if (normalLength < 0.001) {
+        if (normalLength < MIN_NORMAL_LENGTH) {
             normalX = model.ball.vx == 0
                     ? SideRules.directionTowardOpponent(blocker.redSide)
                     : Math.signum(model.ball.vx);
-            normalY = -0.2;
+            normalY = CENTER_CONTACT_NORMAL_Y;
             normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
         }
 
@@ -395,90 +389,58 @@ public class RallyContactHandler {
             reflectedVx = model.ball.vx - 2 * dot * normalX;
             reflectedVy = model.ball.vy - 2 * dot * normalY;
         } else {
-            double currentSpeed = Math.sqrt(model.ball.vx * model.ball.vx + model.ball.vy * model.ball.vy);
-            double speed = Math.max(currentSpeed, GameConfig.BLOCK_HITBOX_MIN_SPEED);
+            double speed = Math.hypot(model.ball.vx, model.ball.vy);
             reflectedVx = normalX * speed;
             reflectedVy = normalY * speed;
         }
 
-        reflectedVx *= GameConfig.BLOCK_HITBOX_BOUNCE;
-        reflectedVy *= GameConfig.BLOCK_HITBOX_BOUNCE;
-
-        double reflectedSpeed = Math.sqrt(reflectedVx * reflectedVx + reflectedVy * reflectedVy);
-        if (reflectedSpeed < GameConfig.BLOCK_HITBOX_MIN_SPEED) {
-            double scale = GameConfig.BLOCK_HITBOX_MIN_SPEED / Math.max(0.001, reflectedSpeed);
-            reflectedVx *= scale;
-            reflectedVy *= scale;
-        }
+        double bounce = box == blocker.headBlockHitBox
+                ? GameConfig.BLOCK_HEAD_BOUNCE : GameConfig.BLOCK_HITBOX_BOUNCE;
+        reflectedVx *= bounce;
+        reflectedVy *= bounce;
 
         model.ball.vx = reflectedVx;
         model.ball.vy = reflectedVy;
     }
 
     private void setBallVelocity(BallTarget target) {
-        double[] velocity = PhysicsUtils.calculateVelocityToTarget(
+        BallTrajectory.Velocity velocity = BallTrajectory.estimateVelocityToTargetAtSpeed(
                 model.ball.x,
                 model.ball.y,
                 target.x,
                 target.y,
-                target.power,
+                target.launchSpeed,
                 GameConfig.GRAVITY
         );
 
-        model.ball.vx = velocity[0];
-        model.ball.vy = velocity[1];
+        model.ball.vx = velocity.x();
+        model.ball.vy = velocity.y();
     }
 
     private void setSetterBallVelocity(BallTarget target) {
-        double gravity = GameConfig.GRAVITY;
-        int framesToApex = framesToApex(GameConfig.SETTER_SET_APEX_Y);
-        double initialVy = initialVyForApex(GameConfig.SETTER_SET_APEX_Y, framesToApex);
-
-        // 依新的飛行時間重算 vx，使球下降時仍通過原本的預定目標點。
-        double verticalLinearTerm = initialVy + gravity / 2.0;
-        double discriminant = verticalLinearTerm * verticalLinearTerm
-                - 2.0 * gravity * (model.ball.y - target.y);
-        double timeToTarget = (-verticalLinearTerm + Math.sqrt(Math.max(0.0, discriminant))) / gravity;
-
-        model.ball.vx = (target.x - model.ball.x) / Math.max(1.0, timeToTarget);
-        model.ball.vy = initialVy;
+        BallTrajectory.Velocity velocity = BallTrajectory.throughTarget(model.ball.x, model.ball.y,
+                target.x, target.y, GameConfig.SETTER_SET_APEX_Y, GameConfig.GRAVITY);
+        model.ball.vx = velocity.x();
+        model.ball.vy = velocity.y();
     }
 
     private void setQuickAttackBallVelocity(boolean redSide) {
-        double apexX = redSide
-                ? GameConfig.RED_QUICK_SET_APEX_X
-                : GameConfig.BLUE_QUICK_SET_APEX_X;
-        int framesToApex = framesToApex(GameConfig.QUICK_SET_APEX_Y);
-
-        // 以當次 Setter 觸球後的球心位置重算，令整數幀的最高點通過指定座標。
-        model.ball.vx = (apexX - model.ball.x) / framesToApex;
-        model.ball.vy = initialVyForApex(GameConfig.QUICK_SET_APEX_Y, framesToApex);
-    }
-
-    private int framesToApex(double apexY) {
-        double heightToApex = model.ball.y - apexY;
-        double gravity = GameConfig.GRAVITY;
-
-        // Ball.update() 先加重力再移動；取最高點所在的整數幀。
-        return Math.max(1, (int) Math.ceil(
-                (-1.0 + Math.sqrt(1.0 + 8.0 * heightToApex / gravity)) / 2.0
-        ));
-    }
-
-    private double initialVyForApex(double apexY, int framesToApex) {
-        return (apexY - model.ball.y) / framesToApex
-                - GameConfig.GRAVITY * (framesToApex + 1) / 2.0;
+        double apexX = redSide ? GameConfig.RED_QUICK_SET_APEX_X : GameConfig.BLUE_QUICK_SET_APEX_X;
+        BallTrajectory.ApexLaunch launch = BallTrajectory.toApex(model.ball.y,
+                GameConfig.QUICK_SET_APEX_Y, GameConfig.GRAVITY);
+        model.ball.vx = (apexX - model.ball.x) / launch.durationFrames();
+        model.ball.vy = launch.velocityY();
     }
 
     private static class BallTarget {
         final double x;
         final double y;
-        final double power;
+        final double launchSpeed;
 
-        private BallTarget(double x, double y, double power) {
+        private BallTarget(double x, double y, double launchSpeed) {
             this.x = x;
             this.y = y;
-            this.power = power;
+            this.launchSpeed = launchSpeed;
         }
 
         static BallTarget forPlayer(Team team, boolean redSide, int hitCount, double ballX, Player player) {
@@ -496,22 +458,22 @@ public class RallyContactHandler {
         private static BallTarget setterTarget(Team team, double ballX, Player player) {
             double setterX = team.setter.x + team.setter.imageWidth / 2.0;
             double targetX = player == team.setter ? ballX : setterX;
-            return new BallTarget(targetX, team.setter.y + 10, TO_SETTER_PASS_POWER);
+            return new BallTarget(targetX, team.setter.y + SETTER_TARGET_OFFSET_Y, TO_SETTER_PASS_SPEED);
         }
 
         private static BallTarget attackTarget(boolean redSide) {
             return new BallTarget(
                     SideRules.thirdTouchTargetX(redSide),
-                    GameConfig.FLOOR_Y - 50,
-                    THIRD_TOUCH_PASS_POWER
+                    GameConfig.FLOOR_Y - THIRD_TOUCH_TARGET_HEIGHT,
+                    THIRD_TOUCH_PASS_SPEED
             );
         }
 
         private static BallTarget setterThirdTouchTarget(boolean redSide) {
             return new BallTarget(
                     SideRules.setterThirdTouchTargetX(redSide),
-                    GameConfig.FLOOR_Y - 50,
-                    Setter_THIRD_TOUCH_PASS_POWER
+                    GameConfig.FLOOR_Y - THIRD_TOUCH_TARGET_HEIGHT,
+                    SETTER_THIRD_TOUCH_PASS_SPEED
             );
         }
     }

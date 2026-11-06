@@ -12,16 +12,31 @@ import java.awt.RenderingHints;
 import javax.swing.JPanel;
 import model.GameConfig;
 import model.GameModel;
+import model.FixedTickSchedule;
 import network.NetworkView;
 import network.TimingDiagnostics;
 
-public class GamePanel extends JPanel {
-    private final GameModel model;
-    private final GameController controller;
-    private final NetworkView networkView;
-    private final GameRenderer renderer = new GameRenderer();
-    private final NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
-    private Thread gameLoop;
+public final class GamePanel extends JPanel {
+    @java.io.Serial
+    private static final long serialVersionUID = 1L;
+
+    /** 視窗持有執行緒與連線，不能序列化成可恢復的對局。 */
+    @java.io.Serial
+    private void writeObject(java.io.ObjectOutputStream output) throws java.io.IOException {
+        throw new java.io.NotSerializableException(GamePanel.class.getName());
+    }
+    private final transient GameModel model;
+    private final transient GameController controller;
+    private final transient NetworkView networkView;
+    private final transient GameRenderer renderer = new GameRenderer();
+    private final transient NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
+    private transient Thread gameLoop;
+    private transient volatile RenderFrame renderFrame;
+
+    @java.io.Serial
+    private void readObject(java.io.ObjectInputStream input) throws java.io.IOException {
+        throw new java.io.InvalidObjectException("GamePanel must be constructed for a new match");
+    }
 
     public GamePanel(GameModel model, GameController controller) {
         this(model, controller, null);
@@ -31,41 +46,53 @@ public class GamePanel extends JPanel {
         this.model = model;
         this.controller = controller;
         this.networkView = networkView;
+        this.renderFrame = RenderFrame.capture(model, networkView);
         setPreferredSize(new Dimension(GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT));
         setFocusable(true);
     }
 
     public synchronized void startGameLoop() {
-        if (gameLoop != null) return;
-        gameLoop = new Thread(() -> {
-            long tickNanos = 1_000_000_000L / GameConfig.TICKS_PER_SECOND;
-            long nextTickNanos = System.nanoTime();
+        if (gameLoop != null && gameLoop.isAlive()) return;
+        gameLoop = new Thread(this::runGameLoop, "haikyuu-game-loop");
+        gameLoop.setDaemon(true);
+        gameLoop.start();
+    }
 
+    private void runGameLoop() {
+        FixedTickSchedule schedule = new FixedTickSchedule(System.nanoTime(), GameConfig.TICKS_PER_SECOND);
+
+        try {
             while (!Thread.currentThread().isInterrupted()) {
-                long lateNanos = System.nanoTime() - nextTickNanos;
+                long lateNanos = System.nanoTime() - schedule.nextDeadlineNanos();
                 if (networkView != null && lateNanos >= 25_000_000L) {
                     TimingDiagnostics.record("client game loop late "
                             + String.format("%.2f", lateNanos / 1_000_000.0) + " ms");
                 }
                 long updateStarted = System.nanoTime();
                 controller.update();
+                renderFrame = RenderFrame.capture(model, networkView);
                 if (networkView != null) {
                     TimingDiagnostics.recordIfSlow("client update", updateStarted, 25);
                 }
                 repaint();
 
-                nextTickNanos += tickNanos;
-                sleepUntil(nextTickNanos);
+                if (schedule.completeTick(System.nanoTime())) {
+                    TimingDiagnostics.record("client catch-up limit reached");
+                }
+                sleepUntil(schedule.nextDeadlineNanos());
             }
-        }, "haikyuu-game-loop");
-        gameLoop.setDaemon(true);
-        gameLoop.start();
+        } catch (RuntimeException exception) {
+            TimingDiagnostics.record("game update failed: " + exception.getClass().getSimpleName());
+            exception.printStackTrace();
+            if (networkView != null) networkView.close();
+            javax.swing.SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(
+                    this, "遊戲更新失敗，請重新開啟對局。", "遊戲中止", javax.swing.JOptionPane.ERROR_MESSAGE));
+        }
     }
 
     public synchronized void stopGameLoop() {
         if (gameLoop != null) {
             gameLoop.interrupt();
-            gameLoop = null;
         }
     }
 
@@ -86,11 +113,14 @@ public class GamePanel extends JPanel {
         long paintStarted = System.nanoTime();
         super.paintComponent(graphics);
         Graphics2D g = (Graphics2D) graphics.create();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        boolean mirrorWorld = networkView != null && networkView.isBluePerspective();
-        renderer.render(g, model, mirrorWorld, networkView);
-        networkStatusRenderer.draw(g, networkView);
-        g.dispose();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            RenderFrame frame = renderFrame;
+            renderer.render(g, frame);
+            networkStatusRenderer.draw(g, frame.connection());
+        } finally {
+            g.dispose();
+        }
         if (networkView != null) {
             TimingDiagnostics.recordIfSlow("client paint", paintStarted, 25);
         }
