@@ -7,7 +7,7 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class WingSpiker extends Player {
+public final class WingSpiker extends Player {
     private static final double APPROACH_SPEED = 8.0;
     private static final double RETURN_SPEED = 6.5;
 

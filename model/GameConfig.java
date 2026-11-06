@@ -103,24 +103,24 @@ public final class GameConfig {
     public static final double PLAYER_BASE_Y = FLOOR_Y - PLAYER_IMAGE_HEIGHT;
 
     // 扣球球路。vy 為正時往下，為負時往上。
-    public static final double SPIKE_SPEED_X = 17.0;
-    public static final double SPIKE_SPEED_Y = 7.0;
+    public static final double SPIKE_HORIZONTAL_SPEED = 17.0;
+    public static final double SPIKE_VELOCITY_Y = 7.0;
     
     // 紅隊 D／藍隊 ←：平打，橫向速度更大。
-    public static final double FLAT_SPIKE_SPEED_X = 18.0;
-    public static final double FLAT_SPIKE_SPEED_Y = 3.5;
+    public static final double FLAT_SPIKE_HORIZONTAL_SPEED = 18.0;
+    public static final double FLAT_SPIKE_VELOCITY_Y = 3.5;
 
     // S / ↓：短球，向下速度更大。
-    public static final double SHORT_SPIKE_SPEED_X = 13.5;
-    public static final double SHORT_SPIKE_SPEED_Y = 11.0;
+    public static final double SHORT_SPIKE_HORIZONTAL_SPEED = 13.5;
+    public static final double SHORT_SPIKE_VELOCITY_Y = 11.0;
 
     // W / ↑：吊球，慢速上拋後越過攔網。
-    public static final double LOB_SPIKE_SPEED_X = 3.0;
-    public static final double LOB_SPIKE_SPEED_Y = -3.0;
+    public static final double LOB_SPIKE_HORIZONTAL_SPEED = 3.0;
+    public static final double LOB_SPIKE_VELOCITY_Y = -3.0;
 
     // 紅隊 W + D／藍隊 ↑ + ←：吊長球。
-    public static final double LONG_LOB_SPIKE_SPEED_X = 8.0;
-    public static final double LONG_LOB_SPIKE_SPEED_Y = -4.5;
+    public static final double LONG_LOB_SPIKE_HORIZONTAL_SPEED = 8.0;
+    public static final double LONG_LOB_SPIKE_VELOCITY_Y = -4.5;
 
     // red 隊各角色相對基準點的位置
     public static final double RED_BACK_OFFSET_X = -300 - PLAYER_IMAGE_WIDTH + PLAYER_NET_OVERLAP_X;
@@ -148,20 +148,20 @@ public final class GameConfig {
     public static final double BLUE_SERVE_BALL_OFFSET_Y = -5;
 
     // 發球 X 是正值速率，由隊伍方向轉成 vx；Y 是帶符號世界速度，負值往上。
-    public static final double SERVE_NORMAL_VX = 9;
-    public static final double SERVE_NORMAL_VY = -12;
-    public static final double SERVE_CEILING_VX = 5.1;
-    public static final double SERVE_CEILING_VY = -20;
-    public static final double SERVE_LOW_NET_VX = 14.8;
-    public static final double SERVE_LOW_NET_VY = -7;
-    public static final double SERVE_SHORT_VX = 6.4;
-    public static final double SERVE_SHORT_VY = -14.1;
+    public static final double SERVE_NORMAL_HORIZONTAL_SPEED = 9;
+    public static final double SERVE_NORMAL_VELOCITY_Y = -12;
+    public static final double SERVE_CEILING_HORIZONTAL_SPEED = 5.1;
+    public static final double SERVE_CEILING_VELOCITY_Y = -20;
+    public static final double SERVE_LOW_NET_HORIZONTAL_SPEED = 14.8;
+    public static final double SERVE_LOW_NET_VELOCITY_Y = -7;
+    public static final double SERVE_SHORT_HORIZONTAL_SPEED = 6.4;
+    public static final double SERVE_SHORT_VELOCITY_Y = -14.1;
     // 跳發出手的預設速度；其餘三種球路於觸球當下調整其中一個分量。
-    public static final double SERVE_JUMP_VX = 20.0;
-    public static final double SERVE_JUMP_VY = -1.0;
-    public static final double SERVE_JUMP_SHORT_VY = 0.0;
-    public static final double SERVE_JUMP_LONG_VY = -2.0;
-    public static final double SERVE_JUMP_SLOW_VX = 17.0;
+    public static final double SERVE_JUMP_HORIZONTAL_SPEED = 20.0;
+    public static final double SERVE_JUMP_VELOCITY_Y = -1.0;
+    public static final double SERVE_JUMP_SHORT_VELOCITY_Y = 0.0;
+    public static final double SERVE_JUMP_LONG_VELOCITY_Y = -2.0;
+    public static final double SERVE_JUMP_SLOW_HORIZONTAL_SPEED = 17.0;
 
     // 三米線距離（像素）；後排起跳扣球以起跳中心判定，踩線也違規。
     public static final double THREE_METER_PX = 167.0;

@@ -44,7 +44,7 @@ public final class BallTrajectory {
             double apexDeltaY = -launchSpeed * ascentFrames
                     + gravity * ascentFrames * (ascentFrames + 1) / 2;
             if (deltaY >= apexDeltaY) return new Velocity(0, -launchSpeed);
-            // 不可達時暫保留原降級；其玩法取捨仍列於重構計畫。
+            // 依使用者收尾決定，維持既有不可達降級，不改力道與球路。
         }
         double x2 = deltaX * deltaX;
         double a = deltaY * deltaY + x2;

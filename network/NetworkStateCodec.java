@@ -9,6 +9,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import model.player.PlayerAction;
 import model.serve.ServeState;
+import model.rally.RallyContactSnapshot;
 
 final class NetworkStateCodec {
     private static final int PLAYERS_PER_TEAM = 4;
@@ -104,12 +105,27 @@ final class NetworkStateCodec {
     }
 
     static Packet.RallyContactState readRallyContacts(DataInputStream in) throws IOException {
-        Packet.RallyContactState state = new Packet.RallyContactState(
-                in.readInt(), in.readInt(), in.readInt(), in.readInt(),
-                in.readByte(), in.readBoolean(), in.readBoolean(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean(),
-                in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean(), in.readBoolean()
-        );
+        // 保留既有線上順序；先讀各欄位，再組裝有語意的模型資料。
+        int redCount = in.readInt();
+        int blueCount = in.readInt();
+        int redHitter = in.readInt();
+        int blueHitter = in.readInt();
+        int lastTeamCode = in.readByte();
+        require(isNullableBoolean(lastTeamCode), "Invalid contact owner");
+        boolean block = in.readBoolean();
+        boolean reception = in.readBoolean();
+        boolean redSetter = in.readBoolean();
+        boolean blueSetter = in.readBoolean();
+        boolean redSetterFirst = in.readBoolean();
+        boolean blueSetterFirst = in.readBoolean();
+        boolean redBlock = in.readBoolean();
+        boolean blueBlock = in.readBoolean();
+        boolean redAttackLocked = in.readBoolean();
+        boolean blueAttackLocked = in.readBoolean();
+        Packet.RallyContactState state = new Packet.RallyContactState(new RallyContactSnapshot(
+                new RallyContactSnapshot.TeamContacts(redCount, redHitter, redSetter, redSetterFirst, redBlock, redAttackLocked),
+                new RallyContactSnapshot.TeamContacts(blueCount, blueHitter, blueSetter, blueSetterFirst, blueBlock, blueAttackLocked),
+                Packet.decodeNullableBoolean(lastTeamCode), block, reception));
         require(state.redHitCount >= 0 && state.redHitCount <= 4
                 && state.blueHitCount >= 0 && state.blueHitCount <= 4, "Invalid contact count");
         require(state.redLastHitterIndex >= -1 && state.redLastHitterIndex < PLAYERS_PER_TEAM

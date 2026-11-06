@@ -182,25 +182,25 @@ public class RallyContactHandler {
     }
 
     private void setSpikeVelocity(boolean redSide, TeamInput input) {
-        double speedX = GameConfig.SPIKE_SPEED_X;
-        double speedY = GameConfig.SPIKE_SPEED_Y;
+        double horizontalSpeed = GameConfig.SPIKE_HORIZONTAL_SPEED;
+        double verticalVelocity = GameConfig.SPIKE_VELOCITY_Y;
 
         if (input.spikeLob && input.spikeFlat) {
-            speedX = GameConfig.LONG_LOB_SPIKE_SPEED_X;
-            speedY = GameConfig.LONG_LOB_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.LONG_LOB_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.LONG_LOB_SPIKE_VELOCITY_Y;
         } else if (input.spikeLob) {
-            speedX = GameConfig.LOB_SPIKE_SPEED_X;
-            speedY = GameConfig.LOB_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.LOB_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.LOB_SPIKE_VELOCITY_Y;
         } else if (input.spikeFlat) {
-            speedX = GameConfig.FLAT_SPIKE_SPEED_X;
-            speedY = GameConfig.FLAT_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.FLAT_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.FLAT_SPIKE_VELOCITY_Y;
         } else if (input.spikeShort) {
-            speedX = GameConfig.SHORT_SPIKE_SPEED_X;
-            speedY = GameConfig.SHORT_SPIKE_SPEED_Y;
+            horizontalSpeed = GameConfig.SHORT_SPIKE_HORIZONTAL_SPEED;
+            verticalVelocity = GameConfig.SHORT_SPIKE_VELOCITY_Y;
         }
 
-        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
-        model.ball.vy = speedY;
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * horizontalSpeed;
+        model.ball.vy = verticalVelocity;
         model.ball.setRotationSpeed(spikeSpinSpeed(redSide, input));
 
         if (input.spikeLob) {

@@ -20,12 +20,28 @@ import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.util.List;
 import model.GameConfig;
-import model.effect.SpikeEffect;
 
 public class SpikeEffectRenderer {
+    private static final float RED_HUE = 0.0f;
+    private static final float BLUE_HUE = 0.61f;
+    private static final float TRAIL_SATURATION = 0.9f;
+    private static final float TRAIL_BRIGHTNESS = 1.0f;
+    private static final float TRAIL_OUTER_WIDTH_PX = 12.0f;
+    private static final float TRAIL_INNER_WIDTH_PX = 5.0f;
+    private static final int TRAIL_OUTER_ALPHA = 100;
+    private static final int TRAIL_INNER_ALPHA = 225;
+    private static final float SMOKE_LAYER_ALPHA = 0.6f;
+    private static final double SMOKE_PARTICLE_ALPHA = 0.20;
+    private static final float SMOKE_CENTER_SHADE = 0.18f;
+    private static final float SMOKE_EDGE_SHADE = 0.12f;
+    private static final float SMOKE_EDGE_ALPHA_MULTIPLIER = 0.5f;
+    private static final float SMOKE_VERTICAL_SCALE = 0.6f;
+    private static final int BLUR_KERNEL_SIZE = 5;
+    private static final int[] GAUSSIAN_WEIGHTS = {1, 4, 6, 4, 1};
+    private static final float GAUSSIAN_WEIGHT_SUM = 256f;
     private static final float[] GRADIENT_DISTANCES = {0.0f, 0.6f, 1.0f};
     private final ConvolveOp smokeBlur = new ConvolveOp(
-            new Kernel(5, 5, createGaussianKernel()),
+            new Kernel(BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE, createGaussianKernel()),
             ConvolveOp.EDGE_NO_OP,
             null
     );
@@ -65,12 +81,12 @@ public class SpikeEffectRenderer {
                 }
 
                 Color baseColor = Color.getHSBColor(
-                        first.isRedTeam() ? SpikeEffect.RED_HUE : SpikeEffect.BLUE_HUE,
-                        SpikeEffect.TRAIL_SATURATION,
-                        SpikeEffect.TRAIL_BRIGHTNESS
+                        first.isRedTeam() ? RED_HUE : BLUE_HUE,
+                        TRAIL_SATURATION,
+                        TRAIL_BRIGHTNESS
                 );
-                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, 12.0f, 100);
-                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, 5.0f, 225);
+                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, TRAIL_OUTER_WIDTH_PX, TRAIL_OUTER_ALPHA);
+                drawTrailSegment(trailGraphics, first, second, baseColor, lifeRatio, TRAIL_INNER_WIDTH_PX, TRAIL_INNER_ALPHA);
             }
         } finally {
             trailGraphics.dispose();
@@ -133,7 +149,7 @@ public class SpikeEffectRenderer {
 
         Graphics2D outputGraphics = (Graphics2D) g.create();
         try {
-            outputGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
+            outputGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, SMOKE_LAYER_ALPHA));
             outputGraphics.drawImage(blurredSmoke, 0, 0, null);
         } finally {
             outputGraphics.dispose();
@@ -146,7 +162,7 @@ public class SpikeEffectRenderer {
             return;
         }
 
-        float baseAlpha = (float) (0.20 * lifeRatio);
+        float baseAlpha = (float) (SMOKE_PARTICLE_ALPHA * lifeRatio);
         float radius = (float) particle.currentRadius();
         float centerX = (float) particle.x();
         float centerY = (float) particle.y();
@@ -168,8 +184,8 @@ public class SpikeEffectRenderer {
             float alphaMultiplier
     ) {
         Color[] colors = {
-                new Color(0.18f, 0.18f, 0.18f, baseAlpha * alphaMultiplier),
-                new Color(0.12f, 0.12f, 0.12f, baseAlpha * alphaMultiplier * 0.5f),
+                new Color(SMOKE_CENTER_SHADE, SMOKE_CENTER_SHADE, SMOKE_CENTER_SHADE, baseAlpha * alphaMultiplier),
+                new Color(SMOKE_EDGE_SHADE, SMOKE_EDGE_SHADE, SMOKE_EDGE_SHADE, baseAlpha * alphaMultiplier * SMOKE_EDGE_ALPHA_MULTIPLIER),
                 new Color(0f, 0f, 0f, 0f)
         };
         return new RadialGradientPaint(
@@ -194,7 +210,7 @@ public class SpikeEffectRenderer {
             double angle = 2.0 * Math.PI * pointIndex / offsets.size();
             float multiplier = offsets.get(pointIndex);
             float x = blobX + (float) Math.cos(angle) * blobRadius * multiplier;
-            float y = blobY + (float) Math.sin(angle) * blobRadius * multiplier * 0.6f;
+            float y = blobY + (float) Math.sin(angle) * blobRadius * multiplier * SMOKE_VERTICAL_SCALE;
 
             if (pointIndex == 0) {
                 shape.moveTo(x, y);
@@ -234,13 +250,12 @@ public class SpikeEffectRenderer {
     }
 
     private static float[] createGaussianKernel() {
-        int[] gaussianValues = {1, 4, 6, 4, 1};
-        float[] kernelValues = new float[25];
+        float[] kernelValues = new float[BLUR_KERNEL_SIZE * BLUR_KERNEL_SIZE];
 
-        for (int row = 0; row < 5; row++) {
-            for (int column = 0; column < 5; column++) {
-                kernelValues[row * 5 + column] =
-                        (gaussianValues[row] * gaussianValues[column]) / 256f;
+        for (int row = 0; row < BLUR_KERNEL_SIZE; row++) {
+            for (int column = 0; column < BLUR_KERNEL_SIZE; column++) {
+                kernelValues[row * BLUR_KERNEL_SIZE + column] =
+                        (GAUSSIAN_WEIGHTS[row] * GAUSSIAN_WEIGHTS[column]) / GAUSSIAN_WEIGHT_SUM;
             }
         }
         return kernelValues;

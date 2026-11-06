@@ -7,7 +7,7 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class Team {
+public final class Team {
     private static final double RECEIVE_HITBOX_RED_X = 30;
     private static final double RECEIVE_HITBOX_Y = 60;
     private static final double RECEIVE_HITBOX_WIDTH = 25;

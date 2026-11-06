@@ -52,6 +52,8 @@ public class GameplayFlowTest {
         testFocusLossClearsKeys();
         testCatchUpIsBounded();
         testGameLoopStopsAfterClose();
+        testGamePanelRejectsSerialization();
+        testRestartClearsEveryAction();
         testDiveCanSaveOnLandingFrame();
         testClientWaitsForAuthoritativeSwing();
         testAttackPressBeforeBallMovesIntoHitBox();
@@ -337,8 +339,8 @@ public class GameplayFlowTest {
         input.spikeFlat = true;
         new RallyContactHandler(model).collideTeam(model.redTeam, true, input);
 
-        check(model.ball.vx == GameConfig.FLAT_SPIKE_SPEED_X
-                        && model.ball.vy == GameConfig.FLAT_SPIKE_SPEED_Y,
+        check(model.ball.vx == GameConfig.FLAT_SPIKE_HORIZONTAL_SPEED
+                        && model.ball.vy == GameConfig.FLAT_SPIKE_VELOCITY_Y,
                 "同時按短球與平打不再使用專屬球速，依平打處理");
     }
 
@@ -879,6 +881,61 @@ public class GameplayFlowTest {
         }
     }
 
+    private static void testGamePanelRejectsSerialization() throws Exception {
+        GameModel model = new GameModel();
+        view.GamePanel panel = new view.GamePanel(model,
+                new controller.GameController(model, new KeyboardController()));
+        boolean rejected = false;
+        try (var bytes = new java.io.ByteArrayOutputStream();
+             var output = new java.io.ObjectOutputStream(bytes)) {
+            output.writeObject(panel);
+        } catch (java.io.NotSerializableException expected) {
+            rejected = true;
+        }
+        check(rejected, "持有對局與執行緒的畫面明確拒絕序列化，不產生無法恢復的視窗");
+    }
+
+    private static void testRestartClearsEveryAction() {
+        for (int mode = 0; mode < 3; mode++) {
+            for (PlayerAction action : PlayerAction.values()) {
+                GameModel model = new GameModel(mode > 0, mode == 2);
+                for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
+                    for (Player player : team.getPlayers()) {
+                        player.applyNetworkAction(action, player.assetName, 0);
+                        player.jumping = true;
+                        player.diving = true;
+                        player.vx = 20;
+                        player.vy = -10;
+                        player.attackHitBox.enable();
+                    }
+                }
+                model.recordRegularHit(false, model.blueTeam.setter);
+                model.recordBlock(true, model.redTeam.quickAttacker);
+                model.lockAttack(true);
+                model.lockAttack(false);
+                model.spikeEffect.startSpikeTrail(true);
+                model.spikeEffect.spawnSmoke(300, GameConfig.FLOOR_Y);
+                model.matchOver = true;
+                model.transientMessage = "old result";
+                model.restart();
+                for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
+                    for (Player player : team.getPlayers()) {
+                        check(player.getAction() == PlayerAction.IDLE && !player.jumping && !player.diving
+                                        && !player.attackHitBox.enabled && player.vx == 0 && player.vy == 0,
+                                "各角色從每種動作重開均回到乾淨待命狀態");
+                    }
+                }
+                check(!model.matchOver && model.redScore == 0 && model.blueScore == 0
+                                && model.getHitCount(true) == 0 && model.getHitCount(false) == 0
+                                && model.getLastHitTeam() == null && !model.hasBlocked(true)
+                                && !model.isAttackLocked(true) && !model.isAttackLocked(false)
+                                && model.transientMessage == null && model.spikeEffect.getSmokeParticles().isEmpty()
+                                && model.getServeHandler().isWaitingForServe(),
+                        "本地及左右練習重開不殘留上一局觸球、得分或特效");
+            }
+        }
+    }
+
     private static void testGameLoopStopsAfterClose() throws Exception {
         GameModel model = new GameModel();
         view.GamePanel panel = new view.GamePanel(model,
@@ -1373,7 +1430,7 @@ public class GameplayFlowTest {
                 }
                 if (hit) {
                     successfulDelay = delay;
-                    check(model.ball.vx == (redSide ? 1 : -1) * GameConfig.SERVE_JUMP_VX
+                    check(model.ball.vx == (redSide ? 1 : -1) * GameConfig.SERVE_JUMP_HORIZONTAL_SPEED
                                     && !model.isServeReceptionComplete(),
                             "第三次按住發球鍵，球進攻擊框後才由 Server 真正發球");
                     check(model.isAttackLocked(redSide), "跳發出手也鎖住同隊再次扣球");
@@ -1437,9 +1494,9 @@ public class GameplayFlowTest {
             updateOnlySide(model, redSide, hit.copy());
         }
         if (model.getServeHandler().getState() == ServeState.JUMP_TOSS) return false;
-        double expectedVx = route == 2 ? GameConfig.SERVE_JUMP_SLOW_VX : GameConfig.SERVE_JUMP_VX;
-        double expectedVy = route == 1 ? GameConfig.SERVE_JUMP_SHORT_VY
-                : route == 3 ? GameConfig.SERVE_JUMP_LONG_VY : GameConfig.SERVE_JUMP_VY;
+        double expectedVx = route == 2 ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
+        double expectedVy = route == 1 ? GameConfig.SERVE_JUMP_SHORT_VELOCITY_Y
+                : route == 3 ? GameConfig.SERVE_JUMP_LONG_VELOCITY_Y : GameConfig.SERVE_JUMP_VELOCITY_Y;
         check(Math.abs(model.ball.vx) == expectedVx
                         && Math.abs(model.ball.vy - (expectedVy + GameConfig.GRAVITY)) < 1e-9,
                 "跳發球路於命中時依方向鍵選擇水平或垂直初速: route=" + route

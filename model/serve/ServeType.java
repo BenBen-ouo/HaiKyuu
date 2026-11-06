@@ -7,16 +7,16 @@ package model.serve;
 import model.GameConfig;
 
 public enum ServeType {
-    NORMAL(GameConfig.SERVE_NORMAL_VX, GameConfig.SERVE_NORMAL_VY),
-    CEILING(GameConfig.SERVE_CEILING_VX, GameConfig.SERVE_CEILING_VY),
-    LOW_NET(GameConfig.SERVE_LOW_NET_VX, GameConfig.SERVE_LOW_NET_VY),
-    SHORT(GameConfig.SERVE_SHORT_VX, GameConfig.SERVE_SHORT_VY);
+    NORMAL(GameConfig.SERVE_NORMAL_HORIZONTAL_SPEED, GameConfig.SERVE_NORMAL_VELOCITY_Y),
+    CEILING(GameConfig.SERVE_CEILING_HORIZONTAL_SPEED, GameConfig.SERVE_CEILING_VELOCITY_Y),
+    LOW_NET(GameConfig.SERVE_LOW_NET_HORIZONTAL_SPEED, GameConfig.SERVE_LOW_NET_VELOCITY_Y),
+    SHORT(GameConfig.SERVE_SHORT_HORIZONTAL_SPEED, GameConfig.SERVE_SHORT_VELOCITY_Y);
 
-    public final double baseVx;
-    public final double baseVy;
+    public final double horizontalSpeed;
+    public final double verticalVelocity;
 
-    ServeType(double baseVx, double baseVy) {
-        this.baseVx = baseVx;
-        this.baseVy = baseVy;
+    ServeType(double horizontalSpeed, double verticalVelocity) {
+        this.horizontalSpeed = horizontalSpeed;
+        this.verticalVelocity = verticalVelocity;
     }
 }

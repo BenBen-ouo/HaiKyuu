@@ -45,7 +45,7 @@ public class ServeBallController {
         model.setLastHitTeam(redSide);
         model.ball.stopRotation();
         model.ball.useSlowFloorBounceSpin();
-        setBallVelocity(serveType.baseVx * direction, serveType.baseVy);
+        setRandomizedVelocity(serveType.horizontalSpeed * direction, serveType.verticalVelocity);
     }
 
     public void tossJumpServe(boolean redSide) {
@@ -62,11 +62,11 @@ public class ServeBallController {
 
     public void hitJumpServe(boolean redSide, boolean shortArc, boolean slowHorizontal,
                              boolean longArc) {
-        double speedX = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_VX : GameConfig.SERVE_JUMP_VX;
-        double speedY = shortArc ? GameConfig.SERVE_JUMP_SHORT_VY
-                : longArc ? GameConfig.SERVE_JUMP_LONG_VY : GameConfig.SERVE_JUMP_VY;
-        model.ball.vx = SideRules.directionTowardOpponent(redSide) * speedX;
-        model.ball.vy = speedY;
+        double horizontalSpeed = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
+        double verticalVelocity = shortArc ? GameConfig.SERVE_JUMP_SHORT_VELOCITY_Y
+                : longArc ? GameConfig.SERVE_JUMP_LONG_VELOCITY_Y : GameConfig.SERVE_JUMP_VELOCITY_Y;
+        model.ball.vx = SideRules.directionTowardOpponent(redSide) * horizontalSpeed;
+        model.ball.vy = verticalVelocity;
         model.ball.setRotationSpeed(redSide ? GameConfig.SPIKE_SPIN_SPEED : -GameConfig.SPIKE_SPIN_SPEED);
         model.ball.useFastFloorBounceSpin();
         model.setLastHitTeam(redSide);
@@ -89,9 +89,9 @@ public class ServeBallController {
         return redSide ? GameConfig.RED_SERVE_BALL_OFFSET_Y : GameConfig.BLUE_SERVE_BALL_OFFSET_Y;
     }
 
-    private void setBallVelocity(double baseVx, double baseVy) {
-        model.ball.vx = baseVx + randomRange(GameConfig.SERVE_RANDOM_VX_RANGE);
-        model.ball.vy = baseVy + randomRange(GameConfig.SERVE_RANDOM_VY_RANGE);
+    private void setRandomizedVelocity(double velocityX, double velocityY) {
+        model.ball.vx = velocityX + randomRange(GameConfig.SERVE_RANDOM_VX_RANGE);
+        model.ball.vy = velocityY + randomRange(GameConfig.SERVE_RANDOM_VY_RANGE);
     }
 
     private double randomRange(double range) {

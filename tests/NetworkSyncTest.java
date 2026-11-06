@@ -16,10 +16,12 @@ import model.serve.ServeState;
 public final class NetworkSyncTest {
     public static void main(String[] args) throws Exception {
         testWorldSnapshotRoundTripAndOrdering();
+        testTypedRallyContactSnapshot();
         testBlockJumpCountSnapshot();
         testBlockPhaseIsIndependentOfAssetName();
         testClientAirSetWaitsForAuthority();
         testBackRunStagesInClientPrediction();
+        testScoreLockResetsClientAcceleration();
         testRallyContactsWithoutReliableEvent();
         testReliableEventRestoresContactHistory();
         testReliableEventsStayInOrder();
@@ -46,6 +48,41 @@ public final class NetworkSyncTest {
         }
         awaitMatchWorkerShutdown();
         System.out.println("NetworkSyncTest passed");
+    }
+
+    private static void testScoreLockResetsClientAcceleration() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            GameModel client = new GameModel();
+            client.getServeHandler().setWaitingForServe(false);
+            var back = (redSide ? client.redTeam : client.blueTeam).backPlayer;
+            TeamInput run = new TeamInput();
+            run.backRight = redSide;
+            run.backLeft = !redSide;
+            for (int tick = 0; tick <= model.GameConfig.BACK_RUN_FOURTH_STAGE_END_FRAMES; tick++) {
+                client.updateForNetworkPrediction(run, redSide);
+            }
+            check(Math.abs(back.vx) == model.GameConfig.BACK_RUN_MAX_SPEED, "Client 先達到第五階速度");
+            // FLOW 事件會先歸位，再套用鎖定階段；即使沒有中間預測 tick 也須清理累計。
+            back.applyNetworkAction(PlayerAction.IDLE, back.assetName, 0);
+            client.applyNetworkRallyPhase(true, 30);
+            client.applyNetworkRallyPhase(false, 0);
+            client.updateForNetworkPrediction(run, redSide);
+            check(Math.abs(back.vx) == model.GameConfig.BACK_RUN_START_SPEED,
+                    "兩側 Client 下一球不沿用上一球的加速累計");
+        }
+    }
+
+    private static void testTypedRallyContactSnapshot() throws Exception {
+        var red = new model.rally.RallyContactSnapshot.TeamContacts(2, 1, true, true, false, true);
+        var blue = new model.rally.RallyContactSnapshot.TeamContacts(0, 2, false, false, true, false);
+        var contacts = new model.rally.RallyContactSnapshot(red, blue, false, true, true);
+        GameModel authoritative = new GameModel();
+        authoritative.applyNetworkRallyContactState(contacts);
+        check(authoritative.captureRallyContacts().equals(contacts),
+                "型別化回合資料一次套用，不交換紅藍欄位或漏掉接球／扣球鎖定");
+        GameModel client = new GameModel();
+        snapshot(1, 0, Packet.WorldSnapshot.from(authoritative, 0)).snapshot.rallyContacts.applyTo(client);
+        check(client.captureRallyContacts().equals(contacts), "回合資料經封包往返保持全部語意欄位");
     }
 
     private static void testBackRunStagesInClientPrediction() throws Exception {

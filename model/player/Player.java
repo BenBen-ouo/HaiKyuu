@@ -47,7 +47,7 @@ public abstract class Player {
     public double minX = GameConfig.WORLD_LEFT;
     public double maxX = GameConfig.WORLD_RIGHT;
 
-    public Player(String assetName, double x, double y, boolean redSide) {
+    Player(String assetName, double x, double y, boolean redSide) {
         this.assetName = assetName;
         this.x = x;
         this.y = y;
@@ -126,9 +126,9 @@ public abstract class Player {
         actionAnimator.playDive();
     }
 
-    protected void startAttackReady(double horizontalSpeed) {
+    protected void startAttackReady(double velocityX) {
         heldAttackQueued = false;
-        actionAnimator.startAttackReady(horizontalSpeed);
+        actionAnimator.startAttackReady(velocityX);
     }
 
     public void startAttackSwingAnimation() {

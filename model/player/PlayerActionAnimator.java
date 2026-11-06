@@ -59,12 +59,12 @@ public class PlayerActionAnimator {
         );
     }
 
-    public void startAttackReady(double horizontalSpeed) {
+    public void startAttackReady(double velocityX) {
         player.mirrorImage = false;
         player.action = PlayerAction.ATTACK_READY;
         player.diving = false;
         player.attackHitBox.enable();
-        player.vx = horizontalSpeed;
+        player.vx = velocityX;
         player.vy = GameConfig.BACK_JUMP_VELOCITY_Y;
         // 紀錄起跳時的 X 座標以便後續三米線判定（以圖片中心為基準）
         player.jumpStartCenterX = player.x + player.imageWidth / 2.0;

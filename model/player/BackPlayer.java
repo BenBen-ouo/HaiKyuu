@@ -7,13 +7,13 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class BackPlayer extends Player {
+public final class BackPlayer extends Player {
     private static final double BACK_JUMP_MAX_HORIZONTAL_SPEED = 2.8;
 
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;
     private boolean previousBackAction = false;
-    private double jumpAirSpeed;
+    private double jumpVelocityX;
     private int runDirection;
     private int runHeldFrames;
 
@@ -132,7 +132,7 @@ public class BackPlayer extends Player {
         }
 
         if (jumping) {
-            vx = jumpAirSpeed;
+            vx = jumpVelocityX;
         } else {
             vx = 0;
         }
@@ -181,16 +181,16 @@ public class BackPlayer extends Player {
     }
 
     private void startBackAttack() {
-        jumpAirSpeed = plannedJumpAirSpeed();
-        startAttackReady(jumpAirSpeed);
+        jumpVelocityX = plannedJumpVelocityX();
+        startAttackReady(jumpVelocityX);
     }
 
     /** 發球拋球也使用同一份起跳預測，避免漏算攻擊框相對圖片中心的位移。 */
     public double plannedAttackHitBoxCenterAtApex() {
-        return attackHitBox.getCenterX() + plannedJumpAirSpeed() * framesToApex();
+        return attackHitBox.getCenterX() + plannedJumpVelocityX() * framesToApex();
     }
 
-    private double plannedJumpAirSpeed() {
+    private double plannedJumpVelocityX() {
         // 起跳中心若已在線上或靠網側，讓攻擊框的前緣在最高點對齊 Setter 中心。
         // 線後方維持原上限；速度只在起跳時決定，空中不重新計算。
         double center = x + imageWidth / 2.0;
@@ -215,19 +215,24 @@ public class BackPlayer extends Player {
     }
 
     /** 快照還原時保留本次起跳速度，避免 Client 下一幀改回舊速度。 */
-    public void syncJumpAirSpeed(double serverVx) {
-        jumpAirSpeed = serverVx;
+    public void applyJumpVelocityX(double serverVx) {
+        jumpVelocityX = serverVx;
+    }
+
+    /** 新一球歸位時也清除 Client 的本機加速累計。 */
+    public void resetRunAcceleration() {
+        runDirection = 0;
+        runHeldFrames = 0;
     }
     /**
      * 發球準備時清除舊的撲球／攻擊動作，避免發球鍵沿用上一個 Space 狀態。
      */
     public void prepareForServe() {
-        runDirection = 0;
-        runHeldFrames = 0;
+        resetRunAcceleration();
         diveController.cancel();
         restoreDefaultHitBox();
         previousBackAction = false;
-        jumpAirSpeed = 0;
+        jumpVelocityX = 0;
         PlayerPhysics.clearMotionAndActions(this);
         finishAction();
         attackHitBox.disable();
@@ -235,13 +240,12 @@ public class BackPlayer extends Player {
 
     @Override
     public void resetToInitial() {
-        runDirection = 0;
-        runHeldFrames = 0;
+        resetRunAcceleration();
         diveController.cancel();
         super.resetToInitial();
         restoreDefaultHitBox();
         previousBackAction = false;
-        jumpAirSpeed = 0;
+        jumpVelocityX = 0;
     }
 
     @Override

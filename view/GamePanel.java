@@ -16,14 +16,27 @@ import model.FixedTickSchedule;
 import network.NetworkView;
 import network.TimingDiagnostics;
 
-public class GamePanel extends JPanel {
-    private final GameModel model;
-    private final GameController controller;
-    private final NetworkView networkView;
-    private final GameRenderer renderer = new GameRenderer();
-    private final NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
-    private Thread gameLoop;
-    private volatile RenderFrame renderFrame;
+public final class GamePanel extends JPanel {
+    @java.io.Serial
+    private static final long serialVersionUID = 1L;
+
+    /** 視窗持有執行緒與連線，不能序列化成可恢復的對局。 */
+    @java.io.Serial
+    private void writeObject(java.io.ObjectOutputStream output) throws java.io.IOException {
+        throw new java.io.NotSerializableException(GamePanel.class.getName());
+    }
+    private final transient GameModel model;
+    private final transient GameController controller;
+    private final transient NetworkView networkView;
+    private final transient GameRenderer renderer = new GameRenderer();
+    private final transient NetworkStatusRenderer networkStatusRenderer = new NetworkStatusRenderer();
+    private transient Thread gameLoop;
+    private transient volatile RenderFrame renderFrame;
+
+    @java.io.Serial
+    private void readObject(java.io.ObjectInputStream input) throws java.io.IOException {
+        throw new java.io.InvalidObjectException("GamePanel must be constructed for a new match");
+    }
 
     public GamePanel(GameModel model, GameController controller) {
         this(model, controller, null);

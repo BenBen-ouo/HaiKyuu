@@ -7,6 +7,7 @@ package network;
 import java.util.List;
 
 import model.GameModel;
+import model.rally.RallyContactSnapshot;
 import model.ControlInput;
 import model.ball.Ball;
 import model.player.Player;
@@ -153,54 +154,35 @@ public final class Packet {
         public final boolean redAttackLocked;
         public final boolean blueAttackLocked;
 
-        public RallyContactState(int redHitCount, int blueHitCount,
-                                 int redLastHitterIndex, int blueLastHitterIndex,
-                                 int lastHitTeamCode, boolean lastTouchWasBlock,
-                                 boolean serveReceptionComplete,
-                                 boolean redSetterTouched, boolean blueSetterTouched,
-                                 boolean redSetterTouchedFirst, boolean blueSetterTouchedFirst,
-                                 boolean redBlockUsed, boolean blueBlockUsed,
-                                 boolean redAttackLocked, boolean blueAttackLocked) {
-            this.redHitCount = redHitCount;
-            this.blueHitCount = blueHitCount;
-            this.redLastHitterIndex = redLastHitterIndex;
-            this.blueLastHitterIndex = blueLastHitterIndex;
-            this.lastHitTeamCode = lastHitTeamCode;
-            this.lastTouchWasBlock = lastTouchWasBlock;
-            this.serveReceptionComplete = serveReceptionComplete;
-            this.redSetterTouched = redSetterTouched;
-            this.blueSetterTouched = blueSetterTouched;
-            this.redSetterTouchedFirst = redSetterTouchedFirst;
-            this.blueSetterTouchedFirst = blueSetterTouchedFirst;
-            this.redBlockUsed = redBlockUsed;
-            this.blueBlockUsed = blueBlockUsed;
-            this.redAttackLocked = redAttackLocked;
-            this.blueAttackLocked = blueAttackLocked;
+        public RallyContactState(RallyContactSnapshot snapshot) {
+            redHitCount = snapshot.red().hitCount();
+            blueHitCount = snapshot.blue().hitCount();
+            redLastHitterIndex = snapshot.red().lastHitterIndex();
+            blueLastHitterIndex = snapshot.blue().lastHitterIndex();
+            lastHitTeamCode = encodeNullableBoolean(snapshot.lastHitTeam());
+            lastTouchWasBlock = snapshot.lastTouchWasBlock();
+            serveReceptionComplete = snapshot.serveReceptionComplete();
+            redSetterTouched = snapshot.red().setterTouched();
+            blueSetterTouched = snapshot.blue().setterTouched();
+            redSetterTouchedFirst = snapshot.red().setterTouchedFirst();
+            blueSetterTouchedFirst = snapshot.blue().setterTouchedFirst();
+            redBlockUsed = snapshot.red().blockUsed();
+            blueBlockUsed = snapshot.blue().blockUsed();
+            redAttackLocked = snapshot.red().attackLocked();
+            blueAttackLocked = snapshot.blue().attackLocked();
         }
 
         public static RallyContactState from(GameModel model) {
-            return new RallyContactState(
-                    model.getHitCount(true), model.getHitCount(false),
-                    model.getLastHitterIndexForNetwork(true), model.getLastHitterIndexForNetwork(false),
-                    encodeNullableBoolean(model.getLastHitTeam()),
-                    model.wasLastTouchBlockForNetwork(), model.isServeReceptionComplete(),
-                    model.hasSetterTouched(true), model.hasSetterTouched(false),
-                    model.wasSetterTouchedFirst(true), model.wasSetterTouchedFirst(false),
-                    model.hasBlocked(true), model.hasBlocked(false), model.redAttackLocked, model.blueAttackLocked
-            );
+            return new RallyContactState(model.captureRallyContacts());
         }
 
         public void applyTo(GameModel model) {
-            model.redAttackLocked = redAttackLocked;
-            model.blueAttackLocked = blueAttackLocked;
-            model.applyNetworkRallyContactState(
-                    redHitCount, blueHitCount, decodeNullableBoolean(lastHitTeamCode),
-                    lastTouchWasBlock, serveReceptionComplete,
-                    redLastHitterIndex, blueLastHitterIndex,
-                    redSetterTouched, blueSetterTouched,
-                    redSetterTouchedFirst, blueSetterTouchedFirst,
-                    redBlockUsed, blueBlockUsed
-            );
+            model.applyNetworkRallyContactState(new RallyContactSnapshot(
+                    new RallyContactSnapshot.TeamContacts(redHitCount, redLastHitterIndex, redSetterTouched,
+                            redSetterTouchedFirst, redBlockUsed, redAttackLocked),
+                    new RallyContactSnapshot.TeamContacts(blueHitCount, blueLastHitterIndex, blueSetterTouched,
+                            blueSetterTouchedFirst, blueBlockUsed, blueAttackLocked),
+                    decodeNullableBoolean(lastHitTeamCode), lastTouchWasBlock, serveReceptionComplete));
         }
     }
 
@@ -542,7 +524,7 @@ public final class Packet {
                 mb.applyBlockJumpState(countedBlockJumps, opponentFirstTouchSeen);
             }
             if (player instanceof BackPlayer backPlayer && jumping) {
-                backPlayer.syncJumpAirSpeed(vx);
+                backPlayer.applyJumpVelocityX(vx);
             }
             player.hitBox.set(
                     hitBoxOffsetX,

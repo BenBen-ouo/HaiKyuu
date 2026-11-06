@@ -117,9 +117,9 @@ try {
     Set-Content -LiteralPath $workMarker -Value 'HaiKyuu generated release build workspace' -Encoding UTF8
 
     Write-Host '1/6 Compiling game and tests...'
-    & $javac -encoding UTF-8 -d $classes Main.java
+    & $javac -Xlint:all -encoding UTF-8 -d $classes Main.java
     Assert-ToolSucceeded 'Game compilation'
-    & $javac -encoding UTF-8 -cp $classes -d $tests `
+    & $javac -Xlint:all -encoding UTF-8 -cp $classes -d $tests `
         tests\GameplayFlowTest.java tests\LauncherTest.java `
         tests\NetworkSyncTest.java tests\PackagingSmokeTest.java
     Assert-ToolSucceeded 'Test compilation'

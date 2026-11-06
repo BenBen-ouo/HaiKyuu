@@ -11,7 +11,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
 import model.GameConfig;
 
-public class NetHitBox {
+public final class NetHitBox {
     private double centerX;
     private double topY;
     private double width;

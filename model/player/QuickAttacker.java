@@ -7,7 +7,7 @@ package model.player;
 import model.GameConfig;
 import model.TeamInput;
 
-public class QuickAttacker extends Player {
+public final class QuickAttacker extends Player {
     private boolean previousMbActionPressed = false;
     private int countedBlockJumps;
     private boolean opponentFirstTouchSeen;

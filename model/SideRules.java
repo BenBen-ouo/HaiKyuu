@@ -18,7 +18,7 @@ public final class SideRules {
         return redSide ? 1 : -1;
     }
 
-    public static int horizontalDirectionFromBackInput(TeamInput input, boolean redSide) {
+    public static int horizontalDirectionFromBackInput(ControlInput input, boolean redSide) {
         if (input.backLeft && !input.backRight) {
             return -1;
         }

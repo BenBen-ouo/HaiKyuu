@@ -14,9 +14,10 @@ import model.player.Team;
 import model.rally.RallyContactHandler;
 import model.rally.RallyScorer;
 import model.rally.RallyState;
+import model.rally.RallyContactSnapshot;
 import model.serve.ServeHandler;
 
-public class GameModel {
+public final class GameModel {
     private static final double INITIAL_BALL_CENTER_Y = 130;
     private final boolean practiceMode;
     private final boolean practiceRedServing;
@@ -521,52 +522,26 @@ public class GameModel {
         return scorer.getDeadBallTimer();
     }
 
-    public int getLastHitterIndexForNetwork(boolean redSide) {
-        return rallyState.getLastHitterIndex(redSide, redSide ? redTeam : blueTeam);
+    public RallyContactSnapshot captureRallyContacts() {
+        return new RallyContactSnapshot(
+                rallyState.captureTeamContacts(true, redTeam, redAttackLocked),
+                rallyState.captureTeamContacts(false, blueTeam, blueAttackLocked),
+                rallyState.getLastHitTeam(), rallyState.wasLastTouchBlock(), serveReceptionComplete);
     }
 
-    public boolean wasLastTouchBlockForNetwork() {
-        return rallyState.wasLastTouchBlock();
-    }
-
-    public void applyNetworkRallyContactState(
-            int redHitCount,
-            int blueHitCount,
-            Boolean lastHitTeam,
-            boolean lastTouchWasBlock,
-            boolean serveReceptionComplete,
-            int redLastHitterIndex,
-            int blueLastHitterIndex,
-            boolean redSetterTouched,
-            boolean blueSetterTouched,
-            boolean redSetterTouchedFirst,
-            boolean blueSetterTouchedFirst,
-            boolean redBlockUsed,
-            boolean blueBlockUsed
-    ) {
-        rallyState.applyNetworkState(
-                redHitCount,
-                blueHitCount,
-                lastHitTeam,
-                lastTouchWasBlock,
-                redLastHitterIndex,
-                blueLastHitterIndex,
-                redSetterTouched,
-                blueSetterTouched,
-                redSetterTouchedFirst,
-                blueSetterTouchedFirst,
-                redBlockUsed,
-                blueBlockUsed,
-                redTeam,
-                blueTeam
-        );
-        this.serveReceptionComplete = serveReceptionComplete;
+    public void applyNetworkRallyContactState(RallyContactSnapshot snapshot) {
+        rallyState.applySnapshot(snapshot, redTeam, blueTeam);
+        serveReceptionComplete = snapshot.serveReceptionComplete();
+        redAttackLocked = snapshot.red().attackLocked();
+        blueAttackLocked = snapshot.blue().attackLocked();
     }
 
     public void applyNetworkRallyPhase(boolean rallyOver, int deadBallTimer) {
         scorer.applyNetworkState(rallyOver, deadBallTimer);
         if (scorer.isLockedPhase()) {
             spikeEffect.clear();
+            redTeam.backPlayer.resetRunAcceleration();
+            blueTeam.backPlayer.resetRunAcceleration();
         }
     }
 

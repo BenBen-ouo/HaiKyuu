@@ -1,8 +1,8 @@
 # HaiKyuu 專案架構
 
-本文件記錄實作現況。協作與品質規則以 [AGENTS.md](AGENTS.md) 為權威；操作與發布引用 [README.md](README.md)，本次批次與驗證引用 [REFACTOR_PLAN.md](REFACTOR_PLAN.md)。
+本文件記錄實作現況。協作與品質規則以 [AGENTS.md](AGENTS.md) 為權威；操作與發布引用 [README.md](README.md)。
 
-更新：2026-11-06，`refactor`，基準 commit `5c0a9faefff2df7142e13060f2d0536257c70865` 加本次未提交差異。使用者已核准整體重構；以下已實作與尚待確認分開記錄。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
+更新：2026-11-06，`refactor`，收尾基準 commit `3deea06e9205eef59131f5d7ad74ccdcf4071f19` 加本次未提交差異。使用者已核准整體重構；以下已實作與尚待確認分開記錄。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
 
 ## 1. 系統目的與範圍
 
@@ -23,7 +23,7 @@
 | JDK 尋找 | 打包依 JAVA_HOME、PATH、安裝目錄尋找完整工具組；沒有把個人安裝路徑寫入專案。 |
 | CI／持久化 | 沒有 CI workflow、資料庫、ORM、migration 或外部 API。 |
 
-使用與日常命令見 README、AGENTS §9；本次實際命令與退出碼見 REFACTOR_PLAN §9。
+使用與日常命令見 README、AGENTS §9。
 
 ## 3. 架構風格與依賴方向
 
@@ -38,7 +38,7 @@ model 子模組 → model 與必要的 model 子模組
 ```
 
 - 模型禁止依賴 View／Controller／network 的規範見 AGENTS §3。
-- `tests/ArchitectureTest.ps1` 用 jdeps 檢查編譯後的類別依賴，已接入發行入口；不只搜尋 import。完整模組循環與職責合理性仍需人工審查。
+- `tests/ArchitectureTest.ps1` 用 jdeps 檢查編譯後的類別依賴，已接入發行入口；不只搜尋 import。同時拒絕跨 model／view／controller／network 的類別循環；層內擁有者回參照不等於禁止的跨層循環。職責合理性仍須人工審查。
 - `controller.GameController` 切換 `view.DebugSettings`、Launcher 使用 `network.NetworkAddress` 是保留的現況，未增加泛用共用層。
 - 模型使用必要 AWT 幾何型別，並不操作 Swing 視窗。
 
@@ -51,11 +51,11 @@ model 子模組 → model 與必要的 model 子模組
 | 啟動組裝 | `Main` | 啟動參數、模式、Server／Client 與視窗關閉監聽。 |
 | 操作調度 | `KeyboardController`、`GameController` | 讀取 ControlInput；失焦清鍵；送本地模型或 Client。 |
 | 世界總調度 | `GameModel.update/updateForNetworkPrediction/restart` | 權威更新與角色預測分開；統籌整場重設。 |
-| 回合 | `RallyState`、`RallyContactHandler`、`RallyScorer`、`ScoringLogic` | 唯一觸球計數、碰撞規則、判決與得分階段。 |
+| 回合 | `RallyState`、`RallyContactSnapshot`、`RallyContactHandler`、`RallyScorer`、`ScoringLogic` | 唯一觸球計數、具名快照、碰撞規則、判決與得分階段；模型不接收十多個位置參數。 |
 | 球／球路 | `Ball`、`BallTrajectory`、`NetHitBox` | 物理、幾何、離散舉球／拋球與指定力道球路計算。 |
 | 角色 | `Team`、各 Player、`PlayerPhysics`、`DiveController`、動畫類別 | 動作請求、移動、碰撞框與動畫階段；成功觸球由回合流程確認。 |
 | 發球 | `ServeHandler`、`ServeBallController`、`ServeInputLocker`、`ServeContactPolicy` | 發球階段、擺球、輸入過濾及出球。 |
-| 特效 | `SpikeEffect` | 軌跡與煙霧的可變生命週期；沒有舊圖片特效管理器。 |
+| 特效 | `SpikeEffect` | 軌跡與煙霧的可變生命週期；HSB、透明度與線寬由 SpikeEffectRenderer 擁有。 |
 | 同步 | `GameServer`、`GameClient`、`ServerPlayerSlot`、Packet／codec | 傳輸、輸入樣本、可靠事件與權威快照套用。 |
 | 傳輸邊界 | `ClientTransport`、`UdpClientTransport` | 固定遠端資料報端點與資源關閉；測試可替換成記憶體傳輸。 |
 | 圖片校正 | `RemotePlayerInterpolator`、`PlayerRenderCorrection` | 對手插值／有限外推、本機圖片平滑；不改碰撞位置。 |
@@ -68,9 +68,11 @@ model 子模組 → model 與必要的 model 子模組
 - `NetworkSyncTest` 宣告 package network，以測試傳輸邊界；其他 Java 測試仍在未命名 package。
 - `assets/images/` 由 AssetLoader 優先從 JAR 載入，再回退開發目錄；圖片不再作為攔網碰撞階段的判斷來源。
 - GameConfig 是全域調參入口，Team 管理角色碰撞框，Renderer 管理外觀。起跳 Y 參數以 `*_JUMP_VELOCITY_Y` 命名，保留使用者原數值。
+- 發球／扣球的正值水平速率以 `HORIZONTAL_SPEED` 命名，帶符號垂直分量以 `VELOCITY_Y` 命名；ServeType 也分開描述速率與分量，沒有改數值或球路。
 - AppVersion 是遊戲／發行版本來源；UdpCodec 的協定版本是不同概念。本次協定升為 11，遊戲版本未升。
 - 建置／發行／診斷目錄由 .gitignore 排除；不提交 bundled runtime。
 - 沒有建立 Service、Repository、shared/common 或相容層空殼。
+- 實際角色與模型目前沒有對外繼承擴充入口；具體類別使用 final，Player 的建構責任限於角色 package。GamePanel 持有對局執行資源，明確拒絕序列化／反序列化，不以 transient 欄位假裝可還原對局。
 
 ## 6. 主要資料與呼叫流程
 
@@ -147,19 +149,24 @@ FixedTickSchedule 限制補跑，不放大物理步長。更新失敗明確回�
 
 | 項目 | 防護與入口 | 實際限制 |
 | --- | --- | --- |
-| 模型依賴 | ArchitectureTest.ps1／jdeps，已接打包 | 檢查禁止的跨層類別依賴，不宣稱完整模組循環分析。 |
+| 模型依賴與循環 | ArchitectureTest.ps1／jdeps，已接打包 | 檢查禁止依賴及四層間的類別循環；保留已審查的模型內擁有者／協作者回參照，不宣稱所有 package 都無循環。 |
 | 遊戲與狀態 | GameplayFlowTest，已接打包 | 含左右、落地邊界、焦點、補跑、畫面資料及迴圈關閉；不是實體 GUI。 |
 | 網路 | NetworkSyncTest，基本模式已接打包 | 基本使用記憶體傳輸；動態埠 loopback 另執行，不等於雙機區網。 |
 | 發行回復 | ReleaseReplacementTest.ps1，已接打包 | 正常替換、舊 ZIP 鎖住及新 ZIP 鎖住失敗；不是所有 OS 故障注入。 |
 | 素材與發行 | PackagingSmokeTest、JAR／ZIP 清單，已接打包 | 隔離目錄驗證素材；無 Java Windows 人工驗收仍另列。 |
 | 效能 | RefactorBenchmark，手動入口 | 同機小型比較，不冒充 GPU、實體視窗或長時間壓測。 |
 
-本次來源、命令、結果及量測見 REFACTOR_PLAN §9；沒有 CI，未以文件要求冒充已啟用的自動檢查。
+沒有 CI，未以文件要求冒充已啟用的自動檢查。
+
+2026-11-06 收尾驗證（基準為本文件上方 commit 加當次未提交差異）：JDK 21.0.10 全新輸出編譯並啟用 `javac -Xlint:all`，退出碼 0、零警告；GameplayFlowTest、LauncherTest、NetworkSyncTest 基本與 loopback、架構及發行回復檢查、隔離 JAR 的 39 張素材檢查均通過。版本 v1.1.0 的 app-image／ZIP 已重建，兩者遊戲 JAR 雜湊一致。這是當次來源的結果，後續修改須重新驗證。
+
+當次 RefactorBenchmark 以相同 JDK、相同 `-Xbatch` 條件比較三輪中位數，最大平均退化約 4.6%、p95 約 2.0%，符合當次 10%／15% 門檻；煙霧場景繪圖仍約 21.7 ms，未達 60 Hz 單幀預算。證據為忽略的本機產物 `build/closeout-batch-before.csv`、`build/closeout-batch-after.csv`；並非完整比賽效能保證。
 
 ## 11. 已確認限制與待決事項
 
 - A：保留 Swing、既有模式／按鍵／數值、Server 權威及同幀順序；沒有升版、提交、發布或引入新框架。
-- 審查項目的狀態以 AGENTS §11 為唯一完整清單，不複製第二份缺陷列表。
-- E：確實不可達目標的球路降級政策尚待使用者選擇；只阻擋該子項，不影響已修正的垂直可達球路。
+- Client 套用得分鎖定階段時，GameModel 同時清除兩隊後排的移動加速累計，避免下一球沿用舊累計；由 BackPlayer.resetRunAcceleration() 統一執行。
+- A：使用者已確認不可達目標的既有降級、力道與球路維持現狀，日後遇到實際案例再議；例外的完整規範見 AGENTS §5，不再列為本次阻塞。
 - E：正式 JDK 支援範圍與未來 CI 尚未另訂；本輪只記實際 JDK 與已接入的建置入口。
-- 尚未以人工確認：真實雙機區網、實體 GUI／操作手感、無 Java Windows 與長時間運行。效能及資源測試的完成範圍以執行紀錄為準。
+- 依賴盤點：jdeps 的強連通群主要為巢狀型別及模型內部的球／網子、Player／動畫／碰撞框、BackPlayer／DiveController、GameModel／回合／發球協作者回參照；沒有跨四層的類別循環。未為消除合法回參照而重設整個架構。
+- 尚未以人工確認：真實雙機區網、實體 GUI／操作手感、無 Java Windows 與長時間運行。自動資源測試及效能取樣不涵蓋全部 OS 故障組合。

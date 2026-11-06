@@ -1,5 +1,5 @@
 /*
-定義扣球特效資料，包含扣球軌跡與落地煙霧粒子的生命週期管理，並提供 HSB 色彩配置。
+定義扣球軌跡與落地煙霧粒子的資料及生命週期。
 */
 package model.effect;
 
@@ -8,12 +8,6 @@ import java.util.Iterator;
 import java.util.List;
 
 public class SpikeEffect {
-    // HSB 顏色設定（供後續調整亮度）
-    // 預設紅隊使用 Hue 0.0（紅色），藍隊使用 Hue 0.61（藍色）
-    public static final float RED_HUE = 0.0f;
-    public static final float BLUE_HUE = 0.61f;
-    public static final float TRAIL_SATURATION = 0.9f;
-    public static final float TRAIL_BRIGHTNESS = 1.0f;
     private static final int MAX_TRAIL_POINTS = 40;
     private static final int TRAIL_DURATION_FRAMES = 10;
     private static final double SMOKE_START_RADIUS = 25;

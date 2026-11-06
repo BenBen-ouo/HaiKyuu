@@ -624,10 +624,6 @@ public final class GameServer implements AutoCloseable {
         return localIp;
     }
 
-    public String getEndMessage() {
-        return endMessage;
-    }
-
     @Override
     public void close() {
         if (!runStarted.get()) {
