@@ -7,6 +7,7 @@ package model;
 import model.ball.Ball;
 import model.ball.NetHitBox;
 import model.effect.SpikeEffect;
+import model.effect.BlockTouchEffect;
 import model.player.BackActionResolver;
 import model.player.Player;
 import model.player.Setter;
@@ -19,8 +20,6 @@ import model.serve.ServeHandler;
 
 public final class GameModel {
     private static final double INITIAL_BALL_CENTER_Y = 130;
-    private final boolean practiceMode;
-    private final boolean practiceRedServing;
 
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, INITIAL_BALL_CENTER_Y);
     public final NetHitBox netHitBox = new NetHitBox();
@@ -32,6 +31,7 @@ public final class GameModel {
     public int blueScore = 0;
 
     public final SpikeEffect spikeEffect = new SpikeEffect();
+    public final BlockTouchEffect blockTouchEffect = new BlockTouchEffect();
 
     // 比賽狀態
     public boolean matchOver = false;
@@ -71,30 +71,8 @@ public final class GameModel {
     public Boolean pendingTouchOutWinner = null;
 
     public GameModel() {
-        this(false);
-    }
-
-    public GameModel(boolean practiceMode) {
-        this(practiceMode, false);
-    }
-
-    /** practiceRedServing=true 表示藍隊練習、紅隊每球固定發球。 */
-    public GameModel(boolean practiceMode, boolean practiceRedServing) {
         GameConfig.validate();
-        this.practiceMode = practiceMode;
-        this.practiceRedServing = practiceMode && practiceRedServing;
-        if (practiceMode) {
-            serveHandler.setRedServing(this.practiceRedServing);
-        }
         serveHandler.setWaitingForServe(true);
-    }
-
-    public boolean isPracticeMode() {
-        return practiceMode;
-    }
-
-    public boolean isPracticeRedServing() {
-        return practiceRedServing;
     }
 
     public ServeHandler getServeHandler() {
@@ -126,6 +104,7 @@ public final class GameModel {
         scorer.reset();
         rallyState.resetAll();
         spikeEffect.clear();
+        blockTouchEffect.clear();
         redAttackLocked = false;
         blueAttackLocked = false;
         netFlashFrames = 0;
@@ -176,6 +155,7 @@ public final class GameModel {
 
     /** Client 只預測本機球員；球、對手與一切碰撞／裁決都等 Server。 */
     public void updateForNetworkPrediction(ControlInput localInput, boolean localRedSide) {
+        blockTouchEffect.beginFrame();
         if (netFlashFrames > 0) netFlashFrames--;
         if (matchOver) updateTransientMessage();
         TeamInput input = localRedSide ? redFrameInput : blueFrameInput;
@@ -209,9 +189,8 @@ public final class GameModel {
             if (!wasActive || spikeEffect.getCurrentSpikeIsRed() != trailRedSide) {
                 spikeEffect.startSpikeTrail(trailRedSide);
             }
-        } else if (wasActive || rallyState.wasLastTouchBlock()) {
-            if (rallyState.wasLastTouchBlock()) spikeEffect.clearSpikeTrail();
-            else spikeEffect.stopSpikeTrail();
+        } else if (wasActive) {
+            spikeEffect.stopSpikeTrail();
         }
     }
 
@@ -236,6 +215,7 @@ public final class GameModel {
     }
 
     private void updateFrame(TeamInput redInput, TeamInput blueInput) {
+        blockTouchEffect.beginFrame();
         if (netFlashFrames > 0) netFlashFrames--;
         landingSmokeThisFrame = false;
         ballHitNetThisFrame = false;
@@ -324,6 +304,7 @@ public final class GameModel {
         if (matchOver) return;
 
         rallyState.recordBlock(redSide, blocker);
+        blockTouchEffect.show(redSide);
         ballContactThisFrame = true;
     }
 
@@ -540,6 +521,7 @@ public final class GameModel {
         scorer.applyNetworkState(rallyOver, deadBallTimer);
         if (scorer.isLockedPhase()) {
             spikeEffect.clear();
+            blockTouchEffect.clear();
             redTeam.backPlayer.resetRunAcceleration();
             blueTeam.backPlayer.resetRunAcceleration();
         }

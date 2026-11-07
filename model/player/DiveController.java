@@ -9,11 +9,20 @@ import model.SideRules;
 import model.TeamInput;
 
 public class DiveController {
-    private static final int TOTAL_FRAMES = 60;
+    public static final int TOTAL_FRAMES = 60;
     private static final double HITBOX_WIDTH = 60;
     private static final double HITBOX_HEIGHT = 10;
     private static final double HITBOX_OFFSET_Y = GameConfig.PLAYER_IMAGE_HEIGHT - HITBOX_HEIGHT - 2;
     private static final double HITBOX_FORWARD_OFFSET_X = 30;
+
+    public record Geometry(double offsetX, double offsetY, double width, double height) {}
+
+    /** 撲球開始時的實際框配置，供角色與公開場況預測共用。 */
+    public static Geometry geometryFor(double imageWidth, int direction) {
+        return new Geometry(direction > 0 ? HITBOX_FORWARD_OFFSET_X
+                : imageWidth - HITBOX_FORWARD_OFFSET_X - HITBOX_WIDTH,
+                HITBOX_OFFSET_Y, HITBOX_WIDTH, HITBOX_HEIGHT);
+    }
 
     private final Player player;
 
@@ -122,23 +131,16 @@ public class DiveController {
     }
 
     private void applyDiveHitBox() {
+        Geometry box = geometryFor(player.imageWidth, diveDirection);
         player.hitBox.set(
-                diveHitBoxOffsetX(),
-                HITBOX_OFFSET_Y,
-                HITBOX_WIDTH,
-                HITBOX_HEIGHT,
+                box.offsetX(),
+                box.offsetY(),
+                box.width(),
+                box.height(),
                 5,
                 5,
                 0
         );
-    }
-
-    private double diveHitBoxOffsetX() {
-        if (diveDirection > 0) {
-            return HITBOX_FORWARD_OFFSET_X;
-        }
-
-        return player.imageWidth - HITBOX_FORWARD_OFFSET_X - HITBOX_WIDTH;
     }
 
     private void clampPlayerX() {

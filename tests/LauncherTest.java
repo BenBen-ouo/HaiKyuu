@@ -5,6 +5,8 @@ import javax.swing.JLabel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import model.AppVersion;
+import model.ai.AiDifficulty;
+import javax.swing.JSlider;
 import network.NetworkAddress;
 import view.LauncherPanel;
 
@@ -29,10 +31,13 @@ public final class LauncherTest {
         check(Main.hostedIpError(null) != null, "創立房間拒絕找不到 IP");
         int[] selected = new int[5];
         String[] joinedIp = new String[1];
+        AiDifficulty[] received = new AiDifficulty[1];
         LauncherPanel panel = new LauncherPanel("192.168.1.20", new LauncherPanel.Actions() {
             @Override public void startLocal() { selected[0]++; }
-            @Override public void startPractice() { selected[1]++; }
-            @Override public void startBluePractice() { selected[2]++; }
+            @Override public void startAiMatch(boolean playerRedSide, AiDifficulty difficulty) {
+                selected[playerRedSide ? 1 : 2]++;
+                received[0] = difficulty;
+            }
             @Override public String startHost() { selected[3]++; return null; }
             @Override public String join(String ip) { selected[4]++; joinedIp[0] = ip; return null; }
         });
@@ -40,11 +45,17 @@ public final class LauncherTest {
         JTextField joinField = findEditableField(panel);
         check(joinField != null, "加入房間的 IP 欄位與模式按鈕在同一個啟動畫面");
         findButton(panel, "本地雙人").doClick();
-        findButton(panel, "左方練習模式").doClick();
-        findButton(panel, "右方練習模式").doClick();
+        findButton(panel, "左方玩家對戰機器人").doClick();
+        findButton(panel, "右方玩家對戰機器人").doClick();
         findButton(panel, "創立房間").doClick();
         check(selected[0] == 1 && selected[1] == 1 && selected[2] == 1 && selected[3] == 1,
-                "本地雙人及雙側練習模式分別呼叫自己的啟動入口");
+                "本地雙人及左右 AI 對戰分別呼叫自己的啟動入口");
+
+        check(AiDifficulty.DEFAULT.equals(received[0]), "兩個模式預設能力都是 50");
+        findSlider(panel, "防守能力").setValue(82);
+        findSlider(panel, "進攻能力").setValue(17);
+        findButton(panel, "右方玩家對戰機器人").doClick();
+        check(new AiDifficulty(82, 17).equals(received[0]), "兩個拉條獨立傳遞給所選模式");
 
         joinField.setText(" 192.168.1.20 ");
         findButton(panel, "加入房間").doClick();
@@ -57,8 +68,7 @@ public final class LauncherTest {
 
         LauncherPanel noLanPanel = new LauncherPanel("127.0.0.1", new LauncherPanel.Actions() {
             @Override public void startLocal() {}
-            @Override public void startPractice() {}
-            @Override public void startBluePractice() {}
+            @Override public void startAiMatch(boolean playerRedSide, AiDifficulty difficulty) {}
             @Override public String startHost() { return Main.hostedIpError("127.0.0.1"); }
             @Override public String join(String ip) { return null; }
         });
@@ -69,6 +79,30 @@ public final class LauncherTest {
                 && !hasLabelContaining(panel, "HaiKyuu!!  " + AppVersion.LABEL),
                 "啟動頁版本號與標題分開顯示");
         check(!findButton(noLanPanel, "複製").isEnabled(), "沒有區網 IP 時不允許複製 loopback");
+        panel.setSize(524, 331);
+        layoutTree(panel);
+        check(findButton(panel, "本地雙人").getHeight() >= 22
+                        && findButton(panel, "本地雙人").getHeight() <= 32
+                        && findSlider(panel, "防守能力").getHeight() >= 16,
+                "精簡啟動視窗維持正常按鈕高度與可操作拉條");
+    }
+
+    private static void layoutTree(Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container nested) layoutTree(nested);
+        }
+    }
+
+    private static JSlider findSlider(Container parent, String name) {
+        for (Component child : parent.getComponents()) {
+            if (child instanceof JSlider slider && name.equals(slider.getName())) return slider;
+            if (child instanceof Container container) {
+                JSlider found = findSlider(container, name);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private static JTextField findEditableField(Container parent) {

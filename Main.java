@@ -11,6 +11,8 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import model.GameModel;
+import model.ai.AiDifficulty;
+import model.ai.RuleBasedAi;
 import network.GameClient;
 import network.GameServer;
 import network.NetworkAddress;
@@ -20,6 +22,8 @@ import view.GamePanel;
 import view.LauncherPanel;
 
 public class Main {
+    private static final int LAUNCHER_WIDTH_PX = 540;
+    private static final int LAUNCHER_HEIGHT_PX = 370;
     public static void main(String[] args) {
         if (args.length > 0 && "server".equalsIgnoreCase(args[0])) {
             startDedicatedServer();
@@ -28,11 +32,11 @@ public class Main {
 
         SwingUtilities.invokeLater(() -> {
             if (args.length > 0 && "local".equalsIgnoreCase(args[0])) {
-                startLocalGame(false);
+                startLocalGame();
             } else if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
-                startLocalGame(true);
+                startAiGame(true, AiDifficulty.DEFAULT);
             } else if (args.length > 0 && "practice-blue".equalsIgnoreCase(args[0])) {
-                startLocalGame(true, true);
+                startAiGame(false, AiDifficulty.DEFAULT);
             } else if (args.length > 1 && "join".equalsIgnoreCase(args[0])) {
                 String error = startClient(args[1], null, networkWindowTitle(args[1]));
                 if (error != null) showError(error);
@@ -51,19 +55,13 @@ public class Main {
         LauncherPanel panel = new LauncherPanel(NetworkAddress.findLocalIpv4(), new LauncherPanel.Actions() {
             @Override
             public void startLocal() {
-                startLocalGame(false);
+                startLocalGame();
                 frame.dispose();
             }
 
             @Override
-            public void startPractice() {
-                startLocalGame(true);
-                frame.dispose();
-            }
-
-            @Override
-            public void startBluePractice() {
-                startLocalGame(true, true);
+            public void startAiMatch(boolean playerRedSide, AiDifficulty difficulty) {
+                startAiGame(playerRedSide, difficulty);
                 frame.dispose();
             }
 
@@ -83,7 +81,7 @@ public class Main {
         });
         frame.add(panel);
         frame.pack();
-        frame.setSize(480, 390);
+        frame.setSize(LAUNCHER_WIDTH_PX, LAUNCHER_HEIGHT_PX);
         frame.setResizable(false);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -141,17 +139,22 @@ public class Main {
                 : "無法創立房間：找不到可用的區網 IPv4 位址，請先連上 Wi-Fi 或有線網路。";
     }
 
-    private static void startLocalGame(boolean practiceMode) {
-        startLocalGame(practiceMode, false);
-    }
-
-    private static void startLocalGame(boolean practiceMode, boolean practiceRedServing) {
-        GameModel model = new GameModel(practiceMode, practiceRedServing);
+    private static void startLocalGame() {
+        GameModel model = new GameModel();
         KeyboardController keyboard = new KeyboardController();
         GameController controller = new GameController(model, keyboard);
         showWindow(model, keyboard, controller, null, null,
-                practiceMode ? "HaiKyuu!! - " + (practiceRedServing ? "右方練習模式" : "左方練習模式")
-                        : "HaiKyuu!! - 本地雙人");
+                "HaiKyuu!! - 本地雙人");
+    }
+
+    private static void startAiGame(boolean playerRedSide, AiDifficulty difficulty) {
+        GameModel model = new GameModel();
+        KeyboardController keyboard = new KeyboardController();
+        RuleBasedAi ai = new RuleBasedAi(!playerRedSide, difficulty);
+        GameController controller = new GameController(model, keyboard, null, ai);
+        showWindow(model, keyboard, controller, null, null, "HaiKyuu!! - "
+                + (playerRedSide ? "左半" : "右半") + "機器人對戰模式"
+                + "（防守 " + difficulty.defense() + "／進攻 " + difficulty.attack() + "）");
     }
 
     private static void showWindow(

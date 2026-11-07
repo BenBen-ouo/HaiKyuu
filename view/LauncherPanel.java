@@ -11,51 +11,59 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.JSlider;
 import javax.swing.SwingConstants;
 import model.AppVersion;
+import model.ai.AiDifficulty;
 import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
 public final class LauncherPanel extends JPanel {
+    private static final int ROW_GAP_PX = 6;
+    private static final int SECTION_GAP_PX = 8;
+    private static final int PADDING_Y_PX = 12;
+    private static final int PADDING_X_PX = 20;
     @java.io.Serial
     private static final long serialVersionUID = 1L;
     public interface Actions {
         void startLocal();
-        void startPractice();
-        void startBluePractice();
+        void startAiMatch(boolean playerRedSide, AiDifficulty difficulty);
         String startHost();
         String join(String ip);
     }
 
     private final JTextField joinIpField = new JTextField(16);
     private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JSlider defenseSlider = new JSlider(1, 100, 50);
+    private final JSlider attackSlider = new JSlider(1, 100, 50);
 
     public LauncherPanel(String localIp, Actions actions) {
-        setLayout(new BorderLayout(0, 16));
-        setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
+        setLayout(new BorderLayout(0, SECTION_GAP_PX));
+        setBorder(BorderFactory.createEmptyBorder(PADDING_Y_PX, PADDING_X_PX, PADDING_Y_PX, PADDING_X_PX));
         setBackground(new Color(241, 246, 250));
 
         JLabel title = new JLabel("HaiKyuu!!", SwingConstants.CENTER);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 28));
         add(title, BorderLayout.NORTH);
 
-        JPanel options = new JPanel(new GridLayout(0, 1, 0, 12));
+        JPanel options = new JPanel(new GridLayout(0, 1, 0, ROW_GAP_PX));
         options.setOpaque(false);
 
         JButton localButton = new JButton("本地雙人");
         localButton.addActionListener(event -> actions.startLocal());
         options.add(localButton);
 
-        JPanel practiceRow = new JPanel(new GridLayout(1, 2, 12, 0));
-        practiceRow.setOpaque(false);
-        JButton practiceButton = new JButton("左方練習模式");
-        practiceButton.addActionListener(event -> actions.startPractice());
-        practiceRow.add(practiceButton);
-
-        JButton bluePracticeButton = new JButton("右方練習模式");
-        bluePracticeButton.addActionListener(event -> actions.startBluePractice());
-        practiceRow.add(bluePracticeButton);
-        options.add(practiceRow);
+        JPanel aiRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        aiRow.setOpaque(false);
+        JButton leftAiButton = new JButton("左方玩家對戰機器人");
+        leftAiButton.addActionListener(event -> actions.startAiMatch(true, difficulty()));
+        aiRow.add(leftAiButton);
+        JButton rightAiButton = new JButton("右方玩家對戰機器人");
+        rightAiButton.addActionListener(event -> actions.startAiMatch(false, difficulty()));
+        aiRow.add(rightAiButton);
+        options.add(aiRow);
+        options.add(difficultyRow("防守能力", defenseSlider));
+        options.add(difficultyRow("進攻能力", attackSlider));
 
         JButton hostButton = new JButton("創立房間");
         hostButton.addActionListener(event -> showResult(actions.startHost()));
@@ -113,6 +121,26 @@ public final class LauncherPanel extends JPanel {
             return;
         }
         showResult(actions.join(ip));
+    }
+
+    private AiDifficulty difficulty() {
+        return new AiDifficulty(defenseSlider.getValue(), attackSlider.getValue());
+    }
+
+    private static JPanel difficultyRow(String name, JSlider slider) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        JLabel value = new JLabel();
+        slider.setName(name);
+        slider.setOpaque(false);
+        slider.getAccessibleContext().setAccessibleName(name);
+        Runnable refresh = () -> value.setText(slider.getValue() + "（" + AiDifficulty.label(slider.getValue()) + "）");
+        slider.addChangeListener(event -> refresh.run());
+        refresh.run();
+        row.add(new JLabel(name), BorderLayout.WEST);
+        row.add(slider, BorderLayout.CENTER);
+        row.add(value, BorderLayout.EAST);
+        return row;
     }
 
     private void showResult(String error) {

@@ -235,7 +235,6 @@ public class RallyContactHandler {
 
         pushBallOutsideHitBox(blockBox);
         reflectBallFromBlock(blocker, blockBox);
-        model.spikeEffect.clearSpikeTrail();
 
         // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
         model.ball.useFastFloorBounceSpin();

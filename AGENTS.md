@@ -55,6 +55,7 @@
 | `model/ball/` | 球的物理、幾何與球路計算。 |
 | `model/rally/` | 觸球、球權、回合與得分規則。 |
 | `model/serve/` | 發球階段、發球輸入與出球流程。 |
+| `model/ai/` | 本地 AI 的公開場況觀察、攻防決策及能力換算，只產生既有操作，不修改玩法或物理。 |
 | `model/effect/` | 特效資料與生命週期，不執行繪圖或封包傳送。 |
 | `view/` | Swing 元件與繪圖，不修改物理、觸球次數或得分。 |
 | `network/` | 傳輸、序列化、可靠事件、權威同步及畫面位置校正，不複製另一套玩法。 |
@@ -106,9 +107,9 @@
 - 區分新球、過網、一般接球、攔網、得分與整場重開；不能用一個模糊的 reset 任意清除全部狀態。
 - 整場重開由單一流程統籌，避免呼叫某個公開 reset 後仍需其他未明說的補充重設。
 
-## 7. 本地、練習與 UDP 同步
+## 7. 本地、AI 對戰與 UDP 同步
 
-- 本地與網路 Server 共用規則；左右練習模式只改變已確認的模式差異，不分叉複製玩法。
+- 本地與網路 Server 共用規則；左右 AI 對戰只替換已確認的操作來源，不分叉複製玩法。
 - Server 權威決定球、碰撞、球速、觸球與得分。房主也透過 Client 連入 Server，不直接操作 Server 模型。
 - Client 可預測自身操作與平滑角色圖片；球的位置與旋轉依權威資料，不能自行碰撞、改球速、結束回合或提前產生落地煙霧。
 - 可靠事件按 ID 依序處理且每件一次；新快照持續處理，不等待不相關的可靠事件。舊事件不得把較新的物理位置倒退。
@@ -141,9 +142,9 @@
 - 基本 `NetworkSyncTest` 使用記憶體傳輸，不建立真實 Client socket；`loopback` 使用動態分配的測試連接埠，不接觸正式 UDP 5001。新增網路測試也必須隔離傳輸／連接埠，並驗證結束後資源釋放。
 
 ```powershell
-javac -encoding UTF-8 -d .\build Main.java tests\GameplayFlowTest.java tests\NetworkSyncTest.java tests\LauncherTest.java tests\PackagingSmokeTest.java
+javac -encoding UTF-8 -d .\build Main.java tests\GameplayFlowTest.java tests\NetworkSyncTest.java tests\LauncherTest.java tests\PackagingSmokeTest.java tests\AiMatchTest.java tests\AiTacticsTest.java
 if ($LASTEXITCODE -ne 0) { throw 'Java compilation failed' }
-foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'LauncherTest')) {
+foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'LauncherTest', 'AiMatchTest', 'AiTacticsTest')) {
     java '-Djava.awt.headless=true' -cp .\build $testClass
     if ($LASTEXITCODE -ne 0) { throw "$testClass failed" }
 }
