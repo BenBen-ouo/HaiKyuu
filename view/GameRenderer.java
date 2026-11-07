@@ -54,6 +54,7 @@ public class GameRenderer {
             drawWorld(g, frame, true);
         }
 
+        for (RenderFrame.PlayerImage player : frame.players()) playerRenderer.drawBlockTouch(g, player, mirrorWorld);
         // 比分、規則提示與比賽結束畫面永遠保持正常方向。
         matchDisplay.draw(g, frame.match(), mirrorWorld);
     }

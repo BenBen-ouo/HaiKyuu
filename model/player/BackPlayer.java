@@ -8,7 +8,7 @@ import model.GameConfig;
 import model.TeamInput;
 
 public final class BackPlayer extends Player {
-    private static final double BACK_JUMP_MAX_HORIZONTAL_SPEED = 2.8;
+    public static final double BACK_JUMP_MAX_HORIZONTAL_SPEED = 2.8;
 
     private final DiveController diveController;
     private HitBoxSnapshot defaultHitBox;
@@ -187,13 +187,19 @@ public final class BackPlayer extends Player {
 
     /** 發球拋球也使用同一份起跳預測，避免漏算攻擊框相對圖片中心的位移。 */
     public double plannedAttackHitBoxCenterAtApex() {
-        return attackHitBox.getCenterX() + plannedJumpVelocityX() * framesToApex();
+        return attackHitBox.getCenterX() + plannedJumpVelocityX() * jumpFramesToApex();
     }
 
     private double plannedJumpVelocityX() {
+        return plannedJumpVelocityXAt(x, imageWidth, attackHitBox.offsetX, attackHitBox.width, redSide);
+    }
+
+    /** 共用起跳規則供 AI 評估候選站位；不改變目前角色位置。 */
+    public static double plannedJumpVelocityXAt(double imageX, double imageWidth,
+            double attackOffsetX, double attackWidth, boolean redSide) {
         // 起跳中心若已在線上或靠網側，讓攻擊框的前緣在最高點對齊 Setter 中心。
         // 線後方維持原上限；速度只在起跳時決定，空中不重新計算。
-        double center = x + imageWidth / 2.0;
+        double center = imageX + imageWidth / 2.0;
         double line = GameConfig.NET_X + (redSide ? -1 : 1) * GameConfig.THREE_METER_PX;
         double speed = BACK_JUMP_MAX_HORIZONTAL_SPEED;
         if (redSide ? center >= line : center <= line) {
@@ -201,16 +207,16 @@ public final class BackPlayer extends Player {
                     ? GameConfig.NET_X + GameConfig.RED_SETTER_OFFSET_X + imageWidth / 2.0
                     : GameConfig.NET_X + GameConfig.BLUE_SETTER_OFFSET_X + imageWidth / 2.0;
             double attackFront = redSide
-                    ? center + (attackHitBox.offsetX + attackHitBox.width - imageWidth / 2.0)
-                    : center + (attackHitBox.offsetX - imageWidth / 2.0);
+                    ? center + (attackOffsetX + attackWidth - imageWidth / 2.0)
+                    : center + (attackOffsetX - imageWidth / 2.0);
             speed = Math.max(0, Math.min(BACK_JUMP_MAX_HORIZONTAL_SPEED,
                     (redSide ? setterCenter - attackFront : attackFront - setterCenter)
-                            / framesToApex()));
+                            / jumpFramesToApex()));
         }
-        return directionTowardNet() * speed;
+        return (redSide ? 1 : -1) * speed;
     }
 
-    private int framesToApex() {
+    private static int jumpFramesToApex() {
         return Math.max(1, (int) Math.ceil(-GameConfig.BACK_JUMP_VELOCITY_Y / GameConfig.GRAVITY) - 1);
     }
 

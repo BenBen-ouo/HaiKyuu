@@ -277,6 +277,9 @@ public final class GameClient implements NetworkView {
         if (event.type == Packet.EventType.SERVE) {
             renderModel.getServeHandler().lockNetworkPostServeBackAction();
         }
+        if (event.type == Packet.EventType.RED_BLOCK_CONTACT || event.type == Packet.EventType.BLUE_BLOCK_CONTACT) {
+            renderModel.blockTouchEffect.show(event.type == Packet.EventType.RED_BLOCK_CONTACT);
+        }
         if (event.type != Packet.EventType.SCORE && event.state.rallyOver) {
             // LANDING／RULE 不搶先顯示；FLOW 也不能重啟得分原因的顯示時間。
             renderModel.transientMessage = previousMessage;

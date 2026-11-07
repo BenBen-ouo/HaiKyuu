@@ -16,7 +16,6 @@ import model.GameConfig;
 public final class MatchDisplay {
     private static final Font VERSION_FONT = new Font("Arial", Font.PLAIN, 14);
     private static final Font SCORE_FONT = new Font("Arial", Font.BOLD, 24);
-    private static final Font PRACTICE_FONT = new Font("Microsoft JhengHei", Font.PLAIN, 22);
     private static final Font VICTORY_FONT = new Font("Arial", Font.BOLD, 48);
     private static final Font JUDGMENT_MEASURE_FONT = new Font("Microsoft JhengHei", Font.BOLD, 48);
     private static final Font JUDGMENT_FONT = new Font("Microsoft JhengHei", Font.BOLD, 36);
@@ -45,12 +44,10 @@ public final class MatchDisplay {
                 GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(AppVersion.LABEL)
                         - VERSION_RIGHT_MARGIN_PX, VERSION_BASELINE_Y);
 
-        String score = match.isPracticeMode()
-                ? (match.isPracticeRedServing() ? "右方練習模式" : "左方練習模式")
-                : bluePerspective ? match.blueScore() + " : " + match.redScore()
+        String score = bluePerspective ? match.blueScore() + " : " + match.redScore()
                         : match.redScore() + " : " + match.blueScore();
         g.setColor(Color.BLACK);
-        g.setFont(match.isPracticeMode() ? PRACTICE_FONT : SCORE_FONT);
+        g.setFont(SCORE_FONT);
         g.drawString(score, (GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(score)) / 2,
                 SCORE_BASELINE_Y);
 

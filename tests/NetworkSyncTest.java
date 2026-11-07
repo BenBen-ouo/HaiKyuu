@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import model.GameModel;
+import model.effect.BlockTouchEffect;
 import model.TeamInput;
 import model.player.PlayerAction;
 import model.serve.ServeState;
@@ -35,6 +36,7 @@ public final class NetworkSyncTest {
         testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
+        testConfirmedBlockTouchHints();
         testNewRulesAndConfirmedLanding();
         testCloseAfterRemoteAbort();
         testClientInitializationFailureClosesTransport();
@@ -517,6 +519,43 @@ public final class NetworkSyncTest {
                 "僅快照到地板或軌跡關閉不能提前產生煙霧");
     }
 
+    private static void testConfirmedBlockTouchHints() throws Exception {
+        GameModel authoritative = new GameModel();
+        authoritative.getServeHandler().setWaitingForServe(false);
+        authoritative.spikeEffect.startSpikeTrail(true);
+        authoritative.recordBlock(true, authoritative.redTeam.quickAttacker);
+        authoritative.recordBlock(false, authoritative.blueTeam.quickAttacker);
+        GameModel model = new GameModel();
+        MemoryTransport transport = new MemoryTransport();
+        try (GameClient client = new GameClient(model, "memory", transport)) {
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(authoritative));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            pumpUntil(client, () -> client.getConnectionMessage().contains("等待"));
+            model.syncNetworkVisualEffects(true, true);
+            model.spikeEffect.addTrailPoint(model.ball.x, model.ball.y);
+            check(!model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "沒有可靠攔網事件前不預先顯示提示");
+            byte[] redBytes = UdpCodec.event(7, 1, 1, Packet.EventType.RED_BLOCK_CONTACT, 0,
+                    Packet.CompactState.from(authoritative));
+            byte[] blueBytes = UdpCodec.event(7, 2, 1, Packet.EventType.BLUE_BLOCK_CONTACT, 0,
+                    Packet.CompactState.from(authoritative));
+            var red = UdpCodec.decode(redBytes, redBytes.length);
+            var blue = UdpCodec.decode(blueBytes, blueBytes.length);
+            transport.offer(blue);
+            transport.offer(red);
+            pumpUntil(client, () -> model.blockTouchEffect.isVisible(true) && model.blockTouchEffect.isVisible(false));
+            check(model.spikeEffect.isSpikeTrailActive() && !model.spikeEffect.getTrailPoints().isEmpty(),
+                    "兩隊提示可靠且依序處理，攔網事件不清除軌跡");
+            for (int i = 0; i < BlockTouchEffect.DURATION_FRAMES; i++) model.blockTouchEffect.beginFrame();
+            int acknowledged = transport.eventAckCount();
+            transport.offer(red);
+            transport.offer(blue);
+            pumpUntil(client, () -> transport.eventAckCount() >= acknowledged + 2);
+            check(!model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "重送的攔網事件不重新播放已結束的提示");
+        }
+    }
+
     private static void testNewRulesAndConfirmedLanding() throws Exception {
         GameModel server = new GameModel();
         server.redAttackLocked = true;
@@ -780,11 +819,15 @@ public final class NetworkSyncTest {
             model.spikeEffect.startSpikeTrail(true);
             model.spikeEffect.addTrailPoint(300, 400);
             model.spikeEffect.spawnSmoke(300, 600);
+            model.blockTouchEffect.show(true);
+            model.blockTouchEffect.show(false);
             byte[] reset = UdpCodec.event(7, 1, 1, Packet.EventType.RESET, 0, Packet.CompactState.from(new GameModel()));
             transport.offer(UdpCodec.decode(reset, reset.length));
             pumpUntil(client, () -> transport.eventAckCount() == 1);
             check(model.spikeEffect.getSmokeParticles().isEmpty() && model.spikeEffect.getTrailPoints().isEmpty()
-                            && !model.spikeEffect.isSpikeTrailActive(), "整場 RESET 清除舊煙霧與軌跡");
+                            && !model.spikeEffect.isSpikeTrailActive()
+                            && !model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "整場 RESET 清除舊煙霧、軌跡與攔網提示");
         }
     }
 

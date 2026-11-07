@@ -2,12 +2,12 @@
 
 本文件記錄實作現況。協作與品質規則以 [AGENTS.md](AGENTS.md) 為權威；操作與發布引用 [README.md](README.md)。
 
-更新：2026-11-06，`refactor`，收尾基準 commit `3deea06e9205eef59131f5d7ad74ccdcf4071f19` 加本次未提交差異。使用者已核准整體重構；以下已實作與尚待確認分開記錄。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
+更新：2026-11-06，`AIbot`，基準 commit `86ce35d91541580aa17c669ef868a48762a53603` 加本次 AI 功能及攔網提示未提交差異。使用者已核准以 AI 對戰取代練習模式及 v1.2.0 更新；以下已實作與尚待確認分開記錄。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
 
 ## 1. 系統目的與範圍
 
-- Java Swing 2D 排球遊戲，含本地雙人、左／右方練習、區網建立／加入房間；入口為 `Main.main`、`LauncherPanel`。
-- 每隊 Back、Setter、MB、WS，由 `model.player.Team` 建立。練習模式共用規則，只由 GameModel 模式資料控制不計分與固定發球方。
+- Java Swing 2D 排球遊戲，含本地雙人、左／右半 AI 對戰、區網建立／加入房間；入口為 `Main.main`、`LauncherPanel`。
+- 每隊 Back、Setter、MB、WS，由 `model.player.Team` 建立。AI 對戰完全取代舊練習功能；GameModel 不再保存練習模式／固定發球資料，所有對局共用正式計分。
 - UDP Server 與兩個 Client；GUI 房主在同一程序執行 Server 與自己的 Client，仍連至 Server 的區網 IP。
 - 依賴桌面、鍵盤、圖片素材與區網；發行版附 Java runtime。沒有 HTTP、資料庫、帳號、配對服務或遊戲存檔。
 
@@ -55,6 +55,7 @@ model 子模組 → model 與必要的 model 子模組
 | 球／球路 | `Ball`、`BallTrajectory`、`NetHitBox` | 物理、幾何、離散舉球／拋球與指定力道球路計算。 |
 | 角色 | `Team`、各 Player、`PlayerPhysics`、`DiveController`、動畫類別 | 動作請求、移動、碰撞框與動畫階段；成功觸球由回合流程確認。 |
 | 發球 | `ServeHandler`、`ServeBallController`、`ServeInputLocker`、`ServeContactPolicy` | 發球階段、擺球、輸入過濾及出球。 |
+| 本地 AI | `model.ai.RuleBasedAi`、`AiObservation`、攻防／發球 Planner、`OpponentHabits` | 只讀公開場況，產生相同 ControlInput；不修改模型或呼叫成功動作入口。 |
 | 特效 | `SpikeEffect` | 軌跡與煙霧的可變生命週期；HSB、透明度與線寬由 SpikeEffectRenderer 擁有。 |
 | 同步 | `GameServer`、`GameClient`、`ServerPlayerSlot`、Packet／codec | 傳輸、輸入樣本、可靠事件與權威快照套用。 |
 | 傳輸邊界 | `ClientTransport`、`UdpClientTransport` | 固定遠端資料報端點與資源關閉；測試可替換成記憶體傳輸。 |
@@ -69,14 +70,14 @@ model 子模組 → model 與必要的 model 子模組
 - `assets/images/` 由 AssetLoader 優先從 JAR 載入，再回退開發目錄；圖片不再作為攔網碰撞階段的判斷來源。
 - GameConfig 是全域調參入口，Team 管理角色碰撞框，Renderer 管理外觀。起跳 Y 參數以 `*_JUMP_VELOCITY_Y` 命名，保留使用者原數值。
 - 發球／扣球的正值水平速率以 `HORIZONTAL_SPEED` 命名，帶符號垂直分量以 `VELOCITY_Y` 命名；ServeType 也分開描述速率與分量，沒有改數值或球路。
-- AppVersion 是遊戲／發行版本來源；UdpCodec 的協定版本是不同概念。本次協定升為 11，遊戲版本未升。
+- AppVersion 是遊戲／發行版本來源；UdpCodec 的協定版本是不同概念。現行遊戲版本為 v1.2.0，協定版本為 12。
 - 建置／發行／診斷目錄由 .gitignore 排除；不提交 bundled runtime。
 - 沒有建立 Service、Repository、shared/common 或相容層空殼。
 - 實際角色與模型目前沒有對外繼承擴充入口；具體類別使用 final，Player 的建構責任限於角色 package。GamePanel 持有對局執行資源，明確拒絕序列化／反序列化，不以 transient 欄位假裝可還原對局。
 
 ## 6. 主要資料與呼叫流程
 
-### 6.1 本地與練習
+### 6.1 本地與 AI 對戰
 
 `KeyboardController → ControlInput → GameModel.update → TeamInput 當幀上下文 → 角色 → 觸球／判決 → RenderFrame → EDT`。
 
@@ -143,6 +144,7 @@ FixedTickSchedule 限制補跑，不放大物理步長。更新失敗明確回�
 - 網路技術失敗中止對局，不當作得分；建立連線與等待期間失聯也會逾時，Server 持續回應時可繼續等對手。
 - codec 無效資料回傳 null；不替換為其他有效事件。AssetLoader 的缺圖回退行為保留。
 - TimingDiagnostics 提供入口，DiagnosticLog 擁有有界佇列、writer 及故障停用；磁碟寫入及滿載回報不在遊戲更新執行緒執行。
+- 連線診斷自動啟用，紀錄在啟動工作目錄的 `diagnostics/`：根目錄 VBS 啟動時在專案根目錄，直接開 EXE 時通常在 `release/HaiKyuu/`。GUI 房主的 Server／Client 共寫 `timing-host-*.log`，訪客使用 `timing-client-*.log`，獨立 Server 使用 `timing-server-*.log`。回報卡頓時提供發生時間及對應檔案；內容記錄更新、繪圖、接球事件超時與快照中斷，不記玩家按鍵或 IP。
 - 發行替換由 ReleaseReplacement.ps1 管理資料夾與 ZIP 回復；保留未完成標記，阻止下次清掉尚待恢復的產物。
 
 ## 10. 架構驗證
@@ -152,21 +154,71 @@ FixedTickSchedule 限制補跑，不放大物理步長。更新失敗明確回�
 | 模型依賴與循環 | ArchitectureTest.ps1／jdeps，已接打包 | 檢查禁止依賴及四層間的類別循環；保留已審查的模型內擁有者／協作者回參照，不宣稱所有 package 都無循環。 |
 | 遊戲與狀態 | GameplayFlowTest，已接打包 | 含左右、落地邊界、焦點、補跑、畫面資料及迴圈關閉；不是實體 GUI。 |
 | 網路 | NetworkSyncTest，基本模式已接打包 | 基本使用記憶體傳輸；動態埠 loopback 另執行，不等於雙機區網。 |
+| 本地 AI | AiMatchTest、AiTacticsTest、LauncherTest，已接打包 | 實際模型攻防、進攻轉換率、站位、節奏、鏡像、難度分離、R 重開及模式輸入；不是人工手感或實戰勝率保證。 |
 | 發行回復 | ReleaseReplacementTest.ps1，已接打包 | 正常替換、舊 ZIP 鎖住及新 ZIP 鎖住失敗；不是所有 OS 故障注入。 |
 | 素材與發行 | PackagingSmokeTest、JAR／ZIP 清單，已接打包 | 隔離目錄驗證素材；無 Java Windows 人工驗收仍另列。 |
 | 效能 | RefactorBenchmark，手動入口 | 同機小型比較，不冒充 GPU、實體視窗或長時間壓測。 |
 
 沒有 CI，未以文件要求冒充已啟用的自動檢查。
 
-2026-11-06 收尾驗證（基準為本文件上方 commit 加當次未提交差異）：JDK 21.0.10 全新輸出編譯並啟用 `javac -Xlint:all`，退出碼 0、零警告；GameplayFlowTest、LauncherTest、NetworkSyncTest 基本與 loopback、架構及發行回復檢查、隔離 JAR 的 39 張素材檢查均通過。版本 v1.1.0 的 app-image／ZIP 已重建，兩者遊戲 JAR 雜湊一致。這是當次來源的結果，後續修改須重新驗證。
+先前重構收尾驗證（commit `3deea06e9205eef59131f5d7ad74ccdcf4071f19` 加當時未提交差異，不代表本次 AI 來源已驗證）：JDK 21.0.10 全新輸出編譯並啟用 `javac -Xlint:all`，退出碼 0、零警告；GameplayFlowTest、LauncherTest、NetworkSyncTest 基本與 loopback、架構及發行回復檢查、隔離 JAR 的 39 張素材檢查均通過。當時版本 v1.1.0 的 app-image／ZIP 已重建，兩者遊戲 JAR 雜湊一致。
 
 當次 RefactorBenchmark 以相同 JDK、相同 `-Xbatch` 條件比較三輪中位數，最大平均退化約 4.6%、p95 約 2.0%，符合當次 10%／15% 門檻；煙霧場景繪圖仍約 21.7 ms，未達 60 Hz 單幀預算。證據為忽略的本機產物 `build/closeout-batch-before.csv`、`build/closeout-batch-after.csv`；並非完整比賽效能保證。
 
 ## 11. 已確認限制與待決事項
 
-- A：保留 Swing、既有模式／按鍵／數值、Server 權威及同幀順序；沒有升版、提交、發布或引入新框架。
+- A：保留 Swing、未被本次需求取代的模式／按鍵／數值、Server 權威及同幀順序；未提交或對外發布，也未引入新框架。發行版本以 AppVersion 為準。
 - Client 套用得分鎖定階段時，GameModel 同時清除兩隊後排的移動加速累計，避免下一球沿用舊累計；由 BackPlayer.resetRunAcceleration() 統一執行。
 - A：使用者已確認不可達目標的既有降級、力道與球路維持現狀，日後遇到實際案例再議；例外的完整規範見 AGENTS §5，不再列為本次阻塞。
 - E：正式 JDK 支援範圍與未來 CI 尚未另訂；本輪只記實際 JDK 與已接入的建置入口。
 - 依賴盤點：jdeps 的強連通群主要為巢狀型別及模型內部的球／網子、Player／動畫／碰撞框、BackPlayer／DiveController、GameModel／回合／發球協作者回參照；沒有跨四層的類別循環。未為消除合法回參照而重設整個架構。
 - 尚未以人工確認：真實雙機區網、實體 GUI／操作手感、無 Java Windows 與長時間運行。自動資源測試及效能取樣不涵蓋全部 OS 故障組合。
+
+## 12. 本地規則式 AI
+
+- A：依本次使用者確認，兩個練習模式完全取代為左右 AI 對戰；玩家半場與按鍵維持，第一球紅隊發球，所有得分及重開使用正式模型。Main 組裝一個 RuleBasedAi，UDP 不建立 AI。
+- GameController 每 tick 擷取 AiObservation，將 AI 所在隊伍的鍵盤輸入替換為 RuleBasedAi 產生的 ControlInput，再呼叫 GameModel.update；AI 不持有可變模型。觀察只含公開位置、速度、動作、已裁定的觸球及回合階段，不含對手按鍵／決策。
+- 座標先轉成 AI 在左的視角，輸出時只轉換一次世界左右；球路模式不二次鏡像。生成輸入保留方向鍵與球路、後排動作與發球共鍵的關係。
+- AiDifficulty 固定每場進攻／防守數值；AiTuning 保存決策參數。1～100 連續換算誤差、使用率及反應曲線；進階操作另有使用者確認的解鎖門檻，解鎖後使用率逐點增加。LauncherPanel 共用兩條拉條，進場後固定；R 同時重開模型並清空習慣，保留能力。
+- DefensePlanner 對接觸／碰網後的新球路加入防守反應延遲，定期估計來球、分配 WS 短球與後排長球，並依公開助跑／起跳及習慣預判攔網。等待發球先居中準備；防守 21 起，對手接球後且球仍在對場組織時，也會先退回三米至九米的中央區域，入門不加入這項退防。實際來球後追接不加三米至九米限制。WS 撲球期間依公開速度、位置及現行碰撞框估計剩餘接球窗口，無法接到就解除原分工，由後排追接。補攔必須等 MB 正常落地，次數及高度仍由角色規則限制。
+- OffensePlanner 在第一球後承諾戰術，以實際站位及含 Setter 跳躍的接觸估計，更新尚未起跳的可達窗口；到位且合法才輸出起跳，已起跳者不取消或瞬移。站舉負節奏的動作開始在 Setter 觸球前 42～48 幀，第二節奏約在球頂點開始後排起跳／WS 助跑。MB 只安排可達的快攻第一節奏，開網而無法覆蓋則改 WS／後排。
+- AttackOptions 在實際球與攻擊框重疊時評估既有球路，優先選能過網且落在對場的選項；變化只在可用選項間抽樣。前四幀若有較好的正常扣球接觸點，可稍等而非一進框就吊球。假扣真舉包含 Setter 接第一球後的空中舉球備援，進攻 61 起才允許；60 以下只選可達攻擊或一般接球。若 WS 舉第二球，後排會先留在合法第三球起跳位置。進攻 41 起解鎖跳發與雙人進攻，61 起解鎖三人進攻；OffensePlanner 計入已起跳者，避免跨幀重複分配超過人數。
+- 正常／低網／短球／天花板球及跳發變化均由 ServePlanner 按現有操作執行；跳發依序拋球、放開、起跳、放開再按擊球，沒有直接設置出球速度。戰術涵蓋吊球、現有合法二次攻擊、空中假扣真舉、Setter 跳舉及多人假跑／起跳；不新增 Setter 二次扣球。
+- OpponentHabits 累計已發生的攻擊者、節奏、方向、吊球、發球類型及實際落地位置，以先驗樣本逐步調整防守。只記本場，不寫檔；每球保留、整場重開清空。
+- BallForecast 是依當下位置／速度的有限自由飛行估計，並非最終落點答案；未來碰人／碰網不在預測內，發生後重新反應。AI 只選現有球路及動作，成功與失敗由正常碰撞／裁決產生；不改物理、碰撞箱或不可達目標降級。
+- 限制：MB／Setter 無水平移動、MB 無一般接球、WS 只有既有助跑／回位／朝網撲救；AI 不能補足角色做不到的防守位置。三種節奏及多人戰術都以當次球路可達為條件，不保證每球執行成功。AI 沒有背景執行緒、等待或外部服務；決策工作隨遊戲迴圈結束。
+
+AI 初版驗證（2026-11-06，來源為本文件開頭 commit 加當時 AI 功能差異）：JDK 21.0.10，`build-release.bat --no-pause` 退出碼 0，乾淨編譯啟用 `-Xlint:all`、零警告；GameplayFlowTest、LauncherTest、NetworkSyncTest、AiMatchTest、ArchitectureTest、ReleaseReplacementTest 及隔離 JAR 的 39 張素材檢查全部通過。當時 `AiMatchTest` 各以能力 10／50／95 推進 24,000 幀正式模型；此測試不足以證明進攻轉換率，後續另加 AiTacticsTest。正式發球原有亂數仍保留。
+
+AI 初版 JAR 曾以 `javac -Xlint:all -encoding UTF-8 -cp release/HaiKyuu/app/HaiKyuu.jar -d build/ai-network-final tests/NetworkSyncTest.java` 編譯測試，再執行 `java '-Djava.awt.headless=true' -cp 'release/HaiKyuu/app/HaiKyuu.jar;build/ai-network-final' network.NetworkSyncTest loopback`，退出碼 0，使用動態埠。當時打包 log 在忽略的 `build/ai-release-verification.log`，版本為 v1.1.0；後續 v1.2.0 攔網提示的來源及驗證另記於下節，歷史結果不取代最新驗證。
+
+當次測試的兩隊 AI 決策平均約 0.001～0.003 ms、p95 約 0.001～0.004 ms，僅包含觀察／決策，不包含繪圖與完整物理，亦非所有機器的效能保證。啟動頁已做離屏繪製檢視；真人手感、真實雙機區網及無 Java Windows 仍未人工驗收。
+
+## 13. 攔網觸球提示
+
+- A：使用者要求恢復攔網後的扣球軌跡，改以 MB 上方的隊伍顏色文字辨識觸球，並確認 AI Bot 功能版本為 v1.2.0。
+- `RallyContactHandler` 沿用原攔網反彈與計次，`GameModel.recordBlock` 同時觸發 `BlockTouchEffect`；不再因攔網清除軌跡。提示預設 30 幀，跟隨 MB 正上方置中顯示；整場重開或歸位鎖定清除。
+- Server 每 tick 依已確認的紅／藍攔網觸球送出可靠 `RED_BLOCK_CONTACT`／`BLUE_BLOCK_CONTACT`。Client 按事件 ID 去重並顯示，不能由按鍵或碰撞預測觸發；新增事件使 UDP 協定升為 12。一般快照不重啟提示計時。
+- RenderFrame 擷取提示可見性，GameRenderer 在世界鏡像完成後交給 PlayerRenderer 畫字，保持文字正常方向、隊伍顏色及角色平滑位置；不依賴除錯框顯示開關。
+- MB 起跳模式維持依本隊第一球觸球狀態決定。過網清除觸球紀錄後、下一次一般接球前，雙方可能同時攔網待命；球心在網子中心不是直接切換條件，空中動作不中途切換。
+
+本次 v1.2.0 驗證：2026-11-06，JDK 21.0.10，`build-release.bat --no-pause` 退出碼 0、編譯零警告；基本遊戲、AI 對戰、Launcher、NetworkSyncTest、架構、發行回復及 39 張素材檢查通過。新增案例驗證攔網保留軌跡與落地煙霧、兩隊提示的顏色／鏡像位置／存續時間／R 清理，以及可靠事件亂序、去重和 RESET 清理；無背景連線的基本測試仍使用記憶體傳輸。
+
+打包後再以最新 JAR 編譯 NetworkSyncTest 至 `build/touch-network-final`，執行 `java '-Djava.awt.headless=true' -cp 'release/HaiKyuu/app/HaiKyuu.jar;build/touch-network-final' network.NetworkSyncTest loopback`，退出碼 0，測試使用動態埠。EXE 與 `release/HaiKyuu-v1.2.0.zip` 已重建；log 為忽略的 `build/block-touch-release-verification.log`。未執行真人 GUI／雙機區網／無 Java Windows 驗收，未 commit、push 或對外發布。
+
+## 14. AI 進攻與防守校正
+
+- A：依使用者實測回報修復低進攻轉換率、接球未完成就退位、開網 MB 空跳、跳舉時機、負／第二節奏及後排踩線；保留手動調整的跳發短球與 MB 二次攔網參數。主選單高度縮至 370，按鈕約 29 像素；TOUCH 改為 MB 正上方置中。
+- C：修正前以兩側、各 24 個 AI 亂數種子，從第一球已接起的正式模型開始；能力 61 的後排／Setter 第一球案例各只有 4／48 次扣球過網，能力 100 為 6／48 與 4／48。原先「能完成比賽」不能證明進攻有效。
+- OffensePlanner 不再把假設走到的位置當成已到位；後排必須實際抵達且起跳中心未踩線才按鍵。BackPlayer 提供同一份候選站位起跳速度計算；WingSpiker 的助跑距離估計扣除啟動動畫但未移動的首幀，實際玩家動作不改。
+- Setter 接觸估計納入自身跳躍軌跡；高能力優先嘗試可達的跳舉。若 MB 的實際預估球路不進框就不排起跳，改由其他可達角色處理。Setter 第一球後可轉 WS／後排攻擊或跳舉；WS 跳舉時後排留作第三球支援，不提前作無效假跳。
+- DefensePlanner 保留已準備好的站位／本次來球接球目標，避免發球後反應等待期被舊預設值拉向網前。後續依 WS 是否仍可接球調整分工，一般接球確認後才轉入進攻組織。三米至九米是等待發球與非入門對手組織進攻時的預備區域，並非追球界限。後排以當下速度、原有分段加速與有限自由飛行估計站立接球窗口；跑不到時再比較兩方向撲救的減速與碰撞框窗口。DiveController.geometryFor 是實際撲球框配置的共用查詢，不另改角色能力或碰撞。
+- 隨機範圍：站舉負節奏在觸球前 42～48 幀開始動作；第二節奏在球頂點附近開始動作，排程擾動限 ±2 幀。移除原本最多 22 幀的額外出手抽樣；進框後用當下位置選球路，至多等待 4 幀內更合適的正常扣球接觸點。能力 61 的接球位置誤差由約 ±32.6 像素降至 ±8.7，100 為 ±2；球路評分雜訊由 40 降至 8，變化只在可用球路中選擇，不刻意抽中必定掛網的角度。
+- ServePlanner 跳發第三次按鍵須球已進攻擊框，並依當下接觸點檢查現有球路；使用者手動修改後若某變化無法過網，改選其他現有球路，不覆寫力道。
+- AiTacticsTest 已接入日常及打包入口，驗證接發轉進攻、合法起跳、接球責任、等待發球居中站位、越出站位區追接、WS 撲早後後排補接、開網不排 MB、後排替代跳舉、實際助跑距離、負／第二節奏與跳發可達性。AiMatchTest 每級推進 48,000 幀，涵蓋 40／41、60／61 解鎖邊界、普通雙人及高難度三人實際動作；吊球計數依攻擊當幀輸入，排除跳發，不用反彈後球速反推球種。
+
+本次定點結果：正常發球情境能力 61／100 各 48／48 次接發後攻擊過網；已接起的後排第一球各 48／48，Setter 第一球各 44／48，三米線犯規為 0。WS 不可用的指定情境中，後排有 6／24 次實際跳舉第二球；跳發 18 次擊球全數過網。這些都是無對手主動攔網的基本能力案例，不等於對真人的得分率或勝率；人工實戰平衡仍需回饋。
+
+本次驗證來源為 `AIbot` 基準 commit `86ce35d91541580aa17c669ef868a48762a53603` 加目前未提交差異，包含使用者手動設定 MB 二次起跳倍率 0.8 與跳發短球垂直速度 2.0。JDK 21.0.10 的 `build-release.bat --no-pause` 退出碼 0，乾淨編譯零警告，GameplayFlowTest、LauncherTest、NetworkSyncTest、AiMatchTest、AiTacticsTest、ArchitectureTest、ReleaseReplacementTest 與隔離 JAR 的 39 張素材檢查通過。較小選單與 TOUCH 置中已有離屏繪圖／幾何驗證。
+
+更新後 JAR 另編譯 NetworkSyncTest 至 `build/ai-tactics-network`，執行 `java '-Djava.awt.headless=true' -cp 'release/HaiKyuu/app/HaiKyuu.jar;build/ai-tactics-network' network.NetworkSyncTest loopback`，退出碼 0，使用動態埠並完成資源清理。`release/HaiKyuu/` 與 `release/HaiKyuu-v1.2.0.zip` 已更新，兩者遊戲 JAR 雜湊一致；完整 log 在忽略的 `build/ai-tactics-release-verification.log`。兩隊 AI 決策本機取樣平均約 0.004～0.006 ms，p95 約 0.021～0.028 ms，不包含整體繪圖成本。未宣稱真人實戰、雙機區網或無 Java Windows 人工驗收通過；未 commit、push 或對外發布。
