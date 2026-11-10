@@ -23,6 +23,7 @@ final class OffensePlanner {
     private record Window(int role, int startTick, int contactTick, double startX, double score, boolean airSet) {}
 
     private final RandomGenerator random;
+    private final OpponentHabits habits;
     private final boolean[] launched = new boolean[4];
     private final Window[] decoys = new Window[4];
     private Window selected;
@@ -40,13 +41,35 @@ final class OffensePlanner {
     private int participants;
     private int selectedLaunchTick = -1;
     private boolean waitingForSetter;
+    private boolean backReserved;
+    private boolean protectBackReturn;
 
-    OffensePlanner(RandomGenerator random) { this.random = random; }
+    boolean isBackReserved() {
+        if (backReserved) return true;
+        if (selected == null || selected.airSet()) return false;
+        int used = 1;
+        for (int role : ATTACKERS) {
+            if (role != selected.role() && launched[role]) used++;
+        }
+        for (int role : ATTACKERS) {
+            if (decoys[role] != null && !launched[role] && used < participants) {
+                used++;
+                if (role == BACK) return true;
+            }
+        }
+        return false;
+    }
+
+    OffensePlanner(RandomGenerator random, OpponentHabits habits) {
+        this.random = random;
+        this.habits = habits;
+    }
 
     void clear() {
         planned = false;
         selected = null;
         selectedLaunchTick = -1;
+        backReserved = false;
         Arrays.fill(launched, false);
         Arrays.fill(decoys, null);
     }
@@ -56,7 +79,9 @@ final class OffensePlanner {
         planned = true;
         beginTick = tick;
         skill = AiDifficulty.ability(difficulty.attack());
-        negative = random.nextDouble() < AiTuning.MAX_NEGATIVE_TEMPO_PROBABILITY * skill;
+        protectBackReturn = habits.shouldKeepBackForReturn(difficulty.defense());
+        negative = random.nextDouble() < AiTuning.MAX_NEGATIVE_TEMPO_PROBABILITY
+                * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_NEGATIVE_TEMPO_ATTACK);
         // 接觸在下一 tick 才被觀察到，預留一幀，避免實際提前量超出 48 幀。
         negativeLead = random.nextInt(AiTuning.NEGATIVE_START_MIN_LEAD_FRAMES,
                 Math.max(AiTuning.NEGATIVE_START_MIN_LEAD_FRAMES + 1, AiTuning.NEGATIVE_START_MAX_LEAD_FRAMES));
@@ -68,8 +93,9 @@ final class OffensePlanner {
                 participants = 3;
             }
         }
-        jumpSet = random.nextDouble() < AiTuning.MAX_JUMP_SET_PROBABILITY * skill;
-        quickSet = o.ownLastRole() != SETTER
+        jumpSet = random.nextDouble() < AiTuning.MAX_JUMP_SET_PROBABILITY
+                * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_JUMP_SET_ATTACK);
+        quickSet = difficulty.attack() >= AiTuning.MIN_QUICK_SET_ATTACK && o.ownLastRole() != SETTER
                 && random.nextDouble() < AiTuning.QUICK_SET_BASE_PROBABILITY + skill * AiTuning.QUICK_SET_SKILL_PROBABILITY;
         airSetAllowed = difficulty.attack() >= AiTuning.MIN_AIR_SET_ATTACK;
         preferAirSet = airSetAllowed && o.ownTouches() == 1 && o.ownLastRole() == SETTER
@@ -90,12 +116,14 @@ final class OffensePlanner {
 
     void update(AiObservation o, ControlInput input, int tick, AiDifficulty difficulty) {
         if (!planned) begin(o, tick, difficulty);
+        backReserved = launched[BACK];
         if (selected != null && !launched[selected.role()] && tick > selected.contactTick()) selected = null;
         SetForecast set = forecast(o);
         if (waitingForSetter && quickSet) input.spikeShort = true;
         if (waitingForSetter && jumpSet && !o.own().get(SETTER).jumping()
                 && set.setterJumpDelay() == 0) input.setterJump = true;
         if (selected != null && selected.airSet() && selected.role() == WS && o.ownTouches() == 1) {
+            backReserved = true;
             var back = o.own().get(BACK);
             double thirdTouchX = GameConfig.NET_X - GameConfig.THREE_METER_PX - back.width() / 2
                     - AiTuning.BACK_TAKEOFF_LINE_MARGIN_PX;
@@ -108,11 +136,18 @@ final class OffensePlanner {
             if (selected != null) {
                 for (int role : ATTACKERS) {
                     decoys[role] = role == selected.role() || launched[role] ? null : findWindow(o, set, role, tick, false);
+                    if (role == BACK && decoys[role] != null && unsafeBackReturn(o, decoys[role], selected.contactTick())) {
+                        decoys[role] = null;
+                    }
                 }
             }
         }
 
+        if (selected != null && (selected.role() == BACK || selected.airSet() && selected.role() == WS)) {
+            backReserved = true;
+        }
         if (selected == null && o.ownTouches() == 1 && o.ownLastRole() == SETTER) {
+            backReserved = true;
             // 無可達攻擊／已解鎖跳舉窗口時，仍以原有一般碰撞追接第二球。
             var back = o.own().get(BACK);
             if (back.canStart()) {
@@ -122,6 +157,7 @@ final class OffensePlanner {
         }
 
         if (selected != null && !launched[selected.role()]) {
+            if (selected.role() == BACK) backReserved = true;
             if (selected.role() == BACK) moveBackTo(input, o.own().get(BACK), selected.startX());
             if (tick >= selected.startTick() && canLaunch(o, selected)) {
                 press(input, selected.role());
@@ -137,7 +173,7 @@ final class OffensePlanner {
                 boolean setting = selected.airSet() && o.ownTouches() == 1;
                 if (overlaps(p, o.ball().x(), o.ball().y())) {
                     if (!setting && betterContactSoon(o, p)) return;
-                    int shot = setting ? 0 : AttackOptions.choose(o, skill, random);
+                    int shot = setting ? 0 : AttackOptions.choose(o, skill, random, selected.role() == MB);
                     if (shot >= 0 && o.ownLastRole() != selected.role()) {
                         press(input, selected.role());
                         if (setting) input.airSetModifier = true;
@@ -163,6 +199,7 @@ final class OffensePlanner {
                     used++;
                     // 後排假跑也必須真的走到合法起跳點；不可用假設的位置直接起跳。
                     if (role == BACK && selected.role() != BACK) moveBackTo(input, o.own().get(BACK), fake.startX());
+                    if (role == BACK) backReserved = true;
                     if (Math.abs(tick - fake.startTick()) <= AiTuning.ATTACK_TIMING_JITTER_FRAMES && canLaunch(o, fake)) {
                         press(input, role);
                         launched[role] = true;
@@ -200,7 +237,27 @@ final class OffensePlanner {
             negative = false;
             return plan(o, set, tick);
         }
+        int earliestOtherContact = candidates.stream().filter(w -> w.role() != BACK)
+                .mapToInt(Window::contactTick).min().orElse(Integer.MAX_VALUE);
+        if (earliestOtherContact != Integer.MAX_VALUE) {
+            candidates.removeIf(w -> w.role() == BACK && unsafeBackReturn(o, w, earliestOtherContact));
+        }
         return candidates.stream().min(java.util.Comparator.comparingDouble(Window::score)).orElse(null);
+    }
+
+    private boolean unsafeBackReturn(AiObservation o, Window backWindow, int attackAt) {
+        if (!protectBackReturn || backWindow.airSet()) return false;
+        var back = o.own().get(BACK);
+        int flight = (int) Math.ceil(-2 * GameConfig.BACK_JUMP_VELOCITY_Y / GameConfig.GRAVITY);
+        double vx = BackPlayer.plannedJumpVelocityXAt(backWindow.startX(), back.width(),
+                back.attackOffsetX(), back.attackWidth(), true);
+        double landedCenter = Math.min(GameConfig.NET_X + GameConfig.PLAYER_NET_OVERLAP_X - back.width() / 2,
+                backWindow.startX() + back.width() / 2 + vx * flight);
+        double middle = (GameConfig.COURT_LEFT_X + GameConfig.NET_X - GameConfig.THREE_METER_PX) / 2;
+        double receiveOffset = back.receiveOffsetX() + back.receiveWidth() / 2 - back.width() / 2;
+        double readyCenter = habits.expectedFastDeepLanding(middle + receiveOffset) - receiveOffset;
+        int returnFrames = (int) Math.ceil(Math.abs(landedCenter - readyCenter) / GameConfig.BACK_RUN_START_SPEED);
+        return backWindow.startTick() + flight + returnFrames > attackAt + AiTuning.FAST_OPPONENT_RETURN_FRAMES;
     }
 
     private Window findWindow(AiObservation o, SetForecast set, int role, int tick, boolean setting) {

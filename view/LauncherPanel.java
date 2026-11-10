@@ -19,10 +19,10 @@ import network.NetworkAddress;
 
 /** 不依賴命令列的啟動選單；訪客 IP 直接在這個畫面輸入。 */
 public final class LauncherPanel extends JPanel {
-    private static final int ROW_GAP_PX = 6;
-    private static final int SECTION_GAP_PX = 8;
-    private static final int PADDING_Y_PX = 12;
-    private static final int PADDING_X_PX = 20;
+    private static final int ROW_GAP_PX = 12;
+    private static final int SECTION_GAP_PX = 14;
+    private static final int PADDING_Y_PX = 20;
+    private static final int PADDING_X_PX = 36;
     @java.io.Serial
     private static final long serialVersionUID = 1L;
     public interface Actions {
@@ -53,7 +53,7 @@ public final class LauncherPanel extends JPanel {
         localButton.addActionListener(event -> actions.startLocal());
         options.add(localButton);
 
-        JPanel aiRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        JPanel aiRow = new JPanel(new GridLayout(1, 2, 20, 0));
         aiRow.setOpaque(false);
         JButton leftAiButton = new JButton("左方玩家對戰機器人");
         leftAiButton.addActionListener(event -> actions.startAiMatch(true, difficulty()));
@@ -128,7 +128,7 @@ public final class LauncherPanel extends JPanel {
     }
 
     private static JPanel difficultyRow(String name, JSlider slider) {
-        JPanel row = new JPanel(new BorderLayout(8, 0));
+        JPanel row = new JPanel(new BorderLayout(16, 0));
         row.setOpaque(false);
         JLabel value = new JLabel();
         slider.setName(name);

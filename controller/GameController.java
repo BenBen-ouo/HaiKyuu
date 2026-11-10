@@ -16,6 +16,20 @@ public class GameController {
     private final KeyboardController keyboard;
     private final GameClient client;
     private final RuleBasedAi ai;
+    private boolean paused;
+
+    public boolean canPause() { return client == null; }
+    public boolean isAiMatch() { return ai != null; }
+    public boolean isAiRedSide() { return ai != null && ai.isRedSide(); }
+
+    public synchronized boolean isPaused() { return paused; }
+
+    public synchronized void setPaused(boolean value) {
+        if (!canPause()) throw new IllegalStateException("Network matches cannot be paused locally");
+        if (paused == value) return;
+        keyboard.setSuspended(value);
+        paused = value;
+    }
 
     public GameController(GameModel model, KeyboardController keyboard) {
         this(model, keyboard, null);
@@ -33,7 +47,8 @@ public class GameController {
         this.ai = ai;
     }
 
-    public void update() {
+    public synchronized void update() {
+        if (paused) return;
         if (keyboard.consumeHitBoxTogglePressed()) {
             DebugSettings.toggleHitBoxesVisible();
         }

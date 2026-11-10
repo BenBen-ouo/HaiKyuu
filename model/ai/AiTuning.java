@@ -11,11 +11,17 @@ public final class AiTuning {
     public static final double DEFENSE_ERROR_HIGH_PX = 2;
     public static final double MOVEMENT_DEAD_ZONE_PX = 3;
     public static final double HABIT_PRIOR_SAMPLES = 8;
+    public static final int MIN_RETURN_HABIT_SAMPLES = 3;
+    public static final double BACK_RETURN_RISK_THRESHOLD = .20;
+    public static final int FAST_OPPONENT_RETURN_FRAMES = 30;
     public static final double BLOCK_TIMING_ERROR_LOW_FRAMES = 20;
     public static final double BLOCK_TIMING_ERROR_HIGH_FRAMES = 3;
     public static final int ATTACK_TIMING_JITTER_FRAMES = 2;
     public static final double MIN_LOB_ABILITY = .20;
     public static final double MAX_LOB_PROBABILITY = .28;
+    public static final double MB_LOB_PROBABILITY_MULTIPLIER = .15;
+    public static final int MIN_ATTACK_COVER_DEFENSE = 41;
+    public static final double MAX_ATTACK_COVER_PROBABILITY = .9;
     public static final double MAX_AIR_SET_PROBABILITY = .28;
     public static final int MIN_AIR_SET_ATTACK = 61;
     public static final int MIN_JUMP_SERVE_ATTACK = 41;
@@ -27,6 +33,12 @@ public final class AiTuning {
     public static final double LOW_SUBOPTIMAL_EXTRA_PROBABILITY = .15;
     public static final double QUICK_SET_BASE_PROBABILITY = .15;
     public static final double QUICK_SET_SKILL_PROBABILITY = .35;
+    public static final int MIN_QUICK_SET_ATTACK = 21;
+    public static final int MIN_JUMP_SET_ATTACK = 41;
+    public static final int MIN_NEGATIVE_TEMPO_ATTACK = 21;
+    public static final int MIN_GAP_SELECTION_ATTACK = 41;
+    public static final int MIN_TEMPO_PREDICTION_DEFENSE = 21;
+    public static final int MIN_REPEAT_BLOCK_DEFENSE = 41;
     public static final double MAX_NEGATIVE_TEMPO_PROBABILITY = .55;
     public static final double ADVANCED_JUMP_SERVE_SHARE = .65;
     public static final double LOW_VISIBLE_READ_PROBABILITY = .25;
@@ -45,7 +57,6 @@ public final class AiTuning {
     public static final double DEFAULT_DEFENSE_DISTANCE_FROM_NET_PX = 280;
     public static final double SERVE_HABIT_POSITION_BIAS_PX = 100;
     public static final double SERVE_POSITION_EDGE_MARGIN_RATIO = .25;
-    public static final int MIN_RETREAT_DEFENSE = 21;
     public static final double LOB_HABIT_POSITION_BIAS_PX = 40;
     public static final double WING_REACH_MARGIN_PX = 65;
     public static final double RESERVE_GAP_PX = 100;
@@ -73,8 +84,10 @@ public final class AiTuning {
     }
 
     public static void validate() {
-        for (int minimum : new int[]{MIN_RETREAT_DEFENSE, MIN_AIR_SET_ATTACK, MIN_JUMP_SERVE_ATTACK,
-                MIN_TWO_ATTACKERS, MIN_THREE_ATTACKERS}) {
+        for (int minimum : new int[]{MIN_ATTACK_COVER_DEFENSE, MIN_AIR_SET_ATTACK, MIN_JUMP_SERVE_ATTACK,
+                MIN_TWO_ATTACKERS, MIN_THREE_ATTACKERS, MIN_QUICK_SET_ATTACK, MIN_JUMP_SET_ATTACK,
+                MIN_NEGATIVE_TEMPO_ATTACK, MIN_GAP_SELECTION_ATTACK, MIN_TEMPO_PREDICTION_DEFENSE,
+                MIN_REPEAT_BLOCK_DEFENSE}) {
             if (minimum < 1 || minimum > 100) throw new IllegalArgumentException("Invalid AI unlock threshold");
         }
         if (MIN_THREE_ATTACKERS < MIN_TWO_ATTACKERS
@@ -84,6 +97,7 @@ public final class AiTuning {
         if (FORECAST_FRAMES <= 0 || TRACK_INTERVAL_FRAMES <= 0 || SERVE_WAIT_FRAMES < 0
                 || ATTACK_TIMING_JITTER_FRAMES < 0 || REPLAN_INTERVAL_FRAMES <= 0
                 || CONTACT_PATIENCE_FRAMES < 0 || HABIT_PRIOR_SAMPLES <= 0
+                || MIN_RETURN_HABIT_SAMPLES <= 0 || FAST_OPPONENT_RETURN_FRAMES <= 0
                 || NEGATIVE_START_MIN_LEAD_FRAMES < 0
                 || NEGATIVE_START_MAX_LEAD_FRAMES < NEGATIVE_START_MIN_LEAD_FRAMES
                 || DEFENSE_ERROR_HIGH_PX < 0 || DEFENSE_ERROR_LOW_PX < DEFENSE_ERROR_HIGH_PX
@@ -92,6 +106,8 @@ public final class AiTuning {
             throw new IllegalArgumentException("Invalid AI timing or error settings");
         }
         double[] probabilities = {REACTION_JITTER_RATIO, MIN_LOB_ABILITY, MAX_LOB_PROBABILITY,
+                BACK_RETURN_RISK_THRESHOLD,
+                MB_LOB_PROBABILITY_MULTIPLIER, MAX_ATTACK_COVER_PROBABILITY,
                 MAX_AIR_SET_PROBABILITY, MAX_JUMP_SET_PROBABILITY, MAX_ADVANCED_SERVE_PROBABILITY,
                 EXPERT_SUBOPTIMAL_PROBABILITY, LOW_SUBOPTIMAL_EXTRA_PROBABILITY,
                 QUICK_SET_BASE_PROBABILITY, QUICK_SET_SKILL_PROBABILITY, MAX_NEGATIVE_TEMPO_PROBABILITY,

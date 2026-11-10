@@ -142,9 +142,9 @@
 - 基本 `NetworkSyncTest` 使用記憶體傳輸，不建立真實 Client socket；`loopback` 使用動態分配的測試連接埠，不接觸正式 UDP 5001。新增網路測試也必須隔離傳輸／連接埠，並驗證結束後資源釋放。
 
 ```powershell
-javac -encoding UTF-8 -d .\build Main.java tests\GameplayFlowTest.java tests\NetworkSyncTest.java tests\LauncherTest.java tests\PackagingSmokeTest.java tests\AiMatchTest.java tests\AiTacticsTest.java
+javac -encoding UTF-8 -d .\build Main.java tests\GameplayFlowTest.java tests\NetworkSyncTest.java tests\LauncherTest.java tests\PackagingSmokeTest.java tests\AiMatchTest.java tests\AiTacticsTest.java tests\AiPolicyTest.java tests\AiLearningTest.java tests\LocalPauseTest.java tests\ThirdTouchTrajectoryTest.java
 if ($LASTEXITCODE -ne 0) { throw 'Java compilation failed' }
-foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'LauncherTest', 'AiMatchTest', 'AiTacticsTest')) {
+foreach ($testClass in @('GameplayFlowTest', 'network.NetworkSyncTest', 'LauncherTest', 'AiMatchTest', 'AiTacticsTest', 'model.ai.AiPolicyTest', 'model.ai.AiLearningTest', 'LocalPauseTest', 'ThirdTouchTrajectoryTest')) {
     java '-Djava.awt.headless=true' -cp .\build $testClass
     if ($LASTEXITCODE -ne 0) { throw "$testClass failed" }
 }

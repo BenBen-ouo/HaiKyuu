@@ -28,7 +28,7 @@ public final class MatchDisplay {
             AlphaComposite.getInstance(AlphaComposite.SRC_OVER, .9f);
     private static final BasicStroke PANEL_STROKE = new BasicStroke(4f);
     private static final int VERSION_RIGHT_MARGIN_PX = 12;
-    private static final int VERSION_BASELINE_Y = 20;
+    private static final int VERSION_BASELINE_Y = 40;
     private static final int SCORE_BASELINE_Y = 44;
     private static final int PANEL_PADDING_X_PX = 16;
     private static final int PANEL_EXTRA_HEIGHT_PX = 36;

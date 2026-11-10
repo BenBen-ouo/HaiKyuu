@@ -21,8 +21,11 @@ public final class RuleBasedAi {
     private AiObservation previous;
     private int tick;
     private int offenseReadyAt;
-    private int opponentSetAt;
+    private int opponentSetAt = -1;
     private boolean lastOpponentShotWasServe;
+    private boolean pendingLanding;
+    private int pendingAttackRole;
+    private int pendingAttackTempo;
     private State state = State.WAITING;
 
     public RuleBasedAi(boolean redSide, AiDifficulty difficulty) {
@@ -33,12 +36,13 @@ public final class RuleBasedAi {
         AiTuning.validate();
         this.redSide = redSide;
         this.difficulty = java.util.Objects.requireNonNull(difficulty);
+        java.util.Arrays.fill(opponentTakeoff, -1);
         java.util.Objects.requireNonNull(random);
         // 分流亂數，避免調整進攻方案的抽樣次數改變防守誤差序列。
         attackRandom = new Random(random.nextLong());
         RandomGenerator defenseRandom = new Random(random.nextLong());
         defense = new DefensePlanner(defenseRandom);
-        offense = new OffensePlanner(attackRandom);
+        offense = new OffensePlanner(attackRandom, habits);
         serve = new ServePlanner(attackRandom);
     }
     public ControlInput update(AiObservation o) {
@@ -71,6 +75,7 @@ public final class RuleBasedAi {
             if (ownFirst) {
                 offenseReadyAt = tick + AiDifficulty.reactionFrames(difficulty.attack(), attackRandom);
                 offense.begin(o, tick, difficulty);
+                defense.beginOwnAttack(difficulty);
             }
             if (o.ownTouches() == 2 && previous != null && previous.ownTouches() != 2) {
                 offense.onSet(o, tick, difficulty);
@@ -78,6 +83,10 @@ public final class RuleBasedAi {
             if (o.ownTouches() > 0 && !o.attackLocked() && o.lastTouchOwn()) {
                 state = o.ownTouches() == 1 ? State.ORGANIZING : State.ATTACKING;
                 if (tick >= offenseReadyAt) offense.update(o, input, tick, difficulty);
+                if (tick >= offenseReadyAt && !offense.isBackReserved()
+                        && !input.wingActionPressed && !input.mbActionPressed && !input.backJump) {
+                    defense.coverOwnAttack(o, input);
+                }
             } else {
                 state = o.receptionComplete() ? State.DEFENDING : State.RECEIVING;
                 if (changedFlight) defense.react(tick, difficulty, habits, o);
@@ -101,8 +110,19 @@ public final class RuleBasedAi {
 
     private void observeHabits(AiObservation o) {
         if (previous == null) return;
+        if (o.serveState() == ServeState.WAITING_FOR_SERVE) {
+            pendingLanding = false;
+            opponentSetAt = -1;
+            java.util.Arrays.fill(opponentTakeoff, -1);
+            return;
+        }
+        if (o.opponentTouches() == 1 && previous.opponentTouches() != 1) {
+            opponentSetAt = -1;
+            java.util.Arrays.fill(opponentTakeoff, -1);
+        }
         var setter = o.opponent().get(1);
-        if (setter.action() == PlayerAction.SETTING && previous.opponent().get(1).action() != PlayerAction.SETTING) {
+        if (o.opponentTouches() == 2 && setter.action() == PlayerAction.SETTING
+                && previous.opponent().get(1).action() != PlayerAction.SETTING) {
             opponentSetAt = tick;
         }
         int[] roles = {0, 2, 3};
@@ -115,20 +135,22 @@ public final class RuleBasedAi {
                 // 發球不混入攻擊者／節奏統計。
                 if (o.receptionComplete()) {
                     int difference = opponentTakeoff[role] - opponentSetAt;
-                    int tempo = difference < -AiTuning.SIMULTANEOUS_TAKEOFF_WINDOW_FRAMES ? 0
+                    int tempo = opponentSetAt < 0 || opponentTakeoff[role] < 0 ? 2
+                            : difference < -AiTuning.SIMULTANEOUS_TAKEOFF_WINDOW_FRAMES ? 0
                             : difference <= AiTuning.SIMULTANEOUS_TAKEOFF_WINDOW_FRAMES ? 1 : 2;
                     habits.recordAttack(i, tempo, observedShot(o.ball()));
                     lastOpponentShotWasServe = false;
+                    pendingLanding = !o.lastTouchOwn();
+                    pendingAttackRole = i;
+                    pendingAttackTempo = tempo;
                 }
             }
-        }
-        if (previous.serveState() == ServeState.WAITING_FOR_SERVE
-                && o.serveState() != ServeState.WAITING_FOR_SERVE && !o.ownServing()) {
-            lastOpponentShotWasServe = true;
         }
         if (!o.ownServing() && (previous.serveState() == ServeState.WAITING_FOR_SERVE
                 || previous.serveState() == ServeState.JUMP_TOSS)
                 && (o.serveState() == ServeState.SERVE_LAUNCHED || o.serveState() == ServeState.IN_PLAY)) {
+            lastOpponentShotWasServe = true;
+            pendingLanding = true;
             if (previous.serveState() == ServeState.JUMP_TOSS) {
                 habits.recordServe(Math.abs(o.ball().velocityY() - GameConfig.GRAVITY - GameConfig.SERVE_JUMP_VELOCITY_Y) < .01
                         && Math.abs(o.ball().velocityX()) == GameConfig.SERVE_JUMP_HORIZONTAL_SPEED ? 3 : 4);
@@ -142,8 +164,11 @@ public final class RuleBasedAi {
                 habits.recordServe(best == 3 ? 5 : best);
             }
         }
-        if (o.landing() && !previous.landing() && !o.lastTouchOwn()) {
-            habits.recordLanding(lastOpponentShotWasServe, o.ball().x());
+        if (pendingLanding && (o.lastTouchOwn() || o.netContact())) pendingLanding = false;
+        if (pendingLanding && o.landing() && !previous.landing() && !o.lastTouchOwn()) {
+            if (lastOpponentShotWasServe) habits.recordLanding(true, o.ball().x());
+            else habits.recordAttackLanding(pendingAttackRole, pendingAttackTempo, o.ball().x());
+            pendingLanding = false;
         }
     }
     private static int observedShot(BallForecast ball) {
@@ -158,13 +183,15 @@ public final class RuleBasedAi {
         previous = null;
         tick = 0;
         offenseReadyAt = 0;
-        opponentSetAt = 0;
+        opponentSetAt = -1;
+        pendingLanding = false;
         lastOpponentShotWasServe = false;
-        java.util.Arrays.fill(opponentTakeoff, 0);
+        java.util.Arrays.fill(opponentTakeoff, -1);
         state = State.WAITING;
     }
     public State state() { return state; }
     public AiDifficulty difficulty() { return difficulty; }
     public boolean isRedSide() { return redSide; }
     public int learnedAttacks() { return habits.attackSamples(); }
+    public int learnedAttackLandings() { return habits.attackLandingSamples(); }
 }

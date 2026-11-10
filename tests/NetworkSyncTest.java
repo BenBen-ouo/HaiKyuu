@@ -44,6 +44,7 @@ public final class NetworkSyncTest {
         testResetClearsConfirmedEffects();
         testConnectionTimeouts();
         testDiagnosticFailureDisablesQueue();
+        testSnapshotArrivalAndApplyTiming();
         testServerCloseBeforeRun();
         if (args.length > 0 && "loopback".equals(args[0])) {
             testLocalLoopback();
@@ -895,6 +896,32 @@ public final class NetworkSyncTest {
     }
 
     /** 不建立 socket；保留阻塞接收、封包編碼及關閉解除阻塞的實際傳輸語意。 */
+    private static void testSnapshotArrivalAndApplyTiming() {
+        var messages = new java.util.ArrayList<String>();
+        var timing = new SnapshotTiming(messages::add);
+        timing.received(1, 100, 1_000_000);
+        timing.applied(1, 100, 1_000_000, 5_000_000);
+        timing.received(2, 101, 17_000_000);
+        timing.received(3, 102, 34_000_000);
+        timing.applied(3, 102, 34_000_000, 100_000_000);
+        check(messages.stream().noneMatch(s -> s.startsWith("snapshot receive gap")),
+                "封包持續抵達時，不將更新延遲誤報成收包間隔");
+        check(messages.stream().anyMatch(s -> s.startsWith("snapshot apply gap 95.00"))
+                        && messages.stream().anyMatch(s -> s.startsWith("snapshot receive-to-apply 66.00")),
+                "套用間隔與接收後等待分別記錄");
+        int beforeRestore = messages.size();
+        timing.applied(3, 102, 34_000_000, 150_000_000);
+        check(messages.size() == beforeRestore, "同一快照恢復位置不重設新快照診斷");
+        timing.received(4, 103, 200_000_000);
+        timing.applied(4, 103, 200_000_000, 201_000_000);
+        check(messages.stream().anyMatch(s -> s.startsWith("snapshot receive gap 166.00")),
+                "真正的收包間隔有獨立紀錄");
+        timing.received(5, 104, 5_100_000_000L);
+        timing.applied(5, 104, 5_100_000_000L, 5_101_000_000L);
+        check(messages.stream().anyMatch(s -> s.contains("received=5 applied=4")),
+                "定期計數能辨識收到但被較新快照取代的更新");
+    }
+
     private static final class MemoryTransport implements ClientTransport {
         private final Deque<UdpCodec.Decoded> incoming = new ArrayDeque<>();
         private boolean closed;
@@ -919,7 +946,7 @@ public final class NetworkSyncTest {
         }
 
         @Override
-        public synchronized UdpCodec.Decoded receive() throws SocketException {
+        public synchronized ClientTransport.Received receive() throws SocketException {
             while (incoming.isEmpty() && !closed) {
                 try {
                     wait();
@@ -929,7 +956,7 @@ public final class NetworkSyncTest {
                 }
             }
             if (closed) throw new SocketException("closed");
-            return incoming.removeFirst();
+            return new ClientTransport.Received(incoming.removeFirst(), System.nanoTime());
         }
 
         @Override

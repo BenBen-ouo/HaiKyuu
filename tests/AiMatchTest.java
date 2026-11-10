@@ -9,13 +9,17 @@ import model.serve.ServeState;
 
 /** 真正推進正式模型，不以隨機成功率替代觸球。 */
 public final class AiMatchTest {
+    // 提前回防後曾在 48000 幀仍為 28:28；保留正式兩分差與完賽驗收，延長有限模擬。
+    private static final int MATCH_SIMULATION_FRAMES = 96000;
     public static void main(String[] args) {
         testDifficulty();
         testMirroredInput();
         testObservationDoesNotMutateModel();
         testSlidersAndController();
         testDefenseScenarios();
-        for (int skill : new int[]{10, 40, 41, 50, 60, 61, 95}) simulate(skill, 48000);
+        for (int skill : new int[]{10, 40, 41, 50, 60, 61, 95}) {
+            simulate(skill, MATCH_SIMULATION_FRAMES);
+        }
         System.out.println("AiMatchTest passed");
     }
     private static void simulate(int skill, int frames) {
@@ -48,10 +52,15 @@ public final class AiMatchTest {
                     && a.spikeFlat == a.backRight && a.airSetModifier == (a.backLeft && a.backRight),
                     "AI 操作遵循既有鍵盤共鍵關係");
             model.update(a, b);
+            if (model.getHitCount(true) == 1 && contacts.red().hitCount() != 1) lastSet[0] = -1000;
+            if (model.getHitCount(false) == 1 && contacts.blue().hitCount() != 1) lastSet[1] = -1000;
             if (model.getServeHandler().getState() != before && model.getServeHandler().hasLaunchedServe()) serves++;
             if (model.didFirstServeReceptionThisFrame()) receives++;
             if (model.didSetterContactThisFrame() || model.didAirSetContactThisFrame()) sets++;
-            if (model.didSetterContactThisFrame()) lastSet[Boolean.TRUE.equals(model.getLastHitTeam()) ? 0 : 1] = frame;
+            if ((model.didSetterContactThisFrame() || model.didAirSetContactThisFrame())
+                    && model.getLastHitTeam() != null && model.getHitCount(model.getLastHitTeam()) == 2) {
+                lastSet[model.getLastHitTeam() ? 0 : 1] = frame;
+            }
             if (model.didAirSetContactThisFrame()) airSets++;
             if (model.didSetterContactThisFrame()
                     && (model.redTeam.setter.jumping || model.blueTeam.setter.jumping)) jumpSets++;
@@ -72,7 +81,8 @@ public final class AiMatchTest {
                         strikeHeights.add((int) model.ball.y);
                         // Inspect the attack input; a same-frame rebound can change ball velocity.
                         if (before != ServeState.JUMP_TOSS && (side == 0 ? a : b).spikeLob) lobs++;
-                        if (before != ServeState.JUMP_TOSS) {
+                        // 沒有本次球權第二球舉球時，不拿上一輪的舉球時間推算節奏。
+                        if (before != ServeState.JUMP_TOSS && lastSet[side] >= 0) {
                             int offset = takeoff[side][role] - lastSet[side];
                             tempoCounts[offset < -5 ? 0 : offset <= 5 ? 1 : 2]++;
                         }
@@ -99,6 +109,10 @@ public final class AiMatchTest {
         if (serves < 10 || receives < 5 || sets < 2) throw new AssertionError("AI must actually serve, receive and set");
         check(matches > 0 && spikes > 0 && dives > 0, "AI 完成實際攻防並結束正式比賽");
         if (skill <= 20) check(lobs == 0, "入門不使用吊球");
+        if (skill <= 20) check(hitters[2] == 0 && tempoCounts[0] == 0,
+                "入門不使用快攻配球或負節奏");
+        if (skill <= 40) check(jumpSets == 0 && repeatBlocks == 0,
+                "普通以下不使用 Setter 跳舉或補攔");
         if (skill < 61) check(airSets == 0 && multiAttacks == 0, "困難以下不使用假扣真舉或三人進攻");
         if (skill < 41) check(jumpServes == 0 && twoAttacks == 0, "普通以下不使用跳發或雙人進攻");
         if (skill == 50) check(twoAttacks > 0, "普通難度實際組織雙人進攻");

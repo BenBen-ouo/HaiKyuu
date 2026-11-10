@@ -1,5 +1,7 @@
 package model.ai;
 
+import model.GameConfig;
+
 /** 僅累計本場已發生的公開觸球；先驗避免少數樣本支配預測。 */
 public final class OpponentHabits {
     private final int[] attackers = new int[3];
@@ -8,6 +10,11 @@ public final class OpponentHabits {
     private final int[] serves = new int[6];
     private final double[] landingSum = new double[2];
     private final int[] landings = new int[2];
+    private final double[][] attackLandingSum = new double[3][3];
+    private final int[][] attackLandings = new int[3][3];
+    private double fastDeepSum;
+    private int fastDeepLandings;
+    private int attackLandingSamples;
     private int attacks;
     private int lobs;
     private int serveSamples;
@@ -32,6 +39,33 @@ public final class OpponentHabits {
         landingSum[slot] += x;
         landings[slot]++;
     }
+    public void recordAttackLanding(int role, int tempo, double x) {
+        recordLanding(false, x);
+        attackLandingSum[role][tempo] += x;
+        attackLandings[role][tempo]++;
+        attackLandingSamples++;
+        if (tempo <= 1 && x >= GameConfig.COURT_LEFT_X - GameConfig.BALL_RADIUS
+                && x <= GameConfig.COURT_LEFT_X + GameConfig.THREE_METER_PX) {
+            fastDeepLandings++;
+            fastDeepSum += x;
+        }
+    }
+    public double expectedAttackLanding(int role, int tempo, double fallback) {
+        return (attackLandingSum[role][tempo] + fallback * AiTuning.HABIT_PRIOR_SAMPLES)
+                / (attackLandings[role][tempo] + AiTuning.HABIT_PRIOR_SAMPLES);
+    }
+    public double fastDeepRisk() {
+        return fastDeepLandings / (attackLandingSamples + AiTuning.HABIT_PRIOR_SAMPLES);
+    }
+    public boolean shouldKeepBackForReturn(int defense) {
+        return attackLandingSamples >= AiTuning.MIN_RETURN_HABIT_SAMPLES
+                && fastDeepRisk() * AiDifficulty.ability(defense) >= AiTuning.BACK_RETURN_RISK_THRESHOLD;
+    }
+    public double expectedFastDeepLanding(double fallback) {
+        return (fastDeepSum + fallback * AiTuning.HABIT_PRIOR_SAMPLES)
+                / (fastDeepLandings + AiTuning.HABIT_PRIOR_SAMPLES);
+    }
+    public int attackLandingSamples() { return attackLandingSamples; }
     public double attackerWeight(int role) {
         return (attackers[role] + AiTuning.HABIT_PRIOR_SAMPLES / 3)
                 / (attacks + AiTuning.HABIT_PRIOR_SAMPLES);
@@ -54,6 +88,13 @@ public final class OpponentHabits {
         java.util.Arrays.fill(serves, 0);
         java.util.Arrays.fill(landingSum, 0);
         java.util.Arrays.fill(landings, 0);
+        for (int i = 0; i < 3; i++) {
+            java.util.Arrays.fill(attackLandingSum[i], 0);
+            java.util.Arrays.fill(attackLandings[i], 0);
+        }
+        fastDeepSum = 0;
+        fastDeepLandings = 0;
+        attackLandingSamples = 0;
         attacks = 0;
         lobs = 0;
         serveSamples = 0;

@@ -22,8 +22,8 @@ import view.GamePanel;
 import view.LauncherPanel;
 
 public class Main {
-    private static final int LAUNCHER_WIDTH_PX = 540;
-    private static final int LAUNCHER_HEIGHT_PX = 370;
+    private static final int LAUNCHER_WIDTH_PX = 600;
+    private static final int LAUNCHER_HEIGHT_PX = 430;
     public static void main(String[] args) {
         if (args.length > 0 && "server".equalsIgnoreCase(args[0])) {
             startDedicatedServer();
@@ -152,9 +152,12 @@ public class Main {
         KeyboardController keyboard = new KeyboardController();
         RuleBasedAi ai = new RuleBasedAi(!playerRedSide, difficulty);
         GameController controller = new GameController(model, keyboard, null, ai);
-        showWindow(model, keyboard, controller, null, null, "HaiKyuu!! - "
-                + (playerRedSide ? "左半" : "右半") + "機器人對戰模式"
-                + "（防守 " + difficulty.defense() + "／進攻 " + difficulty.attack() + "）");
+        showWindow(model, keyboard, controller, null, null, aiWindowTitle(playerRedSide, difficulty));
+    }
+
+    static String aiWindowTitle(boolean playerRedSide, AiDifficulty difficulty) {
+        return "HaiKyuu!! - " + (playerRedSide ? "左方玩家對戰機器人" : "右方玩家對戰機器人")
+                + "（防守 " + difficulty.defense() + "／進攻 " + difficulty.attack() + "）";
     }
 
     private static void showWindow(

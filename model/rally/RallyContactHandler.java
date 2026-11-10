@@ -9,6 +9,7 @@ import model.GameModel;
 import model.SideRules;
 import model.TeamInput;
 import model.ball.BallTrajectory;
+import model.ball.NetClearanceTrajectory;
 import model.player.BackPlayer;
 import model.player.HitBox;
 import model.player.Player;
@@ -282,7 +283,7 @@ public class RallyContactHandler {
         } else if (player instanceof Setter && hitCountBeforeTouch < 2) {
             setSetterBallVelocity(target);
         } else {
-            setBallVelocity(target);
+            setBallVelocity(target, hitCountBeforeTouch >= 2);
         }
         setRotationForRegularTouch(player, redSide);
         return true;
@@ -402,7 +403,7 @@ public class RallyContactHandler {
         model.ball.vy = reflectedVy;
     }
 
-    private void setBallVelocity(BallTarget target) {
+    private void setBallVelocity(BallTarget target, boolean thirdTouch) {
         BallTrajectory.Velocity velocity = BallTrajectory.estimateVelocityToTargetAtSpeed(
                 model.ball.x,
                 model.ball.y,
@@ -411,6 +412,11 @@ public class RallyContactHandler {
                 target.launchSpeed,
                 GameConfig.GRAVITY
         );
+
+        if (thirdTouch) {
+            velocity = NetClearanceTrajectory.correctIfBlocked(model.ball.x, model.ball.y, model.ball.radius,
+                    target.x, target.y, velocity, model.netHitBox);
+        }
 
         model.ball.vx = velocity.x();
         model.ball.vy = velocity.y();

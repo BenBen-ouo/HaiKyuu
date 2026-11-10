@@ -21,10 +21,25 @@ final class DefensePlanner {
     private int lastVisibleAttacker = -1;
     private boolean targetValid;
     private boolean assignReceiver;
+    private boolean coverOwnAttack;
 
     DefensePlanner(RandomGenerator random) { this.random = random; }
 
-    void reset() { targetValid = false; assignReceiver = true; wingAssigned = false; }
+    void reset() { targetValid = false; assignReceiver = true; wingAssigned = false; coverOwnAttack = false; }
+
+    void beginOwnAttack(AiDifficulty difficulty) {
+        coverOwnAttack = random.nextDouble() < AiTuning.MAX_ATTACK_COVER_PROBABILITY
+                * AiTuning.unlockedProgress(difficulty.defense(), AiTuning.MIN_ATTACK_COVER_DEFENSE);
+    }
+
+    void coverOwnAttack(AiObservation o, ControlInput input) {
+        if (!coverOwnAttack) return;
+        var back = o.own().get(0);
+        double middle = (GameConfig.COURT_LEFT_X + GameConfig.NET_X - GameConfig.THREE_METER_PX) / 2;
+        if (back.canStart() && back.centerX() < middle - AiTuning.MOVEMENT_DEAD_ZONE_PX) {
+            move(input, back, middle + back.receiveOffsetX() + back.receiveWidth() / 2 - back.width() / 2);
+        }
+    }
 
     void waitForServe(AiObservation o, ControlInput input, AiDifficulty difficulty, OpponentHabits habits) {
         moveToReadyPosition(o, input, difficulty, habits, true);
@@ -39,8 +54,14 @@ final class DefensePlanner {
         double middle = (GameConfig.COURT_LEFT_X + front) / 2;
         double bias = serve ? (habits.serveWeight(2) - habits.serveWeight(5))
                 * AiTuning.SERVE_HABIT_POSITION_BIAS_PX * skill : 0;
-        double desiredCenter = habits.expectedLanding(serve, middle + centerOffset + bias) - centerOffset;
+        double expected = habits.expectedLanding(serve, middle + centerOffset + bias);
+        if (!serve && habits.shouldKeepBackForReturn(difficulty.defense())) {
+            expected = habits.expectedFastDeepLanding(middle + centerOffset);
+        }
+        double desiredCenter = middle + (expected - centerOffset - middle) * skill;
         double margin = (front - GameConfig.COURT_LEFT_X) * AiTuning.SERVE_POSITION_EDGE_MARGIN_RATIO;
+        if (!serve) margin = margin * (1 - skill * habits.fastDeepRisk())
+                + GameConfig.BALL_RADIUS * skill * habits.fastDeepRisk();
         desiredCenter = Math.max(GameConfig.COURT_LEFT_X + margin, Math.min(front - margin, desiredCenter));
         targetX = desiredCenter + centerOffset;
         targetValid = true;
@@ -56,11 +77,14 @@ final class DefensePlanner {
         blockError = signedError(AiTuning.BLOCK_TIMING_ERROR_HIGH_FRAMES
                 + uncertainty * (AiTuning.BLOCK_TIMING_ERROR_LOW_FRAMES - AiTuning.BLOCK_TIMING_ERROR_HIGH_FRAMES));
         predictedAttacker = weightedRole(habits, skill);
-        predictedTempo = weightedTempo(habits, skill);
+        predictedTempo = difficulty.defense() < AiTuning.MIN_TEMPO_PREDICTION_DEFENSE
+                ? 2 : weightedTempo(habits, skill);
         blockAt = Integer.MAX_VALUE;
         lastVisibleAttacker = -1;
-        if (!targetValid) targetX = habits.expectedLanding(!o.receptionComplete(),
-                GameConfig.NET_X - AiTuning.DEFAULT_DEFENSE_DISTANCE_FROM_NET_PX);
+        if (!targetValid) targetX = !o.receptionComplete()
+                ? habits.expectedLanding(true, GameConfig.NET_X - AiTuning.DEFAULT_DEFENSE_DISTANCE_FROM_NET_PX)
+                : habits.expectedAttackLanding(predictedAttacker, predictedTempo,
+                        GameConfig.NET_X - AiTuning.DEFAULT_DEFENSE_DISTANCE_FROM_NET_PX);
         // 反彈重新反應前保留原接球責任與目標，不立即退回習慣站位。
         assignReceiver = true;
         nextTrack = readyAt;
@@ -72,7 +96,10 @@ final class DefensePlanner {
         boolean organizing = o.receptionComplete() && !o.lastTouchOwn() && o.opponentTouches() > 0
                 && o.ball().x() > GameConfig.NET_X + GameConfig.BALL_RADIUS
                 && o.ball().xAt(floorArrival) > GameConfig.NET_X + GameConfig.BALL_RADIUS;
-        if (difficulty.defense() >= AiTuning.MIN_RETREAT_DEFENSE && organizing) {
+        boolean ownShotOutgoing = o.attackLocked() && o.lastTouchOwn()
+                && o.ball().velocityX() > 0
+                && o.ball().xAt(floorArrival) > GameConfig.NET_X + GameConfig.BALL_RADIUS;
+        if (organizing || ownShotOutgoing) {
             moveToReadyPosition(o, input, difficulty, habits, false);
             wingAssigned = false;
             assignReceiver = true;
@@ -190,6 +217,8 @@ final class DefensePlanner {
 
     private void block(AiObservation o, ControlInput input, int tick, AiDifficulty difficulty, OpponentHabits habits) {
         if (!o.receptionComplete() || o.opponentTouches() == 0 || o.blockUsed()) return;
+        if (difficulty.defense() < AiTuning.MIN_REPEAT_BLOCK_DEFENSE
+                && o.own().get(2).blockJumpCount() > 0) return;
         double skill = AiDifficulty.ability(difficulty.defense());
         // 可見的助跑／起跳會逐步取代習慣猜測；不讀對手按鍵或攻擊方案。
         int[] roles = {0, 2, 3};
@@ -210,7 +239,13 @@ final class DefensePlanner {
         var suspect = o.opponent().get(roles[predictedAttacker]);
         int netArrival = o.ball().velocityX() < 0
                 ? (int) Math.ceil((GameConfig.NET_X - o.ball().x()) / o.ball().velocityX()) : -1;
-        if (netArrival >= 0 && netArrival < AiTuning.BLOCK_NET_WINDOW_FRAMES
+        if (difficulty.defense() < AiTuning.MIN_TEMPO_PREDICTION_DEFENSE) {
+            // 入門固定等第二節奏；不以近網球或快攻起跳資訊提前覆蓋這個時機。
+            if (blockAt == Integer.MAX_VALUE && (visible >= 0
+                    || netArrival >= 0 && netArrival < AiTuning.BLOCK_NET_WINDOW_FRAMES)) {
+                blockAt = tick + AiTuning.SECOND_BLOCK_GUESS_FRAMES + (int) Math.abs(blockError);
+            }
+        } else if (netArrival >= 0 && netArrival < AiTuning.BLOCK_NET_WINDOW_FRAMES
                 && o.ball().yAt(netArrival) < GameConfig.NET_TOP_Y + AiTuning.BLOCK_NET_HEIGHT_MARGIN_PX) {
             blockAt = tick + Math.max(0, netArrival - AiTuning.BLOCK_NET_LEAD_FRAMES + (int) blockError);
         } else if (suspect.jumping() && blockAt == Integer.MAX_VALUE) {

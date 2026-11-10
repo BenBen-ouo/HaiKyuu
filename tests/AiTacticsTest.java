@@ -12,6 +12,10 @@ import model.rally.RallyContactHandler;
 /** 以實際接球後的進攻轉換率驗收，不把跑完整場當成進攻有效。 */
 public final class AiTacticsTest {
     public static void main(String[] args) {
+        if (args.length > 0 && args[0].equals("mb")) {
+            testMbLobPreference();
+            return;
+        }
         if (args.length > 0 && args[0].equals("defense")) {
             testDeepBallDefense();
             testRetreatDuringOpponentOrganization();
@@ -19,6 +23,8 @@ public final class AiTacticsTest {
         }
         testDeepBallDefense();
         testRetreatDuringOpponentOrganization();
+        testOwnAttackCover();
+        testMbLobPreference();
         testReceiveCommitmentAndZone();
         testBackRescuesAfterEarlyWingDive();
         testOpenSetAvoidsMb();
@@ -325,7 +331,7 @@ public final class AiTacticsTest {
 
     private static void testRetreatDuringOpponentOrganization() {
         for (boolean red : new boolean[]{true, false}) {
-            for (int skill : new int[]{20, 21, 50, 100}) {
+            for (int skill : new int[]{1, 10, 20, 21, 50, 100}) {
                 GameModel game = new GameModel();
                 game.getServeHandler().setRedServing(!red);
                 game.getServeHandler().setWaitingForServe(false);
@@ -340,20 +346,16 @@ public final class AiTacticsTest {
                 game.ball.vx = 0;
                 game.ball.vy = 0;
                 var ai = new RuleBasedAi(red, new AiDifficulty(skill, 50), new Random(15));
-                ControlInput lastInput = null;
                 for (int t = 0; t < 40; t++) {
                     var input = ai.update(AiObservation.capture(game, red));
-                    lastInput = input;
                     game.update(red ? input : new ControlInput(), red ? new ControlInput() : input);
                 }
                 double center = team.backPlayer.x + team.backPlayer.imageWidth / 2.0;
                 if (!red) center = GameConfig.SCREEN_WIDTH - center;
-                if (skill > 20) check(Math.abs(center
+                check(Math.abs(center
                         - (GameConfig.COURT_LEFT_X + GameConfig.NET_X - GameConfig.THREE_METER_PX) / 2)
                         < (GameConfig.NET_X - GameConfig.THREE_METER_PX - GameConfig.COURT_LEFT_X) / 4,
-                        "對手組織進攻時，非入門後排主動退回三米至九米間：skill=" + skill);
-                else check(!lastInput.backLeft && !lastInput.backRight,
-                        "入門不強制新增退防行為");
+                        "對手組織進攻時，所有難度後排主動退回三米至九米間：skill=" + skill);
             }
         }
     }
@@ -387,5 +389,75 @@ public final class AiTacticsTest {
                 check(secondTouches > 0, "未解鎖假扣真舉也能用既有操作處理 Setter 第一球之後的第二球");
             }
         }
+    }
+
+    private static void testOwnAttackCover() {
+        int ordinary = 0, expert = 0;
+        for (int defense : new int[]{10, 40, 50, 100}) {
+            int advanced = 0;
+            for (boolean red : new boolean[]{true, false}) {
+                for (int seed = 0; seed < 40; seed++) {
+                    GameModel game = new GameModel();
+                    game.getServeHandler().setRedServing(!red);
+                    game.getServeHandler().setWaitingForServe(false);
+                    var team = red ? game.redTeam : game.blueTeam;
+                    double x = GameConfig.COURT_LEFT_X - team.backPlayer.imageWidth / 2.0;
+                    team.backPlayer.x = red ? x : GameConfig.SCREEN_WIDTH - x - team.backPlayer.imageWidth;
+                    game.recordRegularHit(red, team.wingSpiker);
+                    var ai = new RuleBasedAi(red, new AiDifficulty(defense, 1), new Random(seed));
+                    ai.update(AiObservation.capture(game, red));
+                    game.recordRegularHit(red, team.setter);
+                    game.ball.x = red ? GameConfig.RED_QUICK_SET_APEX_X : GameConfig.BLUE_QUICK_SET_APEX_X;
+                    game.ball.y = GameConfig.QUICK_SET_APEX_Y;
+                    game.ball.vx = 0;
+                    game.ball.vy = 0;
+                    game.ball.syncPreviousPosition();
+                    for (int t = 0; t < 38 && !game.isRallyOverForNetwork(); t++) {
+                        var input = ai.update(AiObservation.capture(game, red));
+                        game.update(red ? input : new ControlInput(), red ? new ControlInput() : input);
+                    }
+                    double center = team.backPlayer.x + team.backPlayer.imageWidth / 2.0;
+                    if (!red) center = GameConfig.SCREEN_WIDTH - center;
+                    if (center > GameConfig.COURT_LEFT_X + GameConfig.BACK_RUN_START_SPEED) advanced++;
+                    check(center < GameConfig.NET_X - GameConfig.THREE_METER_PX,
+                            "未參與攻擊的後排補位仍留在後場");
+                }
+            }
+            System.out.printf("ownAttackCover defense=%d advanced=%d/80%n", defense, advanced);
+            if (defense <= 40) check(advanced == 0, "入門與簡單不加入提前補位");
+            if (defense == 50) ordinary = advanced;
+            if (defense == 100) expert = advanced;
+        }
+        check(ordinary > 0 && expert > ordinary && expert < 80,
+                "普通開始偶爾補位，專家更頻繁但不是每次執行");
+    }
+
+    private static void testMbLobPreference() {
+        int hits = 0, lobs = 0;
+        for (boolean red : new boolean[]{true, false}) {
+            for (int seed = 0; seed < 80; seed++) {
+                GameModel game = new GameModel();
+                game.getServeHandler().setRedServing(!red);
+                game.getServeHandler().setWaitingForServe(true);
+                game.getServeHandler().setWaitingForServe(false);
+                var team = red ? game.redTeam : game.blueTeam;
+                game.ball.x = team.backPlayer.hitBox.getCenterX();
+                game.ball.y = team.backPlayer.hitBox.getCenterY();
+                new RallyContactHandler(game).collideTeam(team, red, new TeamInput());
+                var ai = new RuleBasedAi(red, new AiDifficulty(100, 100), new Random(seed));
+                for (int t = 0; t < 280 && !game.isRallyOverForNetwork(); t++) {
+                    var input = ai.update(AiObservation.capture(game, red));
+                    game.update(red ? input : new ControlInput(), red ? new ControlInput() : input);
+                    if (team.quickAttacker.getAction() == PlayerAction.ATTACK_SWING
+                            && team.quickAttacker.hasValidAttackAttemptThisFrame()) {
+                        hits++;
+                        if (input.spikeLob) lobs++;
+                        break;
+                    }
+                }
+            }
+        }
+        System.out.printf("mbQuickAttack hits=%d lobs=%d%n", hits, lobs);
+        check(hits >= 10 && lobs <= Math.max(1, hits / 5), "MB 可達快攻以扣球為主，吊球僅偶爾使用");
     }
 }

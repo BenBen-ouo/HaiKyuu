@@ -6,6 +6,7 @@ import model.GameModel;
 import model.player.Player;
 import model.player.PlayerAction;
 import model.player.Team;
+import model.player.QuickAttacker;
 import model.serve.ServeState;
 
 /** 只擷取目前可見位置、動作及已裁定觸球；不含按鍵或對手意圖。X 統一為本隊在左。 */
@@ -23,7 +24,8 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
     public record Pose(double x, double y, double velocityX, double velocityY,
             double width, double height, PlayerAction action, boolean jumping, boolean diving,
             double receiveOffsetX, double receiveOffsetY, double receiveWidth, double receiveHeight,
-            double attackOffsetX, double attackOffsetY, double attackWidth, double attackHeight) {
+            double attackOffsetX, double attackOffsetY, double attackWidth, double attackHeight,
+            int blockJumpCount) {
         public double centerX() { return x + width / 2; }
         public double receiveX() { return x + receiveOffsetX + receiveWidth / 2; }
         public double receiveY() { return y + receiveOffsetY + receiveHeight / 2; }
@@ -55,7 +57,8 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
                 redSide ? p.hitBox.offsetX : p.imageWidth - p.hitBox.offsetX - p.hitBox.width,
                 p.hitBox.offsetY, p.hitBox.width, p.hitBox.height,
                 redSide ? p.attackHitBox.offsetX : p.imageWidth - p.attackHitBox.offsetX - p.attackHitBox.width,
-                p.attackHitBox.offsetY, p.attackHitBox.width, p.attackHitBox.height);
+                p.attackHitBox.offsetY, p.attackHitBox.width, p.attackHitBox.height,
+                p instanceof QuickAttacker mb ? mb.getCountedBlockJumps() : 0);
     }
     private static int roleOf(Team team, Player player) {
         Player[] roles = team.getPlayers();

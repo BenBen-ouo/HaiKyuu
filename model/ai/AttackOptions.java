@@ -26,18 +26,22 @@ final class AttackOptions {
         return false;
     }
 
-    static int choose(AiObservation o, double skill, RandomGenerator random) {
+    static int choose(AiObservation o, double skill, RandomGenerator random, boolean quickAttack) {
         List<Integer> safe = new ArrayList<>(5);
         int best = -1;
         double bestScore = Double.NEGATIVE_INFINITY;
         boolean normalAvailable = hasNormalShot(o.ball().x(), o.ball().y());
+        double lobProbability = AiTuning.MAX_LOB_PROBABILITY * skill
+                * (quickAttack ? AiTuning.MB_LOB_PROBABILITY_MULTIPLIER : 1);
         boolean useLob = skill >= AiTuning.MIN_LOB_ABILITY
-                && (!normalAvailable || random.nextDouble() < AiTuning.MAX_LOB_PROBABILITY * skill);
+                && (!normalAvailable || random.nextDouble() < lobProbability);
         int limit = useLob ? 5 : 3;
+        boolean evaluateGaps = skill >= AiDifficulty.ability(AiTuning.MIN_GAP_SELECTION_ATTACK);
         for (int mode = 0; mode < limit; mode++) {
             Double landing = landing(o.ball().x(), o.ball().y(), mode);
             if (landing == null) continue;
             safe.add(mode);
+            if (!evaluateGaps) continue;
             double gap = Math.min(Math.abs(landing - o.opponent().get(0).receiveX()),
                     Math.abs(landing - o.opponent().get(3).receiveX()));
             double block = o.opponent().get(2).jumping() && mode < 3 ? AiTuning.BLOCKED_SHOT_PENALTY : 0;
@@ -46,6 +50,7 @@ final class AttackOptions {
             if (score > bestScore) { bestScore = score; best = mode; }
         }
         if (safe.isEmpty()) return -1;
+        if (!evaluateGaps) return safe.get(random.nextInt(safe.size()));
         double variation = AiTuning.EXPERT_SUBOPTIMAL_PROBABILITY
                 + (1 - skill) * AiTuning.LOW_SUBOPTIMAL_EXTRA_PROBABILITY;
         return random.nextDouble() < variation ? safe.get(random.nextInt(safe.size())) : best;

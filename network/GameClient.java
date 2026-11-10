@@ -36,7 +36,9 @@ public final class GameClient implements NetworkView {
     private final LongSupplier nanoTime;
     private final long connectionStartedNanos;
     private final ConcurrentLinkedQueue<UdpCodec.Decoded> incoming = new ConcurrentLinkedQueue<>();
-    private final AtomicReference<UdpCodec.WorldSnapshotFrame> latestWorldSnapshot = new AtomicReference<>();
+    private record ReceivedWorld(UdpCodec.WorldSnapshotFrame frame, long arrivedAtNanos) {}
+    private final AtomicReference<ReceivedWorld> latestWorldSnapshot = new AtomicReference<>();
+    private final SnapshotTiming snapshotTiming = new SnapshotTiming(TimingDiagnostics::record);
     private final AtomicReference<String> receiveFailure = new AtomicReference<>();
     private final Thread receiveThread;
     private final ScheduledExecutorService controlRetryExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -71,7 +73,6 @@ public final class GameClient implements NetworkView {
     private long lastHelloNanos;
     private long lastInputSendNanos;
     private long terminationAckUntilNanos;
-    private long lastWorldSnapshotAtNanos;
 
     private static final double SPIKE_TRAIL_CLEAR_DISTANCE = 80.0;
     private final PlayerRenderCorrection playerRenderCorrection = new PlayerRenderCorrection();
@@ -147,12 +148,16 @@ public final class GameClient implements NetworkView {
     private void receiveLoop() {
         while (!transport.isClosed()) {
             try {
-                UdpCodec.Decoded decoded = transport.receive();
+                ClientTransport.Received received = transport.receive();
+                UdpCodec.Decoded decoded = received.decoded();
                 if (decoded instanceof UdpCodec.WorldSnapshotFrame snapshot) {
+                    if (isOwnToken(snapshot.token)) {
+                        snapshotTiming.received(snapshot.snapshotSequence, snapshot.serverTick, received.arrivedAtNanos());
+                    }
                     // 即時快照只需要最新一份，避免畫面停頓後逐一補跑舊位置。
-                    latestWorldSnapshot.accumulateAndGet(snapshot,
+                    latestWorldSnapshot.accumulateAndGet(new ReceivedWorld(snapshot, received.arrivedAtNanos()),
                             (current, newest) -> current == null
-                                    || newest.snapshotSequence > current.snapshotSequence ? newest : current);
+                                    || newest.frame().snapshotSequence > current.frame().snapshotSequence ? newest : current);
                 } else if (decoded != null) {
                     incoming.offer(decoded);
                 }
@@ -211,8 +216,8 @@ public final class GameClient implements NetworkView {
                 }
             }
         }
-        UdpCodec.WorldSnapshotFrame snapshot = latestWorldSnapshot.getAndSet(null);
-        if (snapshot != null && !sessionEnded && isOwnToken(snapshot.token)) {
+        ReceivedWorld snapshot = latestWorldSnapshot.getAndSet(null);
+        if (snapshot != null && !sessionEnded && isOwnToken(snapshot.frame().token)) {
             handleWorldSnapshot(snapshot);
             receivedFirstWorldSnapshot = true;
             markServerPacketReceived();
@@ -310,21 +315,17 @@ public final class GameClient implements NetworkView {
         }
     }
 
-    private void handleWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
+    private void handleWorldSnapshot(ReceivedWorld received) {
+        UdpCodec.WorldSnapshotFrame frame = received.frame();
         UdpCodec.WorldSnapshotFrame ready = snapshotInbox.offer(frame, lastCollisionRevision);
         if (ready != null) {
+            snapshotTiming.applied(ready.snapshotSequence, ready.serverTick, received.arrivedAtNanos(), System.nanoTime());
             applyWorldSnapshot(ready);
         }
     }
 
     private void applyWorldSnapshot(UdpCodec.WorldSnapshotFrame frame) {
-        long now = nanoTime.getAsLong();
-        if (lastWorldSnapshotAtNanos != 0 && now - lastWorldSnapshotAtNanos >= 50_000_000L) {
-            TimingDiagnostics.record("world snapshot gap "
-                    + String.format("%.2f", (now - lastWorldSnapshotAtNanos) / 1_000_000.0)
-                    + " ms, serverTick=" + frame.serverTick);
-        }
-        lastWorldSnapshotAtNanos = now;
+        long applyStarted = System.nanoTime();
         double previousBallX = renderModel.ball.x;
         double previousBallY = renderModel.ball.y;
         PlayerVisualPositions playersBefore = captureVisiblePlayers();
@@ -340,6 +341,7 @@ public final class GameClient implements NetworkView {
         scheduleOwnPlayerCorrections(playersBefore, frame.snapshot.redTeam, frame.snapshot.blueTeam);
         observeRemotePlayers(frame.snapshot.redTeam, frame.snapshot.blueTeam, frame.serverTick);
         lastAppliedWorldSnapshot = frame;
+        TimingDiagnostics.recordIfSlow("snapshot apply work", applyStarted, 10);
     }
 
     private void restoreNewerWorldMotion(int eventServerTick) {

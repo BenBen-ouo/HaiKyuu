@@ -9,6 +9,12 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Color;
+import java.awt.GridLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.BorderFactory;
+import javax.swing.SwingConstants;
 import javax.swing.JPanel;
 import model.GameConfig;
 import model.GameModel;
@@ -19,6 +25,12 @@ import network.TimingDiagnostics;
 public final class GamePanel extends JPanel {
     @java.io.Serial
     private static final long serialVersionUID = 1L;
+    private static final int PAUSE_BUTTON_X_PX = 12;
+    private static final int PAUSE_BUTTON_Y_PX = 12;
+    private static final int PAUSE_BUTTON_WIDTH_PX = 72;
+    private static final int PAUSE_BUTTON_HEIGHT_PX = 40;
+    private static final int PAUSE_PANEL_WIDTH_PX = 280;
+    private static final int PAUSE_PANEL_HEIGHT_PX = 120;
 
     /** 視窗持有執行緒與連線，不能序列化成可恢復的對局。 */
     @java.io.Serial
@@ -49,6 +61,40 @@ public final class GamePanel extends JPanel {
         this.renderFrame = RenderFrame.capture(model, networkView);
         setPreferredSize(new Dimension(GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT));
         setFocusable(true);
+        setLayout(null);
+        if (networkView == null && controller.canPause()) addPauseControls();
+    }
+
+    private void addPauseControls() {
+        JButton pause = new JButton("Pause");
+        pause.setFocusable(false);
+        pause.setBounds(PAUSE_BUTTON_X_PX, PAUSE_BUTTON_Y_PX, PAUSE_BUTTON_WIDTH_PX, PAUSE_BUTTON_HEIGHT_PX);
+        JPanel overlay = new JPanel(new GridLayout(2, 1, 0, 12));
+        overlay.setBackground(new Color(241, 246, 250));
+        overlay.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(16, 24, 16, 24)));
+        overlay.setBounds((GameConfig.SCREEN_WIDTH - PAUSE_PANEL_WIDTH_PX) / 2,
+                (GameConfig.SCREEN_HEIGHT - PAUSE_PANEL_HEIGHT_PX) / 2, PAUSE_PANEL_WIDTH_PX, PAUSE_PANEL_HEIGHT_PX);
+        overlay.add(new JLabel("遊戲已暫停", SwingConstants.CENTER));
+        JButton resume = new JButton("繼續遊戲");
+        resume.setFocusable(false);
+        overlay.add(resume);
+        overlay.setVisible(false);
+        pause.addActionListener(event -> {
+            controller.setPaused(true);
+            pause.setEnabled(false);
+            overlay.setVisible(true);
+            repaint();
+        });
+        resume.addActionListener(event -> {
+            controller.setPaused(false);
+            overlay.setVisible(false);
+            pause.setEnabled(true);
+            requestFocusInWindow();
+            repaint();
+        });
+        add(overlay);
+        add(pause);
     }
 
     public synchronized void startGameLoop() {
@@ -70,7 +116,10 @@ public final class GamePanel extends JPanel {
                 }
                 long updateStarted = System.nanoTime();
                 controller.update();
+                if (networkView != null) TimingDiagnostics.recordIfSlow("client controller update", updateStarted, 10);
+                long captureStarted = System.nanoTime();
                 renderFrame = RenderFrame.capture(model, networkView);
+                if (networkView != null) TimingDiagnostics.recordIfSlow("render snapshot capture", captureStarted, 10);
                 if (networkView != null) {
                     TimingDiagnostics.recordIfSlow("client update", updateStarted, 25);
                 }
@@ -112,12 +161,15 @@ public final class GamePanel extends JPanel {
     protected void paintComponent(Graphics graphics) {
         long paintStarted = System.nanoTime();
         super.paintComponent(graphics);
+        TimingDiagnostics.recordIfSlow("paint background", paintStarted, 5);
         Graphics2D g = (Graphics2D) graphics.create();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             RenderFrame frame = renderFrame;
             renderer.render(g, frame);
+            long overlayStarted = System.nanoTime();
             networkStatusRenderer.draw(g, frame.connection());
+            TimingDiagnostics.recordIfSlow("paint overlay", overlayStarted, 5);
         } finally {
             g.dispose();
         }

@@ -18,6 +18,10 @@ public final class LauncherTest {
     }
 
     private static void testLauncherActions() {
+        check("HaiKyuu!! - 左方玩家對戰機器人（防守 50／進攻 50）".equals(
+                Main.aiWindowTitle(true, AiDifficulty.DEFAULT)), "左方 AI 對戰視窗標題使用新名稱");
+        check("HaiKyuu!! - 右方玩家對戰機器人（防守 82／進攻 17）".equals(
+                Main.aiWindowTitle(false, new AiDifficulty(82, 17))), "右方 AI 對戰標題保留本場難度");
         check("HaiKyuu!! - 房主 IP 192.168.1.20".equals(Main.networkWindowTitle("192.168.1.20")),
                 "房主與加入者使用同一個顯示房主 IP 的視窗標題");
         check(NetworkAddress.isUsableLanIpv4("192.168.1.20")
@@ -79,12 +83,34 @@ public final class LauncherTest {
                 && !hasLabelContaining(panel, "HaiKyuu!!  " + AppVersion.LABEL),
                 "啟動頁版本號與標題分開顯示");
         check(!findButton(noLanPanel, "複製").isEnabled(), "沒有區網 IP 時不允許複製 loopback");
-        panel.setSize(524, 331);
+        panel.setSize(584, 391);
         layoutTree(panel);
         check(findButton(panel, "本地雙人").getHeight() >= 22
                         && findButton(panel, "本地雙人").getHeight() <= 32
                         && findSlider(panel, "防守能力").getHeight() >= 16,
                 "精簡啟動視窗維持正常按鈕高度與可操作拉條");
+        JButton local = findButton(panel, "本地雙人");
+        check(local.getWidth() == local.getParent().getWidth()
+                        && local.getWidth() == findButton(panel, "創立房間").getWidth(),
+                "主要單顆按鈕拉寬至內容區且寬度一致");
+        for (String text : new String[]{"左方玩家對戰機器人", "右方玩家對戰機器人"}) {
+            JButton button = findButton(panel, text);
+            check(button.getFontMetrics(button.getFont()).stringWidth(text)
+                            + button.getInsets().left + button.getInsets().right <= button.getWidth(),
+                    "拉寬後完整顯示 AI 對戰按鈕文字");
+        }
+        var localTop = SwingUtilities.convertPoint(local, 0, 0, panel);
+        JButton aiLeft = findButton(panel, "左方玩家對戰機器人");
+        var aiTop = SwingUtilities.convertPoint(aiLeft, 0, 0, panel);
+        JButton aiRight = findButton(panel, "右方玩家對戰機器人");
+        var aiRightTop = SwingUtilities.convertPoint(aiRight, 0, 0, panel);
+        check(aiTop.x == localTop.x && aiLeft.getWidth() == aiRight.getWidth()
+                        && aiRightTop.x + aiRight.getWidth() == localTop.x + local.getWidth(),
+                "左右 AI 按鈕平分內容區並與其他按鈕對齊");
+        var sliderTop = SwingUtilities.convertPoint(findSlider(panel, "防守能力"), 0, 0, panel);
+        check(localTop.y >= 20 && aiTop.y - localTop.y - local.getHeight() >= 12
+                        && sliderTop.y - aiTop.y - aiLeft.getHeight() >= 12,
+                "主選單保留外邊距以及按鈕與拉條之間的留白");
     }
 
     private static void layoutTree(Container container) {
