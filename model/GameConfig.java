@@ -85,7 +85,7 @@ public final class GameConfig {
     public static final double NET_MIN_REBOUND_SPEED = 1.5;
 
     // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
-    public static final double BLOCK_HITBOX_BOUNCE = 0.5;
+    public static final double BLOCK_HITBOX_BOUNCE = 0.6;
     // 頭部圓框的反彈係數；兩種攔網框皆不強制最低球速。
     public static final double BLOCK_HEAD_BOUNCE = 0.7;
 
