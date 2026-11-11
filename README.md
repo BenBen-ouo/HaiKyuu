@@ -1,58 +1,79 @@
 # HaiKyuu
 
-Java 2D 火柴人排球遊戲。
-可用單機雙人模式，或透過同一區域網路的 UDP Server 進行兩人連線。
-選單提供「本地雙人」、「左方練習模式」、「右方練習模式」、「創立房間」與「加入房間」。
+Java 2D 火柴人排球遊戲，提供本地雙人、左右方玩家對戰機器人，以及區域網路雙人對戰。
 
-## Releases 發行版啟動
+## 下載版啟動
 
-- 解壓縮後點兩下 `HaiKyuu.exe` 即可遊玩，不需另裝 JDK。
-- 兩位 Client（包含Server）必須在同一區域網路中。任一方離線會結束該局；下一局需重新啟動。
+從 GitHub Releases 下載 ZIP，完整解壓縮後開啟 `HaiKyuu/HaiKyuu.exe`。發行版已附 Java 執行環境，不需另裝 JDK；請保留整個資料夾。
 
-## 開發者啟動
+## 從原始碼啟動
 
-### Windows PowerShell 手動重新編譯
+目前以 **JDK 21** 建置。先安裝 JDK，讓 `java`、`javac` 指向同一套 JDK，再於專案根目錄開啟 PowerShell：
 
 ```powershell
-Remove-Item .\build -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path .\build -Force | Out-Null
+# 確認 Java 與編譯器版本
+java -version
+javac -version
+
+# 編譯；失敗時停止，不執行舊的編譯結果
 javac -encoding UTF-8 -d .\build Main.java
+if ($LASTEXITCODE -ne 0) { throw 'Java compilation failed' }
+
+# 開啟圖形化主選單
+java -cp .\build Main
 ```
 
-### 手動執行
+若找不到指令，請確認 `JAVA_HOME` 指向 JDK 資料夾，且 `PATH` 包含其 `bin`。修改程式後，重新執行編譯與啟動指令即可。
+
+### 直接啟動指定模式
+
+以下指令都在專案根目錄、完成編譯後執行：
+
+| 模式 | 指令 |
+| --- | --- |
+| 本地雙人 | `java -cp .\build Main local` |
+| 玩家在左、機器人在右 | `java -cp .\build Main practice` |
+| 玩家在右、機器人在左 | `java -cp .\build Main practice-blue` |
+| 創立房間，房主同時加入 | `java -cp .\build Main host` |
+| 加入房間 | `java -cp .\build Main join 192.168.1.100(範例IP)` |
+| 僅啟動 Server | `java -cp .\build Main server` |
+
+加入房間時，將範例 IP 換成房主顯示的區網 IPv4。
+
+## 與機器人對戰
+
+在主選單調整防守／進攻能力（各 1～100，預設 50），再選擇玩家所在的一側。命令列直接啟動時使用預設能力。
+
+進場後難度固定；`R` 重開保留難度、清空機器人的本場習慣統計。兩個模式均採正式計分，不再提供舊練習模式。
+
+本地雙人與機器人對戰可用左上角「Pause」，按「繼續遊戲」後恢復；暫停期間按住的操作鍵需放開重按。連線模式不提供暫停。
+
+## 區網連線
+
+1. 雙方連上同一區域網路，使用相同版本。
+2. 房主選「創立房間」，將顯示的 IPv4 分享給另一位玩家。
+3. 另一位玩家在主選單輸入該 IP，再選「加入房間」。
+
+使用 **UDP 5001**；請允許遊戲通過防火牆。房主也會以 Client 連入同一個 Server。找不到可用區網 IPv4 時無法創立房間；任一方離線會結束該局。
+
+連線時會自動在啟動工作目錄的 `diagnostics/` 產生紀錄。回報卡頓時請附發生時間及同一局的紀錄；新版分開記錄收包、快照套用與繪圖階段，欄位說明見 [架構文件的診斷章節](ARCHITECTURE.md#9-錯誤輸入與診斷)。
+
+## 打包 Windows 發行版
+
+安裝完整 JDK 後，在專案根目錄執行：
 
 ```powershell
-# 圖形化啟動選單
-java -cp .\build Main
-
-# 直接啟動本地雙人：藍隊需使用方向鍵、數字鍵操控
-java -cp .\build Main local
-
-# 左方練習模式：紅隊練習接發與攻擊，藍隊固定發球，不計分
-java -cp .\build Main practice
-
-# 右方練習模式：藍隊練習接發與攻擊，紅隊固定發球，不計分
-java -cp .\build Main practice-blue
-
-# 主機：啟動無畫面的 UDP Server（使用 UDP 5001）
-java -cp .\build Main server
-
-# 建立房間，同時讓房主以 UDP Client 加入
-java -cp .\build Main host
-
-# 兩位玩家各自在自己的電腦執行；<Server-IP> 替換為主機畫面顯示的 IPv4 位址
-java -cp .\build Main join <Server-IP>
+.\build-release.bat --no-pause
 ```
 
-- 更新程式後再執行同一個 `build-release.bat` 即可重新打包產生發行版。若要從命令列執行而不暫停，可用 `build-release.bat --no-pause`。
-- 打包會執行遊戲、啟動頁、封包、編譯後模型依賴／跨層循環與發行回復檢查，編譯時啟用 `-Xlint:all`。app-image／ZIP 替換失敗會回復舊產物；若提示 `.haikyuu-recovery-needed`，請保留 `.release-build/` 並依錯誤檢查，不要直接刪除。
-- 打包過程的 JAR 只放在暫存的 `.release-build/`，成功後會清除；正式發行版包含 `release/HaiKyuu/` 和 `release/HaiKyuu-v1.1.0.zip`（版本取自 `model/AppVersion.java`，同版本重新打包會覆蓋同名 ZIP）。ZIP 可上傳 GitHub Releases 供下載；`release/` 維持由 Git 忽略。
-- `Start Haikyuu.vbs`：專案根目錄的啟動捷徑開啟上述 EXE；若尚未打包，會提示先執行 `build-release.bat`。
-- 「創立房間」會啟動 UDP Server，房主的 Client 使用畫面顯示的區網 IP 連入，不直接操作 Server 模型；找不到可用區網 IPv4 時會顯示錯誤且不啟動。
-- 「加入房間」為加入房主顯示的區域網路 IPv4。雙方都透過相同的 Server 權威判定流程遊玩，使用 UDP 5001。
-- 房主與加入者的遊戲視窗標題都顯示房主 IP；畫面右上角不重複顯示連線位址。
-- 網路協定本次改為版本 11，兩端須使用同一版。球員動畫階段隨快照傳送；不再轉傳對手按鍵供 Client 重跑動作。
-- 長期協作規則見 [AGENTS.md](AGENTS.md)，實際架構、驗證入口及實測限制見 [ARCHITECTURE.md](ARCHITECTURE.md)。
-- MB 攔網 `block1` 使用頭部圓框、`block2` 使用手部框；兩框共用一次攔網接觸限制且不計觸球次數。頭部位置與半徑在 `Team`，反彈係數在 `GameConfig`，不強制最低反彈速度。MB 不提供一般接球。
-- 網子下方寬 6 像素的深紅球柱不閃爍，實際碰撞寬度仍為 4。
-- 連線卡頓診斷會自動啟用，不需按任何鍵。紀錄檔位於啟動時工作目錄的 `diagnostics` 資料夾：透過專案根目錄的 VBS 啟動時在專案根目錄；直接雙擊發行版 EXE 時通常在 `release/HaiKyuu/` 內。GUI 房主的 Server 與 Client 同在一個程式中，寫入同一份 `timing-host-*.log`；訪客寫入 `timing-client-*.log`。若另外用命令列啟動 Server，則會有獨立的 `timing-server-*.log`。再次出現卡頓時，請記下時間並提供對應檔案；紀錄包含更新、繪圖、接球事件超時及快照中斷，不包含玩家按鍵或 IP。
+- 成品為 `release/HaiKyuu/` 與包含版本號的 ZIP；版本取自 `model/AppVersion.java`。
+- 分享整個資料夾或 ZIP，不能只複製 EXE。重新打包前先關閉正在執行的發行版。
+- 每項測試只顯示 `[PASS]`／`[FAIL]`；完整紀錄在 `build/release-tests.log`，每次覆寫。測試失敗會停止打包。
+- 若提示 `.haikyuu-recovery-needed`，請保留 `.release-build/`，依錯誤檢查未完成的發行回復。
+- 專案根目錄的 `Start Haikyuu.vbs` 會開啟已打包的 EXE；修改原始碼後須重新打包才會更新它。
+
+## 開發文件
+
+- [AGENTS.md](AGENTS.md)：協作規則、測試指令與驗證原則。
+- [ARCHITECTURE.md](ARCHITECTURE.md)：模組與資料流、AI 實作、網路同步及診斷紀錄位置。
+- [AI 能力說明](docs/AI_DIFFICULTY.md)：進攻／防守逐項門檻、區段差異與連續數值範圍。

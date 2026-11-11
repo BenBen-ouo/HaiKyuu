@@ -24,7 +24,10 @@ public final class TimingDiagnostics {
             Path file = directory.resolve("timing-" + role + "-" + timestamp + ".log");
             BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8);
             log = new DiagnosticLog(writer, System.err::println);
-            log.record("HaiKyuu timing diagnostics, role=" + role);
+            log.record("HaiKyuu timing diagnostics, schema=2, role=" + role
+                    + ", app=" + model.AppVersion.LABEL + ", java=" + Runtime.version()
+                    + ", processors=" + Runtime.getRuntime().availableProcessors()
+                    + ", maxHeapMiB=" + Runtime.getRuntime().maxMemory() / (1024 * 1024));
             System.out.println("卡頓紀錄檔：" + file);
         } catch (IOException exception) {
             System.err.println("無法建立卡頓紀錄檔：" + exception.getMessage());
@@ -32,6 +35,8 @@ public final class TimingDiagnostics {
     }
 
     public static void recordIfSlow(String operation, long startedAtNanos, long limitMillis) {
+        DiagnosticLog current = log;
+        if (current == null || !current.isAvailable()) return;
         long elapsed = System.nanoTime() - startedAtNanos;
         if (elapsed >= limitMillis * MILLION) {
             record(operation + " " + String.format("%.2f", elapsed / (double) MILLION) + " ms");

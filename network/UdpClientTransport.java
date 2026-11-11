@@ -25,11 +25,14 @@ final class UdpClientTransport implements ClientTransport {
     }
 
     @Override
-    public UdpCodec.Decoded receive() throws IOException {
+    public Received receive() throws IOException {
         DatagramPacket packet = new DatagramPacket(receiveBuffer, receiveBuffer.length);
         socket.receive(packet);
-        return endpoint.equals(packet.getSocketAddress())
+        long arrivedAt = System.nanoTime();
+        UdpCodec.Decoded decoded = endpoint.equals(packet.getSocketAddress())
                 ? UdpCodec.decode(packet.getData(), packet.getLength()) : null;
+        TimingDiagnostics.recordIfSlow("udp decode", arrivedAt, 5);
+        return new Received(decoded, arrivedAt);
     }
 
     @Override

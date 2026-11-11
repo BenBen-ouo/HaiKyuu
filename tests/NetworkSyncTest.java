@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import model.GameModel;
+import model.effect.BlockTouchEffect;
 import model.TeamInput;
 import model.player.PlayerAction;
 import model.serve.ServeState;
@@ -35,6 +36,7 @@ public final class NetworkSyncTest {
         testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
         testSnapshotDrivenVisualEffects();
+        testConfirmedBlockTouchHints();
         testNewRulesAndConfirmedLanding();
         testCloseAfterRemoteAbort();
         testClientInitializationFailureClosesTransport();
@@ -42,6 +44,7 @@ public final class NetworkSyncTest {
         testResetClearsConfirmedEffects();
         testConnectionTimeouts();
         testDiagnosticFailureDisablesQueue();
+        testSnapshotArrivalAndApplyTiming();
         testServerCloseBeforeRun();
         if (args.length > 0 && "loopback".equals(args[0])) {
             testLocalLoopback();
@@ -517,6 +520,43 @@ public final class NetworkSyncTest {
                 "僅快照到地板或軌跡關閉不能提前產生煙霧");
     }
 
+    private static void testConfirmedBlockTouchHints() throws Exception {
+        GameModel authoritative = new GameModel();
+        authoritative.getServeHandler().setWaitingForServe(false);
+        authoritative.spikeEffect.startSpikeTrail(true);
+        authoritative.recordBlock(true, authoritative.redTeam.quickAttacker);
+        authoritative.recordBlock(false, authoritative.blueTeam.quickAttacker);
+        GameModel model = new GameModel();
+        MemoryTransport transport = new MemoryTransport();
+        try (GameClient client = new GameClient(model, "memory", transport)) {
+            byte[] welcome = UdpCodec.welcome(transport.clientNonce, 7, true, 0, Packet.CompactState.from(authoritative));
+            transport.offer(UdpCodec.decode(welcome, welcome.length));
+            pumpUntil(client, () -> client.getConnectionMessage().contains("等待"));
+            model.syncNetworkVisualEffects(true, true);
+            model.spikeEffect.addTrailPoint(model.ball.x, model.ball.y);
+            check(!model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "沒有可靠攔網事件前不預先顯示提示");
+            byte[] redBytes = UdpCodec.event(7, 1, 1, Packet.EventType.RED_BLOCK_CONTACT, 0,
+                    Packet.CompactState.from(authoritative));
+            byte[] blueBytes = UdpCodec.event(7, 2, 1, Packet.EventType.BLUE_BLOCK_CONTACT, 0,
+                    Packet.CompactState.from(authoritative));
+            var red = UdpCodec.decode(redBytes, redBytes.length);
+            var blue = UdpCodec.decode(blueBytes, blueBytes.length);
+            transport.offer(blue);
+            transport.offer(red);
+            pumpUntil(client, () -> model.blockTouchEffect.isVisible(true) && model.blockTouchEffect.isVisible(false));
+            check(model.spikeEffect.isSpikeTrailActive() && !model.spikeEffect.getTrailPoints().isEmpty(),
+                    "兩隊提示可靠且依序處理，攔網事件不清除軌跡");
+            for (int i = 0; i < BlockTouchEffect.DURATION_FRAMES; i++) model.blockTouchEffect.beginFrame();
+            int acknowledged = transport.eventAckCount();
+            transport.offer(red);
+            transport.offer(blue);
+            pumpUntil(client, () -> transport.eventAckCount() >= acknowledged + 2);
+            check(!model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "重送的攔網事件不重新播放已結束的提示");
+        }
+    }
+
     private static void testNewRulesAndConfirmedLanding() throws Exception {
         GameModel server = new GameModel();
         server.redAttackLocked = true;
@@ -780,11 +820,15 @@ public final class NetworkSyncTest {
             model.spikeEffect.startSpikeTrail(true);
             model.spikeEffect.addTrailPoint(300, 400);
             model.spikeEffect.spawnSmoke(300, 600);
+            model.blockTouchEffect.show(true);
+            model.blockTouchEffect.show(false);
             byte[] reset = UdpCodec.event(7, 1, 1, Packet.EventType.RESET, 0, Packet.CompactState.from(new GameModel()));
             transport.offer(UdpCodec.decode(reset, reset.length));
             pumpUntil(client, () -> transport.eventAckCount() == 1);
             check(model.spikeEffect.getSmokeParticles().isEmpty() && model.spikeEffect.getTrailPoints().isEmpty()
-                            && !model.spikeEffect.isSpikeTrailActive(), "整場 RESET 清除舊煙霧與軌跡");
+                            && !model.spikeEffect.isSpikeTrailActive()
+                            && !model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false),
+                    "整場 RESET 清除舊煙霧、軌跡與攔網提示");
         }
     }
 
@@ -852,6 +896,32 @@ public final class NetworkSyncTest {
     }
 
     /** 不建立 socket；保留阻塞接收、封包編碼及關閉解除阻塞的實際傳輸語意。 */
+    private static void testSnapshotArrivalAndApplyTiming() {
+        var messages = new java.util.ArrayList<String>();
+        var timing = new SnapshotTiming(messages::add);
+        timing.received(1, 100, 1_000_000);
+        timing.applied(1, 100, 1_000_000, 5_000_000);
+        timing.received(2, 101, 17_000_000);
+        timing.received(3, 102, 34_000_000);
+        timing.applied(3, 102, 34_000_000, 100_000_000);
+        check(messages.stream().noneMatch(s -> s.startsWith("snapshot receive gap")),
+                "封包持續抵達時，不將更新延遲誤報成收包間隔");
+        check(messages.stream().anyMatch(s -> s.startsWith("snapshot apply gap 95.00"))
+                        && messages.stream().anyMatch(s -> s.startsWith("snapshot receive-to-apply 66.00")),
+                "套用間隔與接收後等待分別記錄");
+        int beforeRestore = messages.size();
+        timing.applied(3, 102, 34_000_000, 150_000_000);
+        check(messages.size() == beforeRestore, "同一快照恢復位置不重設新快照診斷");
+        timing.received(4, 103, 200_000_000);
+        timing.applied(4, 103, 200_000_000, 201_000_000);
+        check(messages.stream().anyMatch(s -> s.startsWith("snapshot receive gap 166.00")),
+                "真正的收包間隔有獨立紀錄");
+        timing.received(5, 104, 5_100_000_000L);
+        timing.applied(5, 104, 5_100_000_000L, 5_101_000_000L);
+        check(messages.stream().anyMatch(s -> s.contains("received=5 applied=4")),
+                "定期計數能辨識收到但被較新快照取代的更新");
+    }
+
     private static final class MemoryTransport implements ClientTransport {
         private final Deque<UdpCodec.Decoded> incoming = new ArrayDeque<>();
         private boolean closed;
@@ -876,7 +946,7 @@ public final class NetworkSyncTest {
         }
 
         @Override
-        public synchronized UdpCodec.Decoded receive() throws SocketException {
+        public synchronized ClientTransport.Received receive() throws SocketException {
             while (incoming.isEmpty() && !closed) {
                 try {
                     wait();
@@ -886,7 +956,7 @@ public final class NetworkSyncTest {
                 }
             }
             if (closed) throw new SocketException("closed");
-            return incoming.removeFirst();
+            return new ClientTransport.Received(incoming.removeFirst(), System.nanoTime());
         }
 
         @Override

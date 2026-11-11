@@ -28,6 +28,10 @@ public final class AnimationSequences {
         animation.playLoop(runFrames(player), runDurations());
     }
 
+    public static int runDurationFrames(int cycles) {
+        return java.util.Arrays.stream(runDurations()).sum() * Math.max(1, cycles);
+    }
+
     public static String[] frames(Player player, String... actionNames) {
         String[] assetNames = new String[actionNames.length];
 

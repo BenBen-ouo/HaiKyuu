@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ReleaseReplacement.ps1')
+. (Join-Path $PSScriptRoot 'ReleaseCheck.ps1')
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
 $workRoot = Join-Path $projectRoot '.release-build'
@@ -92,6 +93,11 @@ try {
     Write-Host "Using JDK: $jdkBin"
 
     Assert-SafePath $workRoot | Out-Null
+    $checkLog = Join-Path $projectRoot 'build\release-tests.log'
+    Assert-SafePath $checkLog | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $checkLog) -Force | Out-Null
+    Set-Content -LiteralPath $checkLog -Value 'HaiKyuu release verification' -Encoding UTF8
+    Write-Host "Test details: $checkLog"
     Assert-SafePath $releaseApp | Out-Null
     if (Test-Path -LiteralPath $releaseApp) {
         Assert-ReleaseNotRunning $releaseApp
@@ -121,17 +127,26 @@ try {
     Assert-ToolSucceeded 'Game compilation'
     & $javac -Xlint:all -encoding UTF-8 -cp $classes -d $tests `
         tests\GameplayFlowTest.java tests\LauncherTest.java `
-        tests\NetworkSyncTest.java tests\PackagingSmokeTest.java
+        tests\NetworkSyncTest.java tests\PackagingSmokeTest.java tests\AiMatchTest.java tests\AiTacticsTest.java tests\AiPolicyTest.java tests\AiLearningTest.java `
+        tests\LocalPauseTest.java tests\ThirdTouchTrajectoryTest.java
     Assert-ToolSucceeded 'Test compilation'
 
     Write-Host '2/6 Running gameplay, launcher, and packet tests...'
     $testClasspath = "$classes;$tests"
-    foreach ($testClass in @('GameplayFlowTest', 'LauncherTest', 'network.NetworkSyncTest')) {
-        & $java '-Djava.awt.headless=true' -cp $testClasspath $testClass
-        Assert-ToolSucceeded $testClass
+    foreach ($testClass in @('GameplayFlowTest', 'LauncherTest', 'network.NetworkSyncTest', 'AiMatchTest', 'AiTacticsTest', 'model.ai.AiPolicyTest', 'model.ai.AiLearningTest', 'LocalPauseTest', 'ThirdTouchTrajectoryTest')) {
+        Invoke-ReleaseCheck -Name $testClass -Executable $java -LogPath $checkLog `
+            -Arguments @('-Djava.awt.headless=true', '-cp', $testClasspath, $testClass)
     }
-    & (Join-Path $projectRoot 'tests\ReleaseReplacementTest.ps1')
-    & (Join-Path $projectRoot 'tests\ArchitectureTest.ps1') -ClassesPath $classes -JdkBin $jdkBin
+    $powershell = Join-Path $PSHOME 'powershell.exe'
+    foreach ($scriptTest in @('ReleaseCheckTest', 'ReleaseReplacementTest', 'ArchitectureTest')) {
+        $scriptArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+            (Join-Path $projectRoot "tests\$scriptTest.ps1"))
+        if ($scriptTest -eq 'ArchitectureTest') {
+            $scriptArguments += @('-ClassesPath', $classes, '-JdkBin', $jdkBin)
+        }
+        Invoke-ReleaseCheck -Name $scriptTest -Executable $powershell `
+            -Arguments $scriptArguments -LogPath $checkLog
+    }
 
     Write-Host '3/6 Copying assets and building the standalone JAR...'
     $assetRoot = Join-Path $projectRoot 'assets'
@@ -153,8 +168,8 @@ try {
     Push-Location -LiteralPath $isolated
     try {
         $smokeClasspath = "$jarPath;$tests"
-        & $java '-Djava.awt.headless=true' -cp $smokeClasspath PackagingSmokeTest @($images.Name)
-        Assert-ToolSucceeded 'JAR resource and render smoke test'
+        Invoke-ReleaseCheck -Name 'PackagingSmokeTest' -Executable $java -LogPath $checkLog `
+            -Arguments (@('-Djava.awt.headless=true', '-cp', $smokeClasspath, 'PackagingSmokeTest') + @($images.Name))
     } finally {
         Pop-Location
     }

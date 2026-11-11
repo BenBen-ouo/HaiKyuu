@@ -10,6 +10,11 @@ import model.TeamInput;
 public final class WingSpiker extends Player {
     private static final double APPROACH_SPEED = 8.0;
     private static final double RETURN_SPEED = 6.5;
+    private static final int APPROACH_CYCLES = 2;
+
+    public static int approachDurationFrames() { return AnimationSequences.runDurationFrames(APPROACH_CYCLES); }
+    // 啟動動畫的當幀尚未水平移動；其後才逐幀助跑。
+    public static double approachDistance() { return APPROACH_SPEED * (approachDurationFrames() - 1); }
 
     private final double homeX;
     private final DiveController diveController;
@@ -85,7 +90,7 @@ public final class WingSpiker extends Player {
             previousWingActionPressed = input.wingActionPressed;
             return;
         } else if (justPressedAttack) {
-            startRunApproachAnimation(2);
+            startRunApproachAnimation(APPROACH_CYCLES);
         }
 
         applyGravity();
