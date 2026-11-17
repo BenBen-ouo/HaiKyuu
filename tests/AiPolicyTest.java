@@ -114,13 +114,13 @@ public final class AiPolicyTest {
         for (int ability : new int[]{20, 40, 41, 100}) {
             int changed = 0;
             for (int seed = 0; seed < 120; seed++) {
-                int a = AttackOptions.choose(AiObservation.capture(first, true), AiDifficulty.ability(ability), new Random(seed), false);
-                int b = AttackOptions.choose(AiObservation.capture(second, true), AiDifficulty.ability(ability), new Random(seed), false);
+                int a = AttackOptions.choose(AiObservation.capture(first, true), AiDifficulty.ability(ability), new Random(seed), 3, false);
+                int b = AttackOptions.choose(AiObservation.capture(second, true), AiDifficulty.ability(ability), new Random(seed), 3, false);
                 check(a >= 0 && b >= 0, "測試球路須有可用攻擊選項");
                 if (a != b) changed++;
             }
-            if (ability <= 40) check(changed == 0, "普通以下不依防守空檔選球路");
-            else check(changed > 0, "普通開始會因防守位置不同改選球路");
+            check(changed > 0, ability <= 40 ? "入門與簡單依人類站位選較容易接的球路"
+                    : "普通開始會因防守位置不同改選球路");
         }
     }
 

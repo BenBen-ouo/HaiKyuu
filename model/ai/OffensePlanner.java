@@ -29,7 +29,10 @@ final class OffensePlanner {
     private Window selected;
     private boolean planned;
     private boolean negative;
+    private final boolean[] negativeByRole = new boolean[4];
+    private final boolean[] startedBeforeSet = new boolean[4];
     private boolean quickSet;
+    private boolean mbDirectSecond;
     private boolean jumpSet;
     private boolean preferAirSet;
     private boolean airSetAllowed;
@@ -72,6 +75,8 @@ final class OffensePlanner {
         backReserved = false;
         Arrays.fill(launched, false);
         Arrays.fill(decoys, null);
+        Arrays.fill(negativeByRole, false);
+        Arrays.fill(startedBeforeSet, false);
     }
 
     void begin(AiObservation o, int tick, AiDifficulty difficulty) {
@@ -79,30 +84,42 @@ final class OffensePlanner {
         planned = true;
         beginTick = tick;
         skill = AiDifficulty.ability(difficulty.attack());
-        protectBackReturn = habits.shouldKeepBackForReturn(difficulty.defense());
+        protectBackReturn = false;
         negative = random.nextDouble() < AiTuning.MAX_NEGATIVE_TEMPO_PROBABILITY
                 * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_NEGATIVE_TEMPO_ATTACK);
-        // 接觸在下一 tick 才被觀察到，預留一幀，避免實際提前量超出 48 幀。
-        negativeLead = random.nextInt(AiTuning.NEGATIVE_START_MIN_LEAD_FRAMES,
-                Math.max(AiTuning.NEGATIVE_START_MIN_LEAD_FRAMES + 1, AiTuning.NEGATIVE_START_MAX_LEAD_FRAMES));
+        // Setter 碰撞可能比預測早一幀；內縮抽樣下界，維持實際 42～48 幀契約。
+        int minimumLead = Math.min(AiTuning.NEGATIVE_START_MAX_LEAD_FRAMES,
+                AiTuning.NEGATIVE_START_MIN_LEAD_FRAMES + 1);
+        negativeLead = random.nextInt(minimumLead,
+                Math.max(minimumLead + 1, AiTuning.NEGATIVE_START_MAX_LEAD_FRAMES));
         timingOffset = random.nextInt(-AiTuning.ATTACK_TIMING_JITTER_FRAMES, AiTuning.ATTACK_TIMING_JITTER_FRAMES + 1);
         participants = 1;
-        if (random.nextDouble() < AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_TWO_ATTACKERS)) {
+        double formationChoice = random.nextDouble();
+        if (formationChoice < AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_TWO_ATTACKERS)) {
             participants = 2;
             if (random.nextDouble() < AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_THREE_ATTACKERS)) {
                 participants = 3;
             }
         }
+        negativeByRole[BACK] = negativeByRole[WS] = negative;
+        if (negative && participants > 1 && random.nextDouble() < AiTuning.MIXED_TEMPO_PROBABILITY) {
+            negativeByRole[random.nextBoolean() ? BACK : WS] = false;
+        }
         jumpSet = random.nextDouble() < AiTuning.MAX_JUMP_SET_PROBABILITY
                 * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_JUMP_SET_ATTACK);
         quickSet = difficulty.attack() >= AiTuning.MIN_QUICK_SET_ATTACK && o.ownLastRole() != SETTER
                 && random.nextDouble() < AiTuning.QUICK_SET_BASE_PROBABILITY + skill * AiTuning.QUICK_SET_SKILL_PROBABILITY;
+        mbDirectSecond = difficulty.attack() >= AiTuning.MIN_QUICK_SET_ATTACK
+                && o.ownTouches() == 1 && o.ownLastRole() == SETTER;
         airSetAllowed = difficulty.attack() >= AiTuning.MIN_AIR_SET_ATTACK;
         preferAirSet = airSetAllowed && o.ownTouches() == 1 && o.ownLastRole() == SETTER
                 && random.nextDouble() < AiTuning.MAX_AIR_SET_PROBABILITY
                     * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_AIR_SET_ATTACK);
         waitingForSetter = o.ownTouches() == 1 && o.ownLastRole() != SETTER;
         nextPlan = tick;
+        // 與多人組織共用本次戰術抽樣，不額外擾動接下來的球路選擇序列。
+        boolean preferGroundDefense = formationChoice < AiTuning.BACK_RETURN_AVOID_MAX_PROBABILITY;
+        protectBackReturn = habits.shouldKeepBackForReturn(difficulty.defense()) && preferGroundDefense;
     }
 
     void onSet(AiObservation o, int tick, AiDifficulty difficulty) {
@@ -125,8 +142,7 @@ final class OffensePlanner {
         if (selected != null && selected.airSet() && selected.role() == WS && o.ownTouches() == 1) {
             backReserved = true;
             var back = o.own().get(BACK);
-            double thirdTouchX = GameConfig.NET_X - GameConfig.THREE_METER_PX - back.width() / 2
-                    - AiTuning.BACK_TAKEOFF_LINE_MARGIN_PX;
+            double thirdTouchX = maximumBackAttackX(back);
             moveBackTo(input, back, thirdTouchX);
         }
 
@@ -135,7 +151,7 @@ final class OffensePlanner {
             nextPlan = tick + AiTuning.REPLAN_INTERVAL_FRAMES;
             if (selected != null) {
                 for (int role : ATTACKERS) {
-                    decoys[role] = role == selected.role() || launched[role] ? null : findWindow(o, set, role, tick, false);
+                    decoys[role] = role == selected.role() || launched[role] ? null : findDecoyWindow(o, set, role, tick);
                     if (role == BACK && decoys[role] != null && unsafeBackReturn(o, decoys[role], selected.contactTick())) {
                         decoys[role] = null;
                     }
@@ -162,6 +178,7 @@ final class OffensePlanner {
             if (tick >= selected.startTick() && canLaunch(o, selected)) {
                 press(input, selected.role());
                 launched[selected.role()] = true;
+                startedBeforeSet[selected.role()] = waitingForSetter;
                 selectedLaunchTick = tick;
             }
         }
@@ -173,7 +190,8 @@ final class OffensePlanner {
                 boolean setting = selected.airSet() && o.ownTouches() == 1;
                 if (overlaps(p, o.ball().x(), o.ball().y())) {
                     if (!setting && betterContactSoon(o, p)) return;
-                    int shot = setting ? 0 : AttackOptions.choose(o, skill, random, selected.role() == MB);
+                    int shot = setting ? 0 : AttackOptions.choose(o, skill, random, selected.role(),
+                            startedBeforeSet[BACK] && startedBeforeSet[WS]);
                     if (shot >= 0 && o.ownLastRole() != selected.role()) {
                         press(input, selected.role());
                         if (setting) input.airSetModifier = true;
@@ -203,6 +221,7 @@ final class OffensePlanner {
                     if (Math.abs(tick - fake.startTick()) <= AiTuning.ATTACK_TIMING_JITTER_FRAMES && canLaunch(o, fake)) {
                         press(input, role);
                         launched[role] = true;
+                        startedBeforeSet[role] = waitingForSetter;
                     }
                 }
             }
@@ -235,6 +254,7 @@ final class OffensePlanner {
         if (candidates.isEmpty() && negative && !set.confirmed()) {
             // 已錯過負節奏就等真正舉出的第二節奏，不以另一個隨機提早量冒充。
             negative = false;
+            Arrays.fill(negativeByRole, false);
             return plan(o, set, tick);
         }
         int earliestOtherContact = candidates.stream().filter(w -> w.role() != BACK)
@@ -260,14 +280,28 @@ final class OffensePlanner {
         return backWindow.startTick() + flight + returnFrames > attackAt + AiTuning.FAST_OPPONENT_RETURN_FRAMES;
     }
 
+    private Window findDecoyWindow(AiObservation o, SetForecast set, int role, int tick) {
+        Window reachable = findWindow(o, set, role, tick, false);
+        if (reachable != null || participants < 2 || role == MB || !o.own().get(role).canStart()) return reachable;
+        // WS／後排可以真實起跳假跑，不必每名假跑者都能打到同一顆快攻配球。
+        // MB 仍只能在球路可達時起跳，不把開網球假裝成快攻。
+        int start = negativeByRole[role] && !set.confirmed() ? set.delay() - negativeLead
+                : set.delay() + apexFrames(set.flight().velocityY());
+        if (start < 0) return null;
+        var p = o.own().get(role);
+        double x = role == BACK ? Math.max(minimumBackAttackX(o), Math.min(p.x(), maximumBackAttackX(p))) : p.x();
+        if (role == BACK && Math.abs(x - p.x()) > runReach(start)) return null;
+        return new Window(role, tick + start, tick + start, x, 0, false);
+    }
+
     private Window findWindow(AiObservation o, SetForecast set, int role, int tick, boolean setting) {
         if (setting && !airSetAllowed) return null;
         var p = o.own().get(role);
         if (launched[role] || p.jumping() || p.diving()
                 || p.action() == PlayerAction.RUN_RETURN || p.action() == PlayerAction.RUN_APPROACH) return null;
         if (setting && (role == MB || o.ownLastRole() == role)) return null;
-        if (role == MB && !quickSet) return null;
-        if (role == MB && set.confirmed()) {
+        if (role == MB && !quickSet && !(mbDirectSecond && o.ownTouches() == 1)) return null;
+        if (role == MB && set.confirmed() && !mbDirectSecond) {
             // 開網球即使還能作攔網動畫，也不能安排無法碰到的 MB 攻擊。
             int peak = apexFrames(set.flight().velocityY());
             double x = set.flight().xAt(peak);
@@ -278,13 +312,15 @@ final class OffensePlanner {
         double vy = role == BACK ? GameConfig.BACK_JUMP_VELOCITY_Y
                 : role == MB ? GameConfig.MB_JUMP_VELOCITY_Y : GameConfig.WS_JUMP_VELOCITY_Y;
         int flight = (int) Math.ceil(-2 * vy / GameConfig.GRAVITY);
-        int nominal = role == MB ? set.delay() : negative && !set.confirmed()
+        double minimumBackX = role == BACK && !setting ? minimumBackAttackX(o) : GameConfig.WORLD_LEFT;
+        int nominal = role == MB ? set.delay() : negativeByRole[role] && !set.confirmed()
                 ? set.delay() - negativeLead : set.delay() + apexFrames(set.flight().velocityY());
-        if (!setting && negative && !set.confirmed() && nominal < 0) return null;
-        boolean negativeStart = negative && !set.confirmed() && role != MB && !setting;
+        if (!setting && negativeByRole[role] && !set.confirmed() && nominal < 0) return null;
+        boolean negativeStart = negativeByRole[role] && !set.confirmed() && role != MB && !setting;
         int min = setting ? 0 : Math.max(0, nominal - (negativeStart ? 0 : AiTuning.ATTACK_TIMING_JITTER_FRAMES));
         int max = setting ? AiTuning.FORECAST_FRAMES - flight : Math.max(0, nominal + (negativeStart ? 0 : AiTuning.ATTACK_TIMING_JITTER_FRAMES));
         if (role == MB) { min = Math.max(0, set.delay() - AiTuning.FIRST_TEMPO_WINDOW_FRAMES); max = set.delay() + AiTuning.FIRST_TEMPO_WINDOW_FRAMES; }
+        if (role == MB && mbDirectSecond) { min = 0; max = AiTuning.FORECAST_FRAMES - flight; }
         Window best = null;
         for (int start = min; start <= max; start++) {
             int wait = p.action() == PlayerAction.RECEIVING
@@ -306,9 +342,9 @@ final class OffensePlanner {
                         startX = bx - p.attackOffsetX() - p.attackWidth() / 2 - vx * age;
                     }
                     double limit = setting ? GameConfig.NET_X + GameConfig.PLAYER_NET_OVERLAP_X - p.width()
-                            : GameConfig.NET_X - GameConfig.THREE_METER_PX - p.width() / 2 - AiTuning.BACK_TAKEOFF_LINE_MARGIN_PX;
+                            : maximumBackAttackX(p);
                     // 球可在框的邊緣命中；理想中心超過三米線時先退到合法位置，再檢查真實重疊。
-                    startX = Math.max(GameConfig.WORLD_LEFT, Math.min(limit, startX));
+                    startX = Math.max(minimumBackX, Math.min(limit, startX));
                     if (Math.abs(startX - p.x()) > runReach(Math.max(0, start - wait))) continue;
                     px = startX + BackPlayer.plannedJumpVelocityXAt(startX, p.width(), p.attackOffsetX(), p.attackWidth(), true) * age;
                 }
@@ -366,7 +402,26 @@ final class OffensePlanner {
         if (!p.canStart()) return false;
         if (window.role() != BACK) return true;
         if (Math.abs(p.x() - window.startX()) > AiTuning.MOVEMENT_DEAD_ZONE_PX) return false;
-        return window.airSet() || p.centerX() < GameConfig.NET_X - GameConfig.THREE_METER_PX;
+        return window.airSet() || p.centerX() < GameConfig.NET_X - GameConfig.THREE_METER_PX
+                && p.x() >= minimumBackAttackX(o) - AiTuning.MOVEMENT_DEAD_ZONE_PX;
+    }
+
+    private static double maximumBackAttackX(AiObservation.Pose p) {
+        // 預留走位死區，避免角色停在線上卻因距離已小於死區而無法再後退。
+        return Math.nextDown(GameConfig.NET_X - GameConfig.THREE_METER_PX - p.width() / 2
+                - Math.max(AiTuning.BACK_TAKEOFF_LINE_MARGIN_PX, AiTuning.MOVEMENT_DEAD_ZONE_PX));
+    }
+
+    private static double minimumBackAttackX(AiObservation o) {
+        var back = o.own().get(BACK);
+        double closest = maximumBackAttackX(back);
+        int peak = Math.max(1, (int) Math.ceil(-GameConfig.BACK_JUMP_VELOCITY_Y / GameConfig.GRAVITY) - 1);
+        double travel = BackPlayer.plannedJumpVelocityXAt(closest, back.width(), back.attackOffsetX(),
+                back.attackWidth(), true) * peak;
+        // 最遠準備點由最高點時攻擊框前緣可碰到 Setter 圖片中心決定，不寫死距線像素。
+        double farthest = o.own().get(SETTER).centerX() - back.attackOffsetX() - back.attackWidth()
+                - GameConfig.BALL_RADIUS - travel;
+        return Math.max(GameConfig.WORLD_LEFT, Math.min(closest, farthest));
     }
 
     private static boolean betterContactSoon(AiObservation o, AiObservation.Pose p) {

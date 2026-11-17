@@ -34,8 +34,8 @@ public final class LauncherPanel extends JPanel {
 
     private final JTextField joinIpField = new JTextField(16);
     private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
-    private final JSlider defenseSlider = new JSlider(1, 100, 50);
-    private final JSlider attackSlider = new JSlider(1, 100, 50);
+    private final JSlider defenseSlider = new JSlider(1, AiDifficulty.LEVEL_COUNT, AiDifficulty.DEFAULT_LEVEL);
+    private final JSlider attackSlider = new JSlider(1, AiDifficulty.LEVEL_COUNT, AiDifficulty.DEFAULT_LEVEL);
 
     public LauncherPanel(String localIp, Actions actions) {
         setLayout(new BorderLayout(0, SECTION_GAP_PX));
@@ -124,7 +124,8 @@ public final class LauncherPanel extends JPanel {
     }
 
     private AiDifficulty difficulty() {
-        return new AiDifficulty(defenseSlider.getValue(), attackSlider.getValue());
+        return new AiDifficulty(AiDifficulty.valueForLevel(defenseSlider.getValue()),
+                AiDifficulty.valueForLevel(attackSlider.getValue()));
     }
 
     private static JPanel difficultyRow(String name, JSlider slider) {
@@ -132,9 +133,12 @@ public final class LauncherPanel extends JPanel {
         row.setOpaque(false);
         JLabel value = new JLabel();
         slider.setName(name);
+        slider.setMajorTickSpacing(1);
+        slider.setSnapToTicks(true);
+        slider.setPaintTicks(true);
         slider.setOpaque(false);
         slider.getAccessibleContext().setAccessibleName(name);
-        Runnable refresh = () -> value.setText(slider.getValue() + "（" + AiDifficulty.label(slider.getValue()) + "）");
+        Runnable refresh = () -> value.setText(AiDifficulty.label(AiDifficulty.valueForLevel(slider.getValue())));
         slider.addChangeListener(event -> refresh.run());
         refresh.run();
         row.add(new JLabel(name), BorderLayout.WEST);

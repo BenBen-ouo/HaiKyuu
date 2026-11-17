@@ -157,7 +157,7 @@ public class Main {
 
     static String aiWindowTitle(boolean playerRedSide, AiDifficulty difficulty) {
         return "HaiKyuu!! - " + (playerRedSide ? "左方玩家對戰機器人" : "右方玩家對戰機器人")
-                + "（防守 " + difficulty.defense() + "／進攻 " + difficulty.attack() + "）";
+                + "（防守 " + AiDifficulty.label(difficulty.defense()) + "／進攻 " + AiDifficulty.label(difficulty.attack()) + "）";
     }
 
     private static void showWindow(

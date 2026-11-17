@@ -22,10 +22,24 @@ final class DefensePlanner {
     private boolean targetValid;
     private boolean assignReceiver;
     private boolean coverOwnAttack;
+    private int previousOpponentTouches;
+    private boolean receptionApexPassed;
 
     DefensePlanner(RandomGenerator random) { this.random = random; }
 
-    void reset() { targetValid = false; assignReceiver = true; wingAssigned = false; coverOwnAttack = false; }
+    void reset() {
+        targetValid = false; assignReceiver = true; wingAssigned = false; coverOwnAttack = false;
+        previousOpponentTouches = 0; receptionApexPassed = false;
+    }
+
+    void observe(AiObservation o) {
+        if (o.lastTouchOwn() || o.opponentTouches() == 0) receptionApexPassed = false;
+        if (!o.lastTouchOwn() && o.opponentTouches() > 0) {
+            if (o.opponentTouches() == 1 && previousOpponentTouches != 1) receptionApexPassed = false;
+            if (o.ball().velocityY() >= 0) receptionApexPassed = true;
+        }
+        previousOpponentTouches = o.opponentTouches();
+    }
 
     void beginOwnAttack(AiDifficulty difficulty) {
         coverOwnAttack = random.nextDouble() < AiTuning.MAX_ATTACK_COVER_PROBABILITY
@@ -47,6 +61,12 @@ final class DefensePlanner {
 
     private void moveToReadyPosition(AiObservation o, ControlInput input, AiDifficulty difficulty,
             OpponentHabits habits, boolean serve) {
+        targetX = readyReceiveX(o, difficulty, habits, serve);
+        targetValid = true;
+        move(input, o.own().get(0), targetX);
+    }
+
+    private double readyReceiveX(AiObservation o, AiDifficulty difficulty, OpponentHabits habits, boolean serve) {
         double skill = AiDifficulty.ability(difficulty.defense());
         var back = o.own().get(0);
         double front = GameConfig.NET_X - GameConfig.THREE_METER_PX;
@@ -63,17 +83,18 @@ final class DefensePlanner {
         if (!serve) margin = margin * (1 - skill * habits.fastDeepRisk())
                 + GameConfig.BALL_RADIUS * skill * habits.fastDeepRisk();
         desiredCenter = Math.max(GameConfig.COURT_LEFT_X + margin, Math.min(front - margin, desiredCenter));
-        targetX = desiredCenter + centerOffset;
-        targetValid = true;
-        move(input, back, targetX);
+        return desiredCenter + centerOffset;
     }
 
     void react(int tick, AiDifficulty difficulty, OpponentHabits habits, AiObservation o) {
         double skill = AiDifficulty.ability(difficulty.defense());
         readyAt = tick + AiDifficulty.reactionFrames(difficulty.defense(), random);
         double uncertainty = (1 - skill) * (1 - skill);
-        receiveError = signedError(AiTuning.DEFENSE_ERROR_HIGH_PX
-                + uncertainty * (AiTuning.DEFENSE_ERROR_LOW_PX - AiTuning.DEFENSE_ERROR_HIGH_PX));
+        receiveError = AiDifficulty.receiveError(difficulty.defense(), random);
+        if (o.receptionComplete() && !o.lastTouchOwn()) {
+            readyAt += (int) Math.round((1 - habits.flightFamiliarity(o.ball()))
+                    * AiTuning.UNFAMILIAR_FLIGHT_DELAY_FRAMES);
+        }
         blockError = signedError(AiTuning.BLOCK_TIMING_ERROR_HIGH_FRAMES
                 + uncertainty * (AiTuning.BLOCK_TIMING_ERROR_LOW_FRAMES - AiTuning.BLOCK_TIMING_ERROR_HIGH_FRAMES));
         predictedAttacker = weightedRole(habits, skill);
@@ -91,6 +112,8 @@ final class DefensePlanner {
     }
 
     void update(AiObservation o, ControlInput input, int tick, AiDifficulty difficulty, OpponentHabits habits) {
+        observe(o);
+        if (DefenseForecast.leaveOutBall(o)) return;
         var back = o.own().get(0);
         int floorArrival = o.ball().descendingArrival(GameConfig.FLOOR_Y - GameConfig.BALL_RADIUS);
         boolean organizing = o.receptionComplete() && !o.lastTouchOwn() && o.opponentTouches() > 0
@@ -99,7 +122,7 @@ final class DefensePlanner {
         boolean ownShotOutgoing = o.attackLocked() && o.lastTouchOwn()
                 && o.ball().velocityX() > 0
                 && o.ball().xAt(floorArrival) > GameConfig.NET_X + GameConfig.BALL_RADIUS;
-        if (organizing || ownShotOutgoing) {
+        if (organizing || ownShotOutgoing || DefenseForecast.opponentCanAttack(o)) {
             moveToReadyPosition(o, input, difficulty, habits, false);
             wingAssigned = false;
             assignReceiver = true;
@@ -108,7 +131,7 @@ final class DefensePlanner {
             return;
         }
         if (tick < readyAt) {
-            move(input, back, targetX);
+            if (targetValid) move(input, back, targetX);
             return;
         }
         if (tick >= nextTrack) {
@@ -121,7 +144,8 @@ final class DefensePlanner {
                         * (habits.directionWeight(2) + habits.lobRate());
             if (assignReceiver || wingAssigned) {
                 // 每次追蹤重新查驗已撲球的剩餘滑行；失去接球窗口就交給後排。
-                wingAssigned = targetX > shortBoundary && wingCanReceive(o);
+                wingAssigned = (targetX > shortBoundary || DefenseForecast.wingStandingCanReceive(o, receiveError))
+                        && wingCanReceive(o);
                 assignReceiver = false;
             }
             targetValid = true;
@@ -129,14 +153,11 @@ final class DefensePlanner {
         if (targetX < GameConfig.NET_X + GameConfig.BALL_RADIUS) {
             if (wingAssigned) {
                 // 短球由 WS 接；後排維持後方補位，不一起追到網前。
-                move(input, back, Math.min(targetX - AiTuning.RESERVE_GAP_PX,
-                        GameConfig.NET_X - AiTuning.SHORT_DEFENSE_DISTANCE_FROM_NET_PX));
+                move(input, back, readyReceiveX(o, difficulty, habits, !o.receptionComplete()));
                 var wing = o.own().get(3);
                 if (wing.canStart() && o.ownTouches() == 0) {
-                    int lowArrival = o.ball().descendingArrival(GameConfig.FLOOR_Y - AiTuning.LOW_BALL_HEIGHT_FROM_FLOOR_PX);
-                    double needed = targetX - wing.receiveX();
-                    if (needed > AiTuning.WING_MIN_DIVE_DISTANCE_PX && lowArrival < AiTuning.WING_DIVE_WINDOW_FRAMES
-                            && o.ball().x() < GameConfig.NET_X + AiTuning.WING_OBSERVATION_NET_MARGIN_PX) {
+                    if (!DefenseForecast.wingStandingCanReceive(o, receiveError)
+                            && DefenseForecast.wingDiveDelay(o, receiveError) == 0) {
                         input.wingActionPressed = true;
                     }
                 }
@@ -217,6 +238,7 @@ final class DefensePlanner {
 
     private void block(AiObservation o, ControlInput input, int tick, AiDifficulty difficulty, OpponentHabits habits) {
         if (!o.receptionComplete() || o.opponentTouches() == 0 || o.blockUsed()) return;
+        if (!receptionApexPassed) return;
         if (difficulty.defense() < AiTuning.MIN_REPEAT_BLOCK_DEFENSE
                 && o.own().get(2).blockJumpCount() > 0) return;
         double skill = AiDifficulty.ability(difficulty.defense());
@@ -226,7 +248,9 @@ final class DefensePlanner {
         double nearest = Double.POSITIVE_INFINITY;
         for (int i = 0; i < roles.length; i++) {
             var attacker = o.opponent().get(roles[i]);
-            if (attacker.jumping() || attacker.action() == PlayerAction.RUN_APPROACH) {
+            if (attacker.action() == PlayerAction.ATTACK_READY
+                    || attacker.action() == PlayerAction.ATTACK_SWING
+                    || attacker.action() == PlayerAction.RUN_APPROACH) {
                 double gap = Math.hypot(o.ball().x() - attacker.centerX(), o.ball().y() - attacker.y());
                 if (gap < nearest) { nearest = gap; visible = i; }
             }
@@ -248,7 +272,8 @@ final class DefensePlanner {
         } else if (netArrival >= 0 && netArrival < AiTuning.BLOCK_NET_WINDOW_FRAMES
                 && o.ball().yAt(netArrival) < GameConfig.NET_TOP_Y + AiTuning.BLOCK_NET_HEIGHT_MARGIN_PX) {
             blockAt = tick + Math.max(0, netArrival - AiTuning.BLOCK_NET_LEAD_FRAMES + (int) blockError);
-        } else if (suspect.jumping() && blockAt == Integer.MAX_VALUE) {
+        } else if ((suspect.action() == PlayerAction.ATTACK_READY || suspect.action() == PlayerAction.ATTACK_SWING)
+                && blockAt == Integer.MAX_VALUE) {
             int lead = predictedTempo == 0 ? AiTuning.NEGATIVE_BLOCK_GUESS_FRAMES
                     : predictedTempo == 1 ? AiTuning.FIRST_BLOCK_GUESS_FRAMES : AiTuning.SECOND_BLOCK_GUESS_FRAMES;
             double visibleLead = Math.max(0, -suspect.velocityY() / GameConfig.GRAVITY
@@ -257,11 +282,36 @@ final class DefensePlanner {
             blockAt = tick + Math.max(0, lead + (int) blockError
                     - (int) (habits.tempoWeight(predictedTempo) * skill * AiTuning.HABIT_BLOCK_ADJUST_FRAMES));
         }
+        if (difficulty.defense() >= AiTuning.MIN_AGGRESSIVE_BLOCK_DEFENSE && o.own().get(2).canStart()) {
+            // 不只看原猜測者；實際攻擊窗口已逼近時，保留仍在地面的一次攔網機會。
+            int contact = imminentAttack(o);
+            if (contact >= 0) blockAt = Math.min(blockAt, tick + Math.max(0,
+                    contact - AiTuning.BLOCK_NET_LEAD_FRAMES));
+        }
         if (tick >= blockAt && o.own().get(2).canStart()) {
             input.mbActionPressed = true;
             // 重新觀察後才補攔；角色仍須完整落地，第二次高度由原模型決定。
             blockAt = Integer.MAX_VALUE;
         }
+    }
+
+    private static int imminentAttack(AiObservation o) {
+        int earliest = Integer.MAX_VALUE;
+        for (int role : new int[]{0, 2, 3}) {
+            var p = o.opponent().get(role);
+            if (p.action() != PlayerAction.ATTACK_READY) continue;
+            for (int t = 0; t <= AiTuning.AGGRESSIVE_BLOCK_CONTACT_WINDOW_FRAMES; t++) {
+                double y = p.y() + p.velocityY() * t + GameConfig.GRAVITY * t * (t + 1) / 2;
+                if (y > GameConfig.FLOOR_Y - p.height()) break;
+                if (DefenseForecast.overlaps(o.ball().xAt(t), o.ball().yAt(t),
+                        p.x() + p.velocityX() * t + p.attackOffsetX(), y + p.attackOffsetY(),
+                        p.attackWidth(), p.attackHeight())) {
+                    earliest = Math.min(earliest, t);
+                    break;
+                }
+            }
+        }
+        return earliest == Integer.MAX_VALUE ? -1 : earliest;
     }
 
     private int weightedRole(OpponentHabits habits, double skill) {
@@ -298,14 +348,8 @@ final class DefensePlanner {
             }
             return false;
         }
-        if (!wing.canStart()) return false;
-        int lowArrival = o.ball().descendingArrival(GameConfig.FLOOR_Y - AiTuning.LOW_BALL_HEIGHT_FROM_FLOOR_PX);
-        int diveFrames = Math.min(lowArrival, DiveController.TOTAL_FRAMES);
-        double travel = GameConfig.DIVE_SPEED * diveFrames
-                * (1 - diveFrames / (2.0 * DiveController.TOTAL_FRAMES));
-        double lowX = o.ball().xAt(lowArrival) + receiveError;
-        return lowX >= wing.receiveX() - GameConfig.BALL_RADIUS
-                && lowX <= wing.receiveX() + travel + AiTuning.WING_REACH_MARGIN_PX;
+        return DefenseForecast.wingStandingCanReceive(o, receiveError)
+                || DefenseForecast.wingDiveDelay(o, receiveError) >= 0;
     }
     static void move(ControlInput input, AiObservation.Pose back, double receiveX) {
         double delta = receiveX - back.receiveX();

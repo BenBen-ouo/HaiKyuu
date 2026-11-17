@@ -128,12 +128,12 @@ try {
     & $javac -Xlint:all -encoding UTF-8 -cp $classes -d $tests `
         tests\GameplayFlowTest.java tests\LauncherTest.java `
         tests\NetworkSyncTest.java tests\PackagingSmokeTest.java tests\AiMatchTest.java tests\AiTacticsTest.java tests\AiPolicyTest.java tests\AiLearningTest.java `
-        tests\LocalPauseTest.java tests\ThirdTouchTrajectoryTest.java
+        tests\LocalPauseTest.java tests\ThirdTouchTrajectoryTest.java tests\AiDefenseBalanceTest.java tests\AiTacticalChoiceTest.java
     Assert-ToolSucceeded 'Test compilation'
 
     Write-Host '2/6 Running gameplay, launcher, and packet tests...'
     $testClasspath = "$classes;$tests"
-    foreach ($testClass in @('GameplayFlowTest', 'LauncherTest', 'network.NetworkSyncTest', 'AiMatchTest', 'AiTacticsTest', 'model.ai.AiPolicyTest', 'model.ai.AiLearningTest', 'LocalPauseTest', 'ThirdTouchTrajectoryTest')) {
+    foreach ($testClass in @('GameplayFlowTest', 'LauncherTest', 'network.NetworkSyncTest', 'AiMatchTest', 'AiTacticsTest', 'model.ai.AiPolicyTest', 'model.ai.AiLearningTest', 'model.ai.AiDefenseBalanceTest', 'model.ai.AiTacticalChoiceTest', 'LocalPauseTest', 'ThirdTouchTrajectoryTest')) {
         Invoke-ReleaseCheck -Name $testClass -Executable $java -LogPath $checkLog `
             -Arguments @('-Djava.awt.headless=true', '-cp', $testClasspath, $testClass)
     }

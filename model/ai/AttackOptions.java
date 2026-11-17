@@ -26,34 +26,60 @@ final class AttackOptions {
         return false;
     }
 
-    static int choose(AiObservation o, double skill, RandomGenerator random, boolean quickAttack) {
+    static int choose(AiObservation o, double skill, RandomGenerator random, int striker, boolean bothNegative) {
         List<Integer> safe = new ArrayList<>(5);
         int best = -1;
         double bestScore = Double.NEGATIVE_INFINITY;
         boolean normalAvailable = hasNormalShot(o.ball().x(), o.ball().y());
         double lobProbability = AiTuning.MAX_LOB_PROBABILITY * skill
-                * (quickAttack ? AiTuning.MB_LOB_PROBABILITY_MULTIPLIER : 1);
+                * (striker == 2 ? AiTuning.MB_LOB_PROBABILITY_MULTIPLIER : 1);
         boolean useLob = skill >= AiTuning.MIN_LOB_ABILITY
                 && (!normalAvailable || random.nextDouble() < lobProbability);
         int limit = useLob ? 5 : 3;
         boolean evaluateGaps = skill >= AiDifficulty.ability(AiTuning.MIN_GAP_SELECTION_ATTACK);
+        boolean tactical = skill >= AiDifficulty.ability(AiTuning.MIN_TACTICAL_ATTACK);
+        int easiest = -1;
+        double nearestReceiver = Double.POSITIVE_INFINITY;
         for (int mode = 0; mode < limit; mode++) {
             Double landing = landing(o.ball().x(), o.ball().y(), mode);
             if (landing == null) continue;
             safe.add(mode);
-            if (!evaluateGaps) continue;
+            if (!evaluateGaps) {
+                double distance = receiverDistance(o, mode);
+                if (distance < nearestReceiver) { nearestReceiver = distance; easiest = mode; }
+                continue;
+            }
             double gap = Math.min(Math.abs(landing - o.opponent().get(0).receiveX()),
                     Math.abs(landing - o.opponent().get(3).receiveX()));
             double block = o.opponent().get(2).jumping() && mode < 3 ? AiTuning.BLOCKED_SHOT_PENALTY : 0;
             double score = gap - block + random.nextDouble() * AiTuning.SHOT_SELECTION_NOISE;
+            if (tactical) score += ReboundForecast.evaluate(o, HORIZONTAL_SPEEDS[mode], VELOCITIES_Y[mode], striker)
+                    .score(bothNegative);
             if (mode >= 3) score -= (1 - skill) * AiTuning.LOB_PREFERENCE_PENALTY;
             if (score > bestScore) { bestScore = score; best = mode; }
         }
         if (safe.isEmpty()) return -1;
-        if (!evaluateGaps) return safe.get(random.nextInt(safe.size()));
+        if (!evaluateGaps) return random.nextDouble() < AiTuning.EASY_RECEIVABLE_SHOT_PROBABILITY
+                ? easiest : safe.get(random.nextInt(safe.size()));
         double variation = AiTuning.EXPERT_SUBOPTIMAL_PROBABILITY
                 + (1 - skill) * AiTuning.LOW_SUBOPTIMAL_EXTRA_PROBABILITY;
         return random.nextDouble() < variation ? safe.get(random.nextInt(safe.size())) : best;
+    }
+
+    private static double receiverDistance(AiObservation o, int mode) {
+        var flight = new BallForecast(o.ball().x(), o.ball().y(), HORIZONTAL_SPEEDS[mode], VELOCITIES_Y[mode]);
+        double nearest = Double.POSITIVE_INFINITY;
+        for (int role : new int[]{0, 3}) {
+            var p = o.opponent().get(role);
+            int arrival = flight.descendingArrival(GameConfig.PLAYER_BASE_Y + p.receiveOffsetY() + p.receiveHeight() / 2);
+            double distance = Math.abs(flight.xAt(arrival) - p.receiveX());
+            if (p.jumping() && p.y() + p.velocityY() * arrival
+                    + GameConfig.GRAVITY * arrival * (arrival + 1) / 2 < GameConfig.FLOOR_Y - p.height()) {
+                distance += AiTuning.BLOCKED_SHOT_PENALTY;
+            }
+            nearest = Math.min(nearest, distance);
+        }
+        return nearest;
     }
 
     private static Double landing(double x, double y, int mode) {

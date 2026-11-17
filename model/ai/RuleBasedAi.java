@@ -58,6 +58,7 @@ public final class RuleBasedAi {
             serve.begin(tick, difficulty);
             defense.react(tick, difficulty, habits, o);
         }
+        defense.observe(o);
         if (o.matchOver()) state = State.FINISHED;
         else if (o.rallyOver()) state = State.WAITING;
         else if (o.ownServing() && (waiting || o.serveState() == ServeState.JUMP_TOSS)) {
@@ -138,7 +139,7 @@ public final class RuleBasedAi {
                     int tempo = opponentSetAt < 0 || opponentTakeoff[role] < 0 ? 2
                             : difference < -AiTuning.SIMULTANEOUS_TAKEOFF_WINDOW_FRAMES ? 0
                             : difference <= AiTuning.SIMULTANEOUS_TAKEOFF_WINDOW_FRAMES ? 1 : 2;
-                    habits.recordAttack(i, tempo, observedShot(o.ball()));
+                    habits.recordAttack(i, tempo, OpponentHabits.observedDirection(o.ball()));
                     lastOpponentShotWasServe = false;
                     pendingLanding = !o.lastTouchOwn();
                     pendingAttackRole = i;
@@ -170,11 +171,6 @@ public final class RuleBasedAi {
             else habits.recordAttackLanding(pendingAttackRole, pendingAttackTempo, o.ball().x());
             pendingLanding = false;
         }
-    }
-    private static int observedShot(BallForecast ball) {
-        if (ball.velocityY() < 0) return Math.abs(ball.velocityX()) < GameConfig.LONG_LOB_SPIKE_HORIZONTAL_SPEED ? 3 : 4;
-        if (Math.abs(ball.velocityX()) > GameConfig.SPIKE_HORIZONTAL_SPEED) return 1;
-        return ball.velocityY() > GameConfig.SPIKE_VELOCITY_Y + 1 ? 2 : 0;
     }
     public void reset() {
         habits.reset();

@@ -35,7 +35,7 @@ public final class AiTacticsTest {
         testJumpServeUsesReachableVariant();
         for (int skill : new int[]{61, 100}) {
             for (int firstRole : new int[]{0, 1}) {
-                int attempts = 0, attacks = 0, cleared = 0, faults = 0, jumpSets = 0;
+                int attempts = 0, attacks = 0, cleared = 0, legalReturns = 0, faults = 0, jumpSets = 0;
                 java.util.List<Integer> standingLeads = new java.util.ArrayList<>();
                 java.util.List<Integer> secondStarts = new java.util.ArrayList<>();
                 for (boolean red : new boolean[]{true, false}) {
@@ -51,7 +51,7 @@ public final class AiTacticsTest {
                         new RallyContactHandler(game).collideTeam(team, red, new TeamInput());
                         if (game.getHitCount(red) != 1) throw new AssertionError("Fixture did not receive first ball");
                         RuleBasedAi ai = new RuleBasedAi(red, new AiDifficulty(skill, skill), new Random(seed));
-                        boolean attacked = false, returned = false;
+                        boolean attacked = false, returned = false, legallyReturned = false, thirdSent = false;
                         int wsStart = -1, setTick = -1, apexTick = -1;
                         attempts++;
                         for (int t = 0; t < 400; t++) {
@@ -75,11 +75,16 @@ public final class AiTacticsTest {
                             if (attacked && (red ? game.ball.x > GameConfig.NET_X + game.ball.radius
                                     : game.ball.x < GameConfig.NET_X - game.ball.radius)
                                     && game.ball.y + game.ball.radius < GameConfig.NET_TOP_Y) returned = true;
+                            thirdSent |= game.getHitCount(red) == 3;
+                            if (thirdSent && (red ? game.ball.x > GameConfig.NET_X + game.ball.radius
+                                    : game.ball.x < GameConfig.NET_X - game.ball.radius)
+                                    && game.ball.y + game.ball.radius < GameConfig.NET_TOP_Y) legallyReturned = true;
                             if (returned) break;
                             if (game.isRallyOverForNetwork()) break;
                         }
                         if (attacked) attacks++;
                         if (returned) cleared++;
+                        if (returned || legallyReturned) legalReturns++;
                         if ("後排三米線".equals(game.transientMessage)) faults++;
                     }
                 }
@@ -88,7 +93,10 @@ public final class AiTacticsTest {
                 System.out.println("standingNegativeLeads=" + standingLeads + " secondStartFromApex=" + secondStarts);
                 check(standingLeads.stream().allMatch(t -> t >= 42 && t <= 48), "站舉負節奏的助跑開始在 Setter 觸球前 0.7～0.8 秒");
                 check(secondStarts.stream().allMatch(t -> Math.abs(t) <= 3), "第二節奏在球頂點附近開始助跑");
-                check(cleared >= attempts * .85 && faults == 0, "已接起第一球後，至少 85% 能實際攻擊過網且無三米犯規");
+                if (firstRole == 0) check(cleared >= attempts * .85 && faults == 0,
+                        "正常組織仍至少 85% 能實際攻擊過網且無三米犯規");
+                else check(legalReturns >= attempts * .85 && cleared >= attempts * .75 && faults == 0,
+                        "Setter 第一球後仍以攻擊為主；較慢反應下無可達第三球扣擊時允許合法低手送回");
             }
         }
         System.out.println("AiTacticsTest passed");
@@ -190,6 +198,8 @@ public final class AiTacticsTest {
                 game.getServeHandler().setWaitingForServe(true);
                 game.getServeHandler().setWaitingForServe(false);
                 team = red ? game.redTeam : game.blueTeam;
+                if (target < GameConfig.COURT_LEFT_X) game.setLastHitTeam(red);
+                else team.wingSpiker.x = team.setter.x; // WS 已在網前，不能向後撲到這顆球。
                 ai.reset(); game.ball.x = red ? target : 1200 - target;
                 game.ball.y = -300; game.ball.vx = 0; game.ball.vy = 0;
                 boolean leftWaitingZone = false;
@@ -283,6 +293,7 @@ public final class AiTacticsTest {
             {650, 300, GameConfig.SPIKE_HORIZONTAL_SPEED, GameConfig.SPIKE_VELOCITY_Y},
             {610, 400, GameConfig.LONG_LOB_SPIKE_HORIZONTAL_SPEED, GameConfig.LONG_LOB_SPIKE_VELOCITY_Y}
         };
+        int beginnerReceived = 0;
         for (int skill : new int[]{10, 50, 75, 100}) {
             int received = 0, attempts = 0;
             int[] byShot = new int[shots.length];
@@ -302,6 +313,9 @@ public final class AiTacticsTest {
                             var own = red ? game.redTeam : game.blueTeam;
                             game.recordRegularHit(red, own.setter);
                             game.recordRegularHit(!red, opponent.backPlayer);
+                            // 這三種是已出手的攻擊，不是仍可能被 MB 扣擊的第一球配球。
+                            game.recordRegularHit(!red, opponent.setter);
+                            game.recordRegularHit(!red, opponent.quickAttacker);
                         }
                         double[] flight = shots[shot];
                         game.ball.x = red ? flight[0] : GameConfig.SCREEN_WIDTH - flight[0];
@@ -320,11 +334,14 @@ public final class AiTacticsTest {
             }
             System.out.printf("deepDefense skill=%d received=%d/%d byShot=%s%n",
                     skill, received, attempts, java.util.Arrays.toString(byShot));
+            if (skill == 10) beginnerReceived = received;
             if (skill >= 50) {
-                for (int count : byShot) {
-                    check(count >= (skill >= 75 ? 21 : 18),
-                            "普通以上需能穩定接起各類可達後場來球：skill=" + skill);
-                }
+                check(received > beginnerReceived, "提高防守仍應改善整體接球表現：skill=" + skill);
+                // 新需求保留最高 60px 誤判與較慢反應，不再要求每種陌生快球都達 75～87.5%。
+                for (int shot = 0; shot < 4; shot++) check(byShot[shot] >= 18,
+                        "仍需穩定守住長跳發，不能為平衡取消深區防守：skill=" + skill);
+                if (skill >= 75) check(byShot[4] + byShot[5] > 0,
+                        "高難度仍須有實際守住快速攻擊的機會");
             }
         }
     }

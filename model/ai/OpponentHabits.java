@@ -30,6 +30,15 @@ public final class OpponentHabits {
         return (directions[direction] + AiTuning.HABIT_PRIOR_SAMPLES / directions.length)
                 / (attacks + AiTuning.HABIT_PRIOR_SAMPLES);
     }
+    public double flightFamiliarity(BallForecast ball) {
+        int count = directions[observedDirection(ball)];
+        return count / (count + AiTuning.HABIT_PRIOR_SAMPLES);
+    }
+    static int observedDirection(BallForecast ball) {
+        if (ball.velocityY() < 0) return Math.abs(ball.velocityX()) < GameConfig.LONG_LOB_SPIKE_HORIZONTAL_SPEED ? 3 : 4;
+        if (Math.abs(ball.velocityX()) > GameConfig.SPIKE_HORIZONTAL_SPEED) return 1;
+        return ball.velocityY() > GameConfig.SPIKE_VELOCITY_Y + 1 ? 2 : 0;
+    }
     public double serveWeight(int type) {
         return (serves[type] + AiTuning.HABIT_PRIOR_SAMPLES / serves.length)
                 / (serveSamples + AiTuning.HABIT_PRIOR_SAMPLES);

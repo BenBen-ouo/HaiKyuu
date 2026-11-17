@@ -13,6 +13,7 @@ public final class WingSpiker extends Player {
     private static final int APPROACH_CYCLES = 2;
 
     public static int approachDurationFrames() { return AnimationSequences.runDurationFrames(APPROACH_CYCLES); }
+    public static double returnSpeed() { return RETURN_SPEED; }
     // 啟動動畫的當幀尚未水平移動；其後才逐幀助跑。
     public static double approachDistance() { return APPROACH_SPEED * (approachDurationFrames() - 1); }
 

@@ -7,8 +7,13 @@ public final class AiTuning {
     public static final int TRACK_INTERVAL_FRAMES = 4;
     public static final int SERVE_WAIT_FRAMES = 45;
     public static final double REACTION_JITTER_RATIO = .16;
-    public static final double DEFENSE_ERROR_LOW_PX = 45;
-    public static final double DEFENSE_ERROR_HIGH_PX = 2;
+    public static final double DEFENSE_ERROR_MAX_PX = 60;
+    public static final double DEFENSE_ERROR_COMMON_PX = 20;
+    public static final double LARGE_ERROR_BEGINNER_PROBABILITY = .75;
+    public static final double LARGE_ERROR_EXPERT_PROBABILITY = .08;
+    public static final double FAST_REACTION_MAX_PROBABILITY = .12;
+    public static final int UNFAMILIAR_FLIGHT_DELAY_FRAMES = 6;
+    public static final double BACK_RETURN_AVOID_MAX_PROBABILITY = .45;
     public static final double MOVEMENT_DEAD_ZONE_PX = 3;
     public static final double HABIT_PRIOR_SAMPLES = 8;
     public static final int MIN_RETURN_HABIT_SAMPLES = 3;
@@ -39,6 +44,13 @@ public final class AiTuning {
     public static final int MIN_GAP_SELECTION_ATTACK = 41;
     public static final int MIN_TEMPO_PREDICTION_DEFENSE = 21;
     public static final int MIN_REPEAT_BLOCK_DEFENSE = 41;
+    public static final int MIN_TACTICAL_ATTACK = 61;
+    public static final int MIN_AGGRESSIVE_BLOCK_DEFENSE = 61;
+    public static final double MIXED_TEMPO_PROBABILITY = .80;
+    public static final double EASY_RECEIVABLE_SHOT_PROBABILITY = .85;
+    public static final int AGGRESSIVE_BLOCK_CONTACT_WINDOW_FRAMES = 22;
+    public static final double REBOUND_RISK_WEIGHT = 180;
+    public static final double RECOVERABLE_REBOUND_BONUS = 50;
     public static final double MAX_NEGATIVE_TEMPO_PROBABILITY = .55;
     public static final double ADVANCED_JUMP_SERVE_SHARE = .65;
     public static final double LOW_VISIBLE_READ_PROBABILITY = .25;
@@ -58,12 +70,6 @@ public final class AiTuning {
     public static final double SERVE_HABIT_POSITION_BIAS_PX = 100;
     public static final double SERVE_POSITION_EDGE_MARGIN_RATIO = .25;
     public static final double LOB_HABIT_POSITION_BIAS_PX = 40;
-    public static final double WING_REACH_MARGIN_PX = 65;
-    public static final double RESERVE_GAP_PX = 100;
-    public static final int WING_DIVE_WINDOW_FRAMES = 34;
-    public static final double LOW_BALL_HEIGHT_FROM_FLOOR_PX = 10;
-    public static final double WING_MIN_DIVE_DISTANCE_PX = 10;
-    public static final double WING_OBSERVATION_NET_MARGIN_PX = 60;
     public static final int BLOCK_NET_WINDOW_FRAMES = 65;
     public static final double BLOCK_NET_HEIGHT_MARGIN_PX = 30;
     public static final int BLOCK_NET_LEAD_FRAMES = 22;
@@ -87,7 +93,7 @@ public final class AiTuning {
         for (int minimum : new int[]{MIN_ATTACK_COVER_DEFENSE, MIN_AIR_SET_ATTACK, MIN_JUMP_SERVE_ATTACK,
                 MIN_TWO_ATTACKERS, MIN_THREE_ATTACKERS, MIN_QUICK_SET_ATTACK, MIN_JUMP_SET_ATTACK,
                 MIN_NEGATIVE_TEMPO_ATTACK, MIN_GAP_SELECTION_ATTACK, MIN_TEMPO_PREDICTION_DEFENSE,
-                MIN_REPEAT_BLOCK_DEFENSE}) {
+                MIN_REPEAT_BLOCK_DEFENSE, MIN_TACTICAL_ATTACK, MIN_AGGRESSIVE_BLOCK_DEFENSE}) {
             if (minimum < 1 || minimum > 100) throw new IllegalArgumentException("Invalid AI unlock threshold");
         }
         if (MIN_THREE_ATTACKERS < MIN_TWO_ATTACKERS
@@ -100,12 +106,19 @@ public final class AiTuning {
                 || MIN_RETURN_HABIT_SAMPLES <= 0 || FAST_OPPONENT_RETURN_FRAMES <= 0
                 || NEGATIVE_START_MIN_LEAD_FRAMES < 0
                 || NEGATIVE_START_MAX_LEAD_FRAMES < NEGATIVE_START_MIN_LEAD_FRAMES
-                || DEFENSE_ERROR_HIGH_PX < 0 || DEFENSE_ERROR_LOW_PX < DEFENSE_ERROR_HIGH_PX
+                || DEFENSE_ERROR_COMMON_PX < 0 || DEFENSE_ERROR_MAX_PX < DEFENSE_ERROR_COMMON_PX
+                || UNFAMILIAR_FLIGHT_DELAY_FRAMES < 0
+                || AGGRESSIVE_BLOCK_CONTACT_WINDOW_FRAMES <= 0
+                || !Double.isFinite(REBOUND_RISK_WEIGHT) || REBOUND_RISK_WEIGHT < 0
+                || !Double.isFinite(RECOVERABLE_REBOUND_BONUS) || RECOVERABLE_REBOUND_BONUS < 0
                 || BLOCK_TIMING_ERROR_HIGH_FRAMES < 0
                 || BLOCK_TIMING_ERROR_LOW_FRAMES < BLOCK_TIMING_ERROR_HIGH_FRAMES) {
             throw new IllegalArgumentException("Invalid AI timing or error settings");
         }
         double[] probabilities = {REACTION_JITTER_RATIO, MIN_LOB_ABILITY, MAX_LOB_PROBABILITY,
+                LARGE_ERROR_BEGINNER_PROBABILITY, LARGE_ERROR_EXPERT_PROBABILITY,
+                FAST_REACTION_MAX_PROBABILITY, BACK_RETURN_AVOID_MAX_PROBABILITY,
+                MIXED_TEMPO_PROBABILITY, EASY_RECEIVABLE_SHOT_PROBABILITY,
                 BACK_RETURN_RISK_THRESHOLD,
                 MB_LOB_PROBABILITY_MULTIPLIER, MAX_ATTACK_COVER_PROBABILITY,
                 MAX_AIR_SET_PROBABILITY, MAX_JUMP_SET_PROBABILITY, MAX_ADVANCED_SERVE_PROBABILITY,

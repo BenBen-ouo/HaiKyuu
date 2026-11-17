@@ -18,9 +18,9 @@ public final class LauncherTest {
     }
 
     private static void testLauncherActions() {
-        check("HaiKyuu!! - 左方玩家對戰機器人（防守 50／進攻 50）".equals(
+        check("HaiKyuu!! - 左方玩家對戰機器人（防守 普通／進攻 普通）".equals(
                 Main.aiWindowTitle(true, AiDifficulty.DEFAULT)), "左方 AI 對戰視窗標題使用新名稱");
-        check("HaiKyuu!! - 右方玩家對戰機器人（防守 82／進攻 17）".equals(
+        check("HaiKyuu!! - 右方玩家對戰機器人（防守 專家／進攻 入門）".equals(
                 Main.aiWindowTitle(false, new AiDifficulty(82, 17))), "右方 AI 對戰標題保留本場難度");
         check("HaiKyuu!! - 房主 IP 192.168.1.20".equals(Main.networkWindowTitle("192.168.1.20")),
                 "房主與加入者使用同一個顯示房主 IP 的視窗標題");
@@ -55,11 +55,27 @@ public final class LauncherTest {
         check(selected[0] == 1 && selected[1] == 1 && selected[2] == 1 && selected[3] == 1,
                 "本地雙人及左右 AI 對戰分別呼叫自己的啟動入口");
 
-        check(AiDifficulty.DEFAULT.equals(received[0]), "兩個模式預設能力都是 50");
-        findSlider(panel, "防守能力").setValue(82);
-        findSlider(panel, "進攻能力").setValue(17);
+        check(new AiDifficulty(60, 60).equals(received[0]) && AiDifficulty.DEFAULT.equals(received[0]),
+                "兩個模式預設為普通，對應既有數值 60");
+        for (String name : new String[]{"防守能力", "進攻能力"}) {
+            var slider = findSlider(panel, name);
+            check(slider.getMinimum() == 1 && slider.getMaximum() == 5 && slider.getValue() == 3
+                    && slider.getSnapToTicks() && slider.getMajorTickSpacing() == 1 && slider.getPaintTicks(),
+                    "只提供五個可選刻度，預設位於普通");
+        }
+        for (int defense = 1; defense <= 5; defense++) {
+            for (int attack = 1; attack <= 5; attack++) {
+                findSlider(panel, "防守能力").setValue(defense);
+                findSlider(panel, "進攻能力").setValue(attack);
+                findButton(panel, defense % 2 == 0 ? "左方玩家對戰機器人" : "右方玩家對戰機器人").doClick();
+                check(new AiDifficulty(defense * 20, attack * 20).equals(received[0]),
+                        "五階段獨立映射到 20／40／60／80／100");
+            }
+        }
+        findSlider(panel, "防守能力").setValue(5);
+        findSlider(panel, "進攻能力").setValue(1);
         findButton(panel, "右方玩家對戰機器人").doClick();
-        check(new AiDifficulty(82, 17).equals(received[0]), "兩個拉條獨立傳遞給所選模式");
+        check(new AiDifficulty(100, 20).equals(received[0]), "兩個拉條獨立傳遞給所選模式");
 
         joinField.setText(" 192.168.1.20 ");
         findButton(panel, "加入房間").doClick();
