@@ -62,8 +62,10 @@ public class ServeBallController {
 
     public void hitJumpServe(boolean redSide, boolean shortArc, boolean slowHorizontal,
                              boolean longArc) {
-        double horizontalSpeed = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
+        double horizontalSpeed = slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED
+                : shortArc ? GameConfig.SERVE_JUMP_SHORT_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
         double verticalVelocity = shortArc ? GameConfig.SERVE_JUMP_SHORT_VELOCITY_Y
+                : slowHorizontal ? GameConfig.SERVE_JUMP_SLOW_VELOCITY_Y
                 : longArc ? GameConfig.SERVE_JUMP_LONG_VELOCITY_Y : GameConfig.SERVE_JUMP_VELOCITY_Y;
         model.ball.vx = SideRules.directionTowardOpponent(redSide) * horizontalSpeed;
         model.ball.vy = verticalVelocity;

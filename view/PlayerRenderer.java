@@ -5,6 +5,8 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Font;
+import model.GameConfig;
 
 /** 只繪製已擷取的角色圖片及權威碰撞框，不讀取可變角色。 */
 public final class PlayerRenderer {
@@ -18,6 +20,9 @@ public final class PlayerRenderer {
     private static final float BLOCK_ALPHA = .55f;
     private static final int HITBOX_STROKE_WIDTH = 2;
     private static final int FALLBACK_BODY_ARC = 14;
+    private static final Font BLOCK_TOUCH_FONT = new Font("Arial", Font.BOLD, 16);
+    private static final String BLOCK_TOUCH_TEXT = "\\ touch ! /";
+    private static final int BLOCK_TOUCH_GAP_PX = 8;
 
     private final AssetLoader assets;
 
@@ -67,6 +72,22 @@ public final class PlayerRenderer {
             else layer.drawRoundRect(x, y, width, height, box.arcWidth(), box.arcHeight());
         } finally {
             layer.dispose();
+        }
+    }
+
+    /** 在世界鏡像完成後繪字，避免藍方 Client 看到反轉文字。 */
+    public void drawBlockTouch(Graphics2D g, RenderFrame.PlayerImage player, boolean mirrorWorld) {
+        if (!player.showBlockTouch()) return;
+        Graphics2D text = (Graphics2D) g.create();
+        try {
+            text.setFont(BLOCK_TOUCH_FONT);
+            text.setColor(player.redSide() ? RED_HITBOX_STROKE : BLUE_HITBOX_STROKE);
+            double x = mirrorWorld ? GameConfig.SCREEN_WIDTH - player.x() - player.width() : player.x();
+            int textX = (int) Math.round(x + player.width() / 2.0
+                    - text.getFontMetrics().stringWidth(BLOCK_TOUCH_TEXT) / 2.0);
+            text.drawString(BLOCK_TOUCH_TEXT, textX, (int) Math.round(player.y()) - BLOCK_TOUCH_GAP_PX);
+        } finally {
+            text.dispose();
         }
     }
 }

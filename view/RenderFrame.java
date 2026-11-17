@@ -25,12 +25,12 @@ public record RenderFrame(
         List<PlayerImage> players = new ArrayList<>(8);
         // 後排永遠位於其他球員上方。
         for (var team : List.of(model.redTeam, model.blueTeam)) {
-            players.add(capturePlayer(team.wingSpiker, network));
-            players.add(capturePlayer(team.setter, network));
-            players.add(capturePlayer(team.quickAttacker, network));
+            players.add(capturePlayer(team.wingSpiker, network, false));
+            players.add(capturePlayer(team.setter, network, false));
+            players.add(capturePlayer(team.quickAttacker, network, model.blockTouchEffect.isVisible(team.redSide)));
         }
-        players.add(capturePlayer(model.redTeam.backPlayer, network));
-        players.add(capturePlayer(model.blueTeam.backPlayer, network));
+        players.add(capturePlayer(model.redTeam.backPlayer, network, false));
+        players.add(capturePlayer(model.blueTeam.backPlayer, network, false));
         List<TrailPoint> trail = model.spikeEffect.getTrailPoints().stream()
                 .map(point -> new TrailPoint(point.x, point.y, point.remainingFrames, point.maxFrames, point.isRedTeam))
                 .toList();
@@ -39,7 +39,7 @@ public record RenderFrame(
         return new RenderFrame(players,
                 new BallImage(model.ball.x, model.ball.y, model.ball.radius, model.ball.rotationDegrees,
                         !model.isLockedScorePhase()), trail, smoke,
-                new Match(model.isPracticeMode(), model.isPracticeRedServing(), model.redScore, model.blueScore,
+                new Match(model.redScore, model.blueScore,
                         model.matchOver, model.matchWinnerRed, model.transientMessage,
                         model.transientMessageTimer, model.transientMessageIsRed),
                 new Net(net.getLeft(), net.getTop(), net.getRight() - net.getLeft(),
@@ -49,7 +49,7 @@ public record RenderFrame(
                         network.getResetMessage(), network.isConnected()));
     }
 
-    private static PlayerImage capturePlayer(Player player, NetworkView network) {
+    private static PlayerImage capturePlayer(Player player, NetworkView network, boolean showBlockTouch) {
         Box regular = player.isDefaultHitBoxActive() ? Box.from(player.hitBox) : null;
         Box block = null;
         Box head = null;
@@ -65,7 +65,7 @@ public record RenderFrame(
                 player.imageWidth, player.imageHeight,
                 network == null ? player.assetName : network.getRenderedPlayerAsset(player),
                 network == null ? player.mirrorImage : network.getRenderedPlayerMirror(player),
-                player.redSide, regular, block, head, attackBox);
+                player.redSide, regular, block, head, attackBox, showBlockTouch);
     }
 
     private static Smoke captureSmoke(SpikeEffect.SmokeParticle particle) {
@@ -81,7 +81,8 @@ public record RenderFrame(
     }
 
     public record PlayerImage(double x, double y, int width, int height, String assetName,
-            boolean mirrorImage, boolean redSide, Box regular, Box block, Box head, Box attack) {}
+            boolean mirrorImage, boolean redSide, Box regular, Box block, Box head, Box attack,
+            boolean showBlockTouch) {}
 
     public record Box(double x, double y, double width, double height,
             int arcWidth, int arcHeight, double rotationDegrees) {
@@ -104,7 +105,7 @@ public record RenderFrame(
         public SmokeBlob { shape = List.copyOf(shape); }
     }
 
-    public record Match(boolean isPracticeMode, boolean isPracticeRedServing, int redScore,
+    public record Match(int redScore,
             int blueScore, boolean matchOver, Boolean matchWinnerRed, String transientMessage,
             int transientMessageTimer, Boolean transientMessageIsRed) {}
 }

@@ -6,6 +6,7 @@ import javax.swing.JPanel;
 import controller.KeyboardController;
 import model.GameConfig;
 import model.GameModel;
+import model.effect.BlockTouchEffect;
 import model.TeamInput;
 import model.ball.Ball;
 import model.ball.NetHitBox;
@@ -29,6 +30,7 @@ import view.GameRenderer;
 public class GameplayFlowTest {
     public static void main(String[] args) throws Exception {
         testBackPlayerDrawnAboveAllOtherPlayers();
+        testBlockTouchHintLifetimeAndRendering();
         testRenderFrameIsDetached();
         testInitialHitBoxMirrors();
         testInvalidGeometryIsRejected();
@@ -72,8 +74,7 @@ public class GameplayFlowTest {
         testNetRoundedTopCollision();
         testClientPredictionDoesNotResolveCollisions();
         testScorePhasesAndReleaseGate();
-        testPracticeMode();
-        testBluePracticeMode();
+        testFormalScoringBothSides();
         testFinalPointStopsBeforeNextServe();
         testBackRunAcceleration();
         testMbHeadBlockAndTouchOut();
@@ -896,43 +897,41 @@ public class GameplayFlowTest {
     }
 
     private static void testRestartClearsEveryAction() {
-        for (int mode = 0; mode < 3; mode++) {
-            for (PlayerAction action : PlayerAction.values()) {
-                GameModel model = new GameModel(mode > 0, mode == 2);
-                for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
-                    for (Player player : team.getPlayers()) {
-                        player.applyNetworkAction(action, player.assetName, 0);
-                        player.jumping = true;
-                        player.diving = true;
-                        player.vx = 20;
-                        player.vy = -10;
-                        player.attackHitBox.enable();
-                    }
+        for (PlayerAction action : PlayerAction.values()) {
+            GameModel model = new GameModel();
+            for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
+                for (Player player : team.getPlayers()) {
+                    player.applyNetworkAction(action, player.assetName, 0);
+                    player.jumping = true;
+                    player.diving = true;
+                    player.vx = 20;
+                    player.vy = -10;
+                    player.attackHitBox.enable();
                 }
-                model.recordRegularHit(false, model.blueTeam.setter);
-                model.recordBlock(true, model.redTeam.quickAttacker);
-                model.lockAttack(true);
-                model.lockAttack(false);
-                model.spikeEffect.startSpikeTrail(true);
-                model.spikeEffect.spawnSmoke(300, GameConfig.FLOOR_Y);
-                model.matchOver = true;
-                model.transientMessage = "old result";
-                model.restart();
-                for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
-                    for (Player player : team.getPlayers()) {
-                        check(player.getAction() == PlayerAction.IDLE && !player.jumping && !player.diving
-                                        && !player.attackHitBox.enabled && player.vx == 0 && player.vy == 0,
-                                "各角色從每種動作重開均回到乾淨待命狀態");
-                    }
-                }
-                check(!model.matchOver && model.redScore == 0 && model.blueScore == 0
-                                && model.getHitCount(true) == 0 && model.getHitCount(false) == 0
-                                && model.getLastHitTeam() == null && !model.hasBlocked(true)
-                                && !model.isAttackLocked(true) && !model.isAttackLocked(false)
-                                && model.transientMessage == null && model.spikeEffect.getSmokeParticles().isEmpty()
-                                && model.getServeHandler().isWaitingForServe(),
-                        "本地及左右練習重開不殘留上一局觸球、得分或特效");
             }
+            model.recordRegularHit(false, model.blueTeam.setter);
+            model.recordBlock(true, model.redTeam.quickAttacker);
+            model.lockAttack(true);
+            model.lockAttack(false);
+            model.spikeEffect.startSpikeTrail(true);
+            model.spikeEffect.spawnSmoke(300, GameConfig.FLOOR_Y);
+            model.matchOver = true;
+            model.transientMessage = "old result";
+            model.restart();
+            for (Team team : new Team[]{model.redTeam, model.blueTeam}) {
+                for (Player player : team.getPlayers()) {
+                    check(player.getAction() == PlayerAction.IDLE && !player.jumping && !player.diving
+                                    && !player.attackHitBox.enabled && player.vx == 0 && player.vy == 0,
+                            "各角色從每種動作重開均回到乾淨待命狀態");
+                }
+            }
+            check(!model.matchOver && model.redScore == 0 && model.blueScore == 0
+                            && model.getHitCount(true) == 0 && model.getHitCount(false) == 0
+                            && model.getLastHitTeam() == null && !model.hasBlocked(true)
+                            && !model.isAttackLocked(true) && !model.isAttackLocked(false)
+                            && model.transientMessage == null && model.spikeEffect.getSmokeParticles().isEmpty()
+                            && model.getServeHandler().isWaitingForServe(),
+                    "所有本地及 Server 對局重開不殘留上一局觸球、得分或特效");
         }
     }
 
@@ -1494,8 +1493,10 @@ public class GameplayFlowTest {
             updateOnlySide(model, redSide, hit.copy());
         }
         if (model.getServeHandler().getState() == ServeState.JUMP_TOSS) return false;
-        double expectedVx = route == 2 ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
+        double expectedVx = route == 2 ? GameConfig.SERVE_JUMP_SLOW_HORIZONTAL_SPEED
+                : route == 1 ? GameConfig.SERVE_JUMP_SHORT_HORIZONTAL_SPEED : GameConfig.SERVE_JUMP_HORIZONTAL_SPEED;
         double expectedVy = route == 1 ? GameConfig.SERVE_JUMP_SHORT_VELOCITY_Y
+                : route == 2 ? GameConfig.SERVE_JUMP_SLOW_VELOCITY_Y
                 : route == 3 ? GameConfig.SERVE_JUMP_LONG_VELOCITY_Y : GameConfig.SERVE_JUMP_VELOCITY_Y;
         check(Math.abs(model.ball.vx) == expectedVx
                         && Math.abs(model.ball.vy - (expectedVy + GameConfig.GRAVITY)) < 1e-9,
@@ -1811,101 +1812,23 @@ public class GameplayFlowTest {
                 "藍隊取得發球權時也直接站到發球位");
     }
 
-    private static void testPracticeMode() {
-        GameModel model = new GameModel(true);
-        check(model.isPracticeMode() && !model.getServeHandler().isRedServing()
-                        && model.getServeHandler().isWaitingForServe(),
-                "練習模式一開始由藍隊等待發球");
-        check(model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X
-                        && model.redTeam.backPlayer.x == new Team(true).backPlayer.x,
-                "練習模式只讓藍隊後排站到發球位");
-
-        TeamInput redServe = new TeamInput();
-        redServe.servePressed = true;
-        model.update(redServe, new TeamInput());
-        check(model.getServeHandler().isWaitingForServe(), "紅隊不能在練習模式發球");
-
-        TeamInput blueServe = new TeamInput();
-        blueServe.servePressed = true;
-        model.update(new TeamInput(), blueServe);
-        check(!model.getServeHandler().isWaitingForServe() && model.ball.vx < 0,
-                "藍隊仍使用一般發球流程向紅隊發球");
-
-        for (boolean redWins : new boolean[]{true, false}) {
-            model.awardPointWithMessage(redWins, redWins ? "IN" : "OUT");
-            check(model.redScore == 0 && model.blueScore == 0 && !model.matchOver
-                            && !model.getServeHandler().isRedServing(),
-                    "練習模式不計分且得失分後都維持藍隊發球");
-            check(model.transientMessageTimer == 90, "練習模式判決仍顯示 90 幀");
-
-            for (int frame = 0; frame < 60; frame++) {
-                model.update(new TeamInput(), new TeamInput());
-            }
-            check(model.isLockedScorePhase()
-                            && model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X,
-                    "練習模式前 60 幀結束後仍歸位並鎖定");
-
-            for (int frame = 0; frame < 30; frame++) {
-                model.update(new TeamInput(), new TeamInput());
-            }
-            check(model.getServeHandler().isWaitingForServe()
-                            && !model.getServeHandler().isRedServing()
-                            && model.transientMessage == null,
-                    "練習模式後 30 幀結束才重新等待藍隊發球");
-        }
-
-        model.restart();
-        check(model.isPracticeMode() && model.getServeHandler().isWaitingForServe()
-                        && !model.getServeHandler().isRedServing()
-                        && model.blueTeam.backPlayer.x == GameConfig.BLUE_BACK_SERVE_X
-                        && model.redTeam.backPlayer.x == new Team(true).backPlayer.x,
-                "練習模式按 R 重開後仍由藍隊發球");
-        check(!new GameModel().isPracticeMode(), "一般單機與 Server 預設不是練習模式");
-    }
-
-    private static void testBluePracticeMode() {
-        GameModel model = new GameModel(true, true);
-        check(model.isPracticeMode() && model.isPracticeRedServing()
-                        && model.getServeHandler().isRedServing()
-                        && model.getServeHandler().isWaitingForServe(),
-                "藍隊練習模式起始由紅隊等待發球");
-        check(model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X
-                        && model.blueTeam.backPlayer.x == new Team(false).backPlayer.x,
-                "藍隊練習模式只讓紅隊後排站到發球位");
-
-        TeamInput blueServe = new TeamInput();
-        blueServe.servePressed = true;
-        model.update(new TeamInput(), blueServe);
-        check(model.getServeHandler().isWaitingForServe(), "藍隊不能在練習模式發球");
-
-        TeamInput redServe = new TeamInput();
-        redServe.servePressed = true;
-        model.update(redServe, new TeamInput());
-        check(!model.getServeHandler().isWaitingForServe() && model.ball.vx > 0,
-                "紅隊使用原本發球流程向藍隊發球");
-
-        for (boolean redWins : new boolean[] {true, false}) {
-            model.awardPointWithMessage(redWins, redWins ? "IN" : "OUT");
-            check(model.redScore == 0 && model.blueScore == 0 && !model.matchOver
-                            && model.getServeHandler().isRedServing()
-                            && model.transientMessageTimer == 90,
-                    "藍隊練習模式得失分都不計分，仍顯示 90 幀並由紅隊發球");
+    private static void testFormalScoringBothSides() {
+        GameModel model = new GameModel();
+        check(model.getServeHandler().isRedServing(), "正式對局第一球由紅方發球");
+        for (boolean redWins : new boolean[]{false, true}) {
+            model.awardPointWithMessage(redWins, "IN");
+            check(model.getServeHandler().isRedServing() == redWins
+                    && (redWins ? model.redScore : model.blueScore) == 1
+                    && model.transientMessageTimer == 90, "得分、發球權及判決共用正式比賽流程");
             for (int frame = 0; frame < 60; frame++) model.update(new TeamInput(), new TeamInput());
-            check(model.isLockedScorePhase()
-                            && model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X,
-                    "藍隊練習模式前 60 幀後紅隊發球員直接歸發球位");
+            check(model.isLockedScorePhase(), "前 60 幀後歸位鎖定");
             for (int frame = 0; frame < 30; frame++) model.update(new TeamInput(), new TeamInput());
-            check(model.getServeHandler().isWaitingForServe()
-                            && model.getServeHandler().isRedServing()
-                            && model.transientMessage == null,
-                    "藍隊練習模式後 30 幀結束才重新允許紅隊發球");
+            check(model.getServeHandler().isWaitingForServe() && model.transientMessage == null,
+                    "後 30 幀結束才允許下一球");
         }
-
         model.restart();
-        check(model.isPracticeMode() && model.isPracticeRedServing()
-                        && model.getServeHandler().isRedServing()
-                        && model.redTeam.backPlayer.x == GameConfig.RED_BACK_SERVE_X,
-                "藍隊練習模式重開後仍由紅隊發球");
+        check(model.redScore == 0 && model.blueScore == 0 && model.getServeHandler().isRedServing(),
+                "正式模式重開清分並由紅方發球");
     }
 
     private static void testFinalPointStopsBeforeNextServe() {
@@ -1995,6 +1918,45 @@ public class GameplayFlowTest {
         }
     }
 
+    private static void testBlockTouchHintLifetimeAndRendering() {
+        GameModel model = new GameModel();
+        for (boolean redSide : new boolean[]{true, false}) model.blockTouchEffect.show(redSide);
+        var frame = view.RenderFrame.capture(model, null);
+        check(frame.players().stream().filter(view.RenderFrame.PlayerImage::showBlockTouch).count() == 2,
+                "只有兩側 MB 顯示攔網提示");
+        view.PlayerRenderer renderer = new view.PlayerRenderer(new view.AssetLoader());
+        for (boolean mirror : new boolean[]{false, true}) {
+          for (var player : frame.players()) {
+            if (!player.showBlockTouch()) continue;
+            BufferedImage image = new BufferedImage(1200, 675, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = image.createGraphics();
+            renderer.drawBlockTouch(g, player, mirror);
+            g.dispose();
+            int pixels = 0, left = 1200, right = 0;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    Color pixel = new Color(image.getRGB(x, y), true);
+                    if (pixel.getAlpha() == 0) continue;
+                    pixels++;
+                    left = Math.min(left, x);
+                    right = Math.max(right, x);
+                    check((pixel.getRed() > pixel.getBlue()) == player.redSide(), "提示維持隊伍顏色");
+                    check(y < player.y(), "提示位於 MB 正上方");
+                }
+            }
+            double center = mirror ? 1200 - player.x() - player.width() / 2.0 : player.x() + player.width() / 2.0;
+            check(pixels > 0 && Math.abs((left + right) / 2.0 - center) < 5, "一般與鏡像視角的提示均水平置中");
+          }
+        }
+        for (int i = 1; i < BlockTouchEffect.DURATION_FRAMES; i++) model.blockTouchEffect.beginFrame();
+        check(model.blockTouchEffect.isVisible(true) && model.blockTouchEffect.isVisible(false), "提示維持完整設定時間");
+        model.blockTouchEffect.beginFrame();
+        check(!model.blockTouchEffect.isVisible(true) && !model.blockTouchEffect.isVisible(false), "提示到期消失");
+        model.blockTouchEffect.show(true);
+        model.restart();
+        check(!model.blockTouchEffect.isVisible(true), "整場重開清除舊攔網提示");
+    }
+
     private static void testMbHeadBlockAndTouchOut() {
         Team red = new Team(true);
         Team blue = new Team(false);
@@ -2025,8 +1987,9 @@ public class GameplayFlowTest {
             check(Math.abs(Math.hypot(model.ball.vx, model.ball.vy) - 1.4) < 1e-9,
                     "頭部反彈係數為 0.7，低速球不被強制加速");
             check(model.hasBlocked(redSide) && model.getHitCount(redSide) == 0
-                            && !model.spikeEffect.isSpikeTrailActive() && model.spikeEffect.getTrailPoints().isEmpty(),
-                    "圓框不計一般觸球並立即清除扣球軌跡");
+                            && model.spikeEffect.isSpikeTrailActive() && !model.spikeEffect.getTrailPoints().isEmpty()
+                            && model.blockTouchEffect.isVisible(redSide),
+                    "圓框不計一般觸球，保留軌跡並顯示攔網提示");
             for (int i = 0; i < 14; i++) mb.update(block);
             check(mb.isBlockHitBoxActive() && !mb.isHeadBlockHitBoxActive(), "block2 改用原攔網框");
             model.ball.x = mb.blockHitBox.getCenterX();
@@ -2042,7 +2005,7 @@ public class GameplayFlowTest {
             model.ball.vy = 0;
             model.update(new TeamInput(), new TeamInput());
             check("TOUCH OUT".equals(model.transientMessage), "攔網後依實際出界顯示 TOUCH OUT");
-            check(model.spikeEffect.getSmokeParticles().isEmpty(), "攔網取消軌跡後落地不產生煙霧");
+            check(!model.spikeEffect.getSmokeParticles().isEmpty(), "攔網後保留軌跡，落地仍產生煙霧");
         }
     }
 

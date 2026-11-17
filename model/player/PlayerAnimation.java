@@ -100,6 +100,17 @@ public class PlayerAnimation {
     public boolean isPlaying() {
         return playing;
     }
+    /** 目前序列抵達指定圖片幀還需幾個 tick；HOLD 不會自行推進。 */
+    int framesUntilIndex(int target) {
+        if (!playing || target >= frames.length) return Integer.MAX_VALUE;
+        if (target <= frameIndex) return 0;
+        int remaining = -frameTimer;
+        for (int i = frameIndex; i < target; i++) {
+            if (durations[i] < 0) return Integer.MAX_VALUE;
+            remaining += durations[i];
+        }
+        return Math.max(0, remaining);
+    }
 
     public boolean isHoldingFrame() {
         return playing && durations.length > 0 && durations[frameIndex] < 0;

@@ -45,7 +45,7 @@ public final class GameConfig {
     public static final double BACK_JUMP_VELOCITY_Y = -9.0;
     public static final double SETTER_JUMP_VELOCITY_Y = -6.3;
     public static final double MB_JUMP_VELOCITY_Y = -7.8;
-    public static final double MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER = 0.9;
+    public static final double MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER = 0.8;
     public static final double WS_JUMP_VELOCITY_Y = -7.8;
     public static final double DIVE_SPEED = 5.0;
 
@@ -85,7 +85,7 @@ public final class GameConfig {
     public static final double NET_MIN_REBOUND_SPEED = 1.5;
 
     // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
-    public static final double BLOCK_HITBOX_BOUNCE = 0.5;
+    public static final double BLOCK_HITBOX_BOUNCE = 0.6;
     // 頭部圓框的反彈係數；兩種攔網框皆不強制最低球速。
     public static final double BLOCK_HEAD_BOUNCE = 0.7;
 
@@ -156,12 +156,14 @@ public final class GameConfig {
     public static final double SERVE_LOW_NET_VELOCITY_Y = -7;
     public static final double SERVE_SHORT_HORIZONTAL_SPEED = 6.4;
     public static final double SERVE_SHORT_VELOCITY_Y = -14.1;
-    // 跳發出手的預設速度；其餘三種球路於觸球當下調整其中一個分量。
+    // 跳發出手速度；S／↓ 與 A／藍隊 → 兩種變化各自設定水平與垂直分量。
     public static final double SERVE_JUMP_HORIZONTAL_SPEED = 20.0;
     public static final double SERVE_JUMP_VELOCITY_Y = -1.0;
-    public static final double SERVE_JUMP_SHORT_VELOCITY_Y = 0.0;
+    public static final double SERVE_JUMP_SHORT_HORIZONTAL_SPEED = 17.2;
+    public static final double SERVE_JUMP_SHORT_VELOCITY_Y = -1.0;
     public static final double SERVE_JUMP_LONG_VELOCITY_Y = -2.0;
-    public static final double SERVE_JUMP_SLOW_HORIZONTAL_SPEED = 17.0;
+    public static final double SERVE_JUMP_SLOW_HORIZONTAL_SPEED = 12.5;
+    public static final double SERVE_JUMP_SLOW_VELOCITY_Y = -3.0;
 
     // 三米線距離（像素）；後排起跳扣球以起跳中心判定，踩線也違規。
     public static final double THREE_METER_PX = 167.0;
@@ -175,6 +177,8 @@ public final class GameConfig {
 
     /** 啟動時拒絕會讓物理或動畫計算失效的設定；不限制合法調參手感。 */
     public static void validate() {
+        requirePositive("jump serve variant horizontal speeds", SERVE_JUMP_SHORT_HORIZONTAL_SPEED,
+                SERVE_JUMP_SLOW_HORIZONTAL_SPEED);
         requirePositive("screen and physics", SCREEN_WIDTH, SCREEN_HEIGHT, TICKS_PER_SECOND,
                 GRAVITY, BALL_RADIUS, PLAYER_IMAGE_WIDTH, PLAYER_IMAGE_HEIGHT, NET_WIDTH, NET_HEIGHT);
         requirePositive("court dimensions", WORLD_RIGHT - WORLD_LEFT, FLOOR_Y - WORLD_TOP,

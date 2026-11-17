@@ -18,6 +18,9 @@ public class CourtRenderer {
     private static final int NET_VISIBLE_HEIGHT = 55;
     private static final int POLE_WIDTH = 6;
     private static final Color GUIDE_COLOR = new Color(180, 180, 180);
+    private static final int GUIDE_BASELINE_Y_PX = 20;
+    private static final int GUIDE_RIGHT_MARGIN_PX = 12;
+    private static final Font GUIDE_FONT = new Font("Arial", Font.PLAIN, 12);
     private static final Shape NET_SHAPE = new NetHitBox().getShape();
 
     public void draw(Graphics2D g) {
@@ -38,9 +41,12 @@ public class CourtRenderer {
 
     public void drawWorldBoundaryGuide(Graphics2D g) {
         g.setColor(GUIDE_COLOR);
-        g.drawString("World boundary: left=" + (int) GameConfig.WORLD_LEFT
+        g.setFont(GUIDE_FONT);
+        String text = "World boundary: left=" + (int) GameConfig.WORLD_LEFT
                 + ", right=" + (int) GameConfig.WORLD_RIGHT
-                + ", top=" + (int) GameConfig.WORLD_TOP, 16, 22);
+                + ", top=" + (int) GameConfig.WORLD_TOP;
+        g.drawString(text, GameConfig.SCREEN_WIDTH - GUIDE_RIGHT_MARGIN_PX
+                - g.getFontMetrics().stringWidth(text), GUIDE_BASELINE_Y_PX);
     }
 
     private void drawBackground(Graphics2D g) {
