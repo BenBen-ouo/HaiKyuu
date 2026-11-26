@@ -7,6 +7,8 @@ import java.awt.Composite;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.awt.Rectangle;
 import java.awt.Stroke;
 import model.AppVersion;
@@ -16,7 +18,6 @@ import model.GameConfig;
 public final class MatchDisplay {
     private static final Font VERSION_FONT = new Font("Arial", Font.PLAIN, 14);
     private static final Font SCORE_FONT = new Font("Arial", Font.BOLD, 24);
-    private static final Font PRACTICE_FONT = new Font("Microsoft JhengHei", Font.PLAIN, 22);
     private static final Font VICTORY_FONT = new Font("Arial", Font.BOLD, 48);
     private static final Font JUDGMENT_MEASURE_FONT = new Font("Microsoft JhengHei", Font.BOLD, 48);
     private static final Font JUDGMENT_FONT = new Font("Microsoft JhengHei", Font.BOLD, 36);
@@ -29,7 +30,7 @@ public final class MatchDisplay {
             AlphaComposite.getInstance(AlphaComposite.SRC_OVER, .9f);
     private static final BasicStroke PANEL_STROKE = new BasicStroke(4f);
     private static final int VERSION_RIGHT_MARGIN_PX = 12;
-    private static final int VERSION_BASELINE_Y = 20;
+    private static final int VERSION_BASELINE_Y = 40;
     private static final int SCORE_BASELINE_Y = 44;
     private static final int PANEL_PADDING_X_PX = 16;
     private static final int PANEL_EXTRA_HEIGHT_PX = 36;
@@ -37,6 +38,34 @@ public final class MatchDisplay {
     private static final int RESTART_HINT_GAP_PX = 20;
     private static final String VICTORY_MEASURE_TEXT = "RED WINS";
     private static final String RESTART_HINT = "Press R to restart";
+    private static boolean fontsPrepared;
+
+    /** 字型為 JVM 共用資源，連線握手與對局開始前初始化一次，避免占用連線逾時預算。 */
+    public static synchronized void prepareFonts() {
+        if (fontsPrepared) return;
+        BufferedImage image = new BufferedImage(GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT,
+                BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            new MatchDisplay().prepareRenderResources(g);
+            fontsPrepared = true;
+        } finally {
+            g.dispose();
+        }
+    }
+
+    /** 在對局開始前走過實際量字／繪字路徑；僅建立 Font 並不會載入字型與字形。 */
+    private void prepareRenderResources(Graphics2D g) {
+        draw(g, new RenderFrame.Match(0, 0, false, null, null, 0, null), false);
+        // 這些是繪圖預熱樣本，不作為模型允許判決的清單。
+        for (String text : new String[]{"IN", "OUT", "TOUCH OUT", "發球犯規", "後排三米線", "四觸違規"}) {
+            drawJudgment(g, text, true);
+        }
+        drawVictory(g, true);
+        drawVictory(g, false);
+    }
 
     public void draw(Graphics2D g, RenderFrame.Match match, boolean bluePerspective) {
         g.setColor(Color.GRAY);
@@ -45,12 +74,10 @@ public final class MatchDisplay {
                 GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(AppVersion.LABEL)
                         - VERSION_RIGHT_MARGIN_PX, VERSION_BASELINE_Y);
 
-        String score = match.isPracticeMode()
-                ? (match.isPracticeRedServing() ? "右方練習模式" : "左方練習模式")
-                : bluePerspective ? match.blueScore() + " : " + match.redScore()
+        String score = bluePerspective ? match.blueScore() + " : " + match.redScore()
                         : match.redScore() + " : " + match.blueScore();
         g.setColor(Color.BLACK);
-        g.setFont(match.isPracticeMode() ? PRACTICE_FONT : SCORE_FONT);
+        g.setFont(SCORE_FONT);
         g.drawString(score, (GameConfig.SCREEN_WIDTH - g.getFontMetrics().stringWidth(score)) / 2,
                 SCORE_BASELINE_Y);
 

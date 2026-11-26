@@ -6,7 +6,9 @@ import java.io.IOException;
 interface ClientTransport extends AutoCloseable {
     void send(byte[] data) throws IOException;
 
-    UdpCodec.Decoded receive() throws IOException;
+    record Received(UdpCodec.Decoded decoded, long arrivedAtNanos) {}
+
+    Received receive() throws IOException;
 
     boolean isClosed();
 

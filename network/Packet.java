@@ -55,7 +55,9 @@ public final class Packet {
         FLOW,
         AIR_SET_CONTACT,
         JUMP_TOSS,
-        NET_CONTACT
+        NET_CONTACT,
+        RED_BLOCK_CONTACT,
+        BLUE_BLOCK_CONTACT
     }
 
     public static int encodeInput(ControlInput input) {

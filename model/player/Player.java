@@ -101,6 +101,14 @@ public abstract class Player {
     }
 
     public int getAnimationFrameIndex() { return animation.getFrameIndex(); }
+    public int framesUntilBlockPhase(BlockPhase phase) {
+        if (action != PlayerAction.BLOCK) return Integer.MAX_VALUE;
+        return switch (phase) {
+            case HANDS_EXTENDED -> animation.framesUntilIndex(1);
+            case RETRACTING -> animation.framesUntilIndex(2);
+            default -> throw new IllegalArgumentException("Only future hands phases have a duration");
+        };
+    }
 
     public boolean isAttackReady() {
         return action == PlayerAction.ATTACK_READY;

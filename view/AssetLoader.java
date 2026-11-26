@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import javax.imageio.ImageIO;
+import network.TimingDiagnostics;
 
 public class AssetLoader {
     private final Map<String, Image> cache = new HashMap<>();
@@ -22,6 +23,7 @@ public class AssetLoader {
             return cache.get(fileName);
         }
 
+        long loadStarted = System.nanoTime();
         BufferedImage image = null;
 
         try {
@@ -60,6 +62,7 @@ public class AssetLoader {
         }
 
         cache.put(fileName, image);
+        TimingDiagnostics.recordIfSlow("asset load " + fileName, loadStarted, 5);
         return image;
     }
 }
