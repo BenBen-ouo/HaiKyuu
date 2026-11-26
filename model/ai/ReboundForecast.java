@@ -46,7 +46,8 @@ final class ReboundForecast {
                     : Math.hypot(dx, dy) <= shape.width() / 2 + GameConfig.BALL_RADIUS;
             if (!overlaps) continue;
             var reflected = BlockReflection.reflect(speed, vy + GameConfig.GRAVITY * t, dx, dy, -1,
-                    hands ? GameConfig.BLOCK_HITBOX_BOUNCE : GameConfig.BLOCK_HEAD_BOUNCE);
+                    hands ? GameConfig.BLOCK_HITBOX_BOUNCE : GameConfig.BLOCK_HEAD_BOUNCE,
+                    hands ? GameConfig.BLOCK_HITBOX_MIN_REBOUND_SPEED : 0);
             var rebound = new BallForecast(bx, by, reflected.x(), reflected.y());
             int ground = rebound.descendingArrival(GameConfig.FLOOR_Y - GameConfig.BALL_RADIUS);
             double landing = rebound.xAt(ground);

@@ -373,7 +373,8 @@ public class RallyContactHandler {
                 ? GameConfig.BLOCK_HEAD_BOUNCE : GameConfig.BLOCK_HITBOX_BOUNCE;
         var reflected = BlockReflection.reflect(model.ball.vx, model.ball.vy,
                 model.ball.x - box.getCenterX(), model.ball.y - box.getCenterY(),
-                SideRules.directionTowardOpponent(blocker.redSide), bounce);
+                SideRules.directionTowardOpponent(blocker.redSide), bounce,
+                box == blocker.headBlockHitBox ? 0 : GameConfig.BLOCK_HITBOX_MIN_REBOUND_SPEED);
         model.ball.vx = reflected.x();
         model.ball.vy = reflected.y();
     }

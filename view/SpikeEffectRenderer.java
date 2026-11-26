@@ -49,6 +49,15 @@ public class SpikeEffectRenderer {
     private BufferedImage smokeLayer;
     private BufferedImage blurredSmoke;
 
+    /** 只在離屏畫布預熱漸層、模糊器及圖層配置，不讀取或產生模型煙霧。 */
+    void prepareRenderResources(Graphics2D g) {
+        var blob = new RenderFrame.SmokeBlob(0, 0, 1, 1, 0, List.of(1f, 1f, 1f, 1f, 1f, 1f));
+        drawSmoke(g, List.of(new RenderFrame.Smoke(GameConfig.SCREEN_WIDTH / 2.0, GameConfig.FLOOR_Y,
+                25, 50, 50, List.of(blob))));
+        clearImage(smokeLayer);
+        clearImage(blurredSmoke);
+    }
+
     public void draw(Graphics2D g, RenderFrame frame) {
         drawTrail(g, frame.trail());
         drawSmoke(g, frame.smoke());

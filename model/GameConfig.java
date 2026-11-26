@@ -86,7 +86,9 @@ public final class GameConfig {
 
     // MB 攔網 hitBox 反彈參數，只在 block2 圖片幀啟用。
     public static final double BLOCK_HITBOX_BOUNCE = 0.6;
-    // 頭部圓框的反彈係數；兩種攔網框皆不強制最低球速。
+    // 手部反彈的總速度下限（像素／幀），只補足慢球，不改反射方向；設 0 可停用。
+    public static final double BLOCK_HITBOX_MIN_REBOUND_SPEED = 3.0;
+    // 頭部圓框維持原反彈係數，不套用手部最低速度。
     public static final double BLOCK_HEAD_BOUNCE = 0.7;
 
     // 球場範圍 (以網子中心點左右各 500)
@@ -188,7 +190,8 @@ public final class GameConfig {
         requirePositive("block multiplier", MB_REPEAT_BLOCK_JUMP_SPEED_MULTIPLIER);
         requireNonNegative("movement and bounce", BACK_RUN_START_SPEED, BACK_RUN_SECOND_STAGE_SPEED,
                 BACK_RUN_THIRD_STAGE_SPEED, BACK_RUN_FOURTH_STAGE_SPEED, BACK_RUN_MAX_SPEED,
-                BALL_BOUNCE, NET_SIDE_BOUNCE, NET_TOP_BOUNCE, BLOCK_HEAD_BOUNCE, BLOCK_HITBOX_BOUNCE);
+                BALL_BOUNCE, NET_SIDE_BOUNCE, NET_TOP_BOUNCE, BLOCK_HEAD_BOUNCE, BLOCK_HITBOX_BOUNCE,
+                BLOCK_HITBOX_MIN_REBOUND_SPEED);
         if (BACK_RUN_FIRST_STAGE_END_FRAMES <= 0
                 || BACK_RUN_FIRST_STAGE_END_FRAMES >= BACK_RUN_SECOND_STAGE_END_FRAMES
                 || BACK_RUN_SECOND_STAGE_END_FRAMES >= BACK_RUN_THIRD_STAGE_END_FRAMES

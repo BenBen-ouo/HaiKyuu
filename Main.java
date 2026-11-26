@@ -20,6 +20,7 @@ import network.NetworkView;
 import network.TimingDiagnostics;
 import view.GamePanel;
 import view.LauncherPanel;
+import view.MatchDisplay;
 
 public class Main {
     private static final int LAUNCHER_WIDTH_PX = 600;
@@ -31,6 +32,7 @@ public class Main {
         }
 
         SwingUtilities.invokeLater(() -> {
+            MatchDisplay.prepareFonts();
             if (args.length > 0 && "local".equalsIgnoreCase(args[0])) {
                 startLocalGame();
             } else if (args.length > 0 && "practice".equalsIgnoreCase(args[0])) {
