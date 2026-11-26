@@ -7,7 +7,7 @@ public final class BlockReflection {
     private BlockReflection() {}
 
     public static BallTrajectory.Velocity reflect(double vx, double vy, double nx, double ny,
-            double fallbackDirectionX, double bounce) {
+            double fallbackDirectionX, double bounce, double minimumSpeed) {
         double length = Math.hypot(nx, ny);
         if (length < MIN_NORMAL_LENGTH) {
             nx = vx == 0 ? fallbackDirectionX : Math.signum(vx);
@@ -17,9 +17,14 @@ public final class BlockReflection {
         nx /= length;
         ny /= length;
         double dot = vx * nx + vy * ny;
-        if (dot < 0) return new BallTrajectory.Velocity((vx - 2 * dot * nx) * bounce,
-                (vy - 2 * dot * ny) * bounce);
         double speed = Math.hypot(vx, vy) * bounce;
-        return new BallTrajectory.Velocity(nx * speed, ny * speed);
+        double reflectedX = dot < 0 ? (vx - 2 * dot * nx) * bounce : nx * speed;
+        double reflectedY = dot < 0 ? (vy - 2 * dot * ny) * bounce : ny * speed;
+        double reflectedSpeed = Math.hypot(reflectedX, reflectedY);
+        if (reflectedSpeed >= minimumSpeed) return new BallTrajectory.Velocity(reflectedX, reflectedY);
+        // 完全靜止的球沒有既有反射方向，沿本次碰撞法線推出。
+        if (reflectedSpeed == 0) return new BallTrajectory.Velocity(nx * minimumSpeed, ny * minimumSpeed);
+        double scale = minimumSpeed / reflectedSpeed;
+        return new BallTrajectory.Velocity(reflectedX * scale, reflectedY * scale);
     }
 }

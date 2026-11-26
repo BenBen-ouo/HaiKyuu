@@ -78,6 +78,7 @@ public class GameplayFlowTest {
         testFinalPointStopsBeforeNextServe();
         testBackRunAcceleration();
         testMbHeadBlockAndTouchOut();
+        testHandBlockMinimumSpeed();
         testWingReturnCanReceive();
         testAttackLockAndPossession();
         testNetAppearanceAndFlash();
@@ -1955,6 +1956,30 @@ public class GameplayFlowTest {
         model.blockTouchEffect.show(true);
         model.restart();
         check(!model.blockTouchEffect.isVisible(true), "整場重開清除舊攔網提示");
+    }
+
+    private static void testHandBlockMinimumSpeed() {
+        for (boolean redSide : new boolean[]{true, false}) {
+            for (double speed : new double[]{0, .2, 20}) {
+                var game = new GameModel();
+                game.getServeHandler().setWaitingForServe(false);
+                var team = redSide ? game.redTeam : game.blueTeam;
+                var opponent = redSide ? game.blueTeam : game.redTeam;
+                game.recordRegularHit(!redSide, opponent.backPlayer);
+                var input = new TeamInput(); input.mbActionPressed = true;
+                for (int t = 0; t < 15; t++) team.quickAttacker.update(input);
+                var box = team.quickAttacker.blockHitBox;
+                check(team.quickAttacker.isBlockHitBoxActive(), "實際手部攔網期間測試");
+                game.ball.x = box.getCenterX() + (redSide ? 3 : -3);
+                game.ball.y = box.getCenterY();
+                game.ball.vx = (redSide ? -1 : 1) * speed; game.ball.vy = 0;
+                new RallyContactHandler(game).collideTeam(team, redSide, input);
+                check(game.hasBlocked(redSide), "手框碰撞必須實際發生");
+                check(Math.abs(Math.hypot(game.ball.vx, game.ball.vy)
+                                - Math.max(speed * GameConfig.BLOCK_HITBOX_BOUNCE, GameConfig.BLOCK_HITBOX_MIN_REBOUND_SPEED)) < .00001,
+                        "正式碰撞使用可調手部下限，高速球保留係數");
+            }
+        }
     }
 
     private static void testMbHeadBlockAndTouchOut() {

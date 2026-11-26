@@ -7,6 +7,7 @@ package view;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.awt.RenderingHints;
 import model.GameConfig;
 import model.GameModel;
@@ -26,6 +27,24 @@ public class GameRenderer {
     private final BallRenderer ballRenderer = new BallRenderer(assets);
     private final SpikeEffectRenderer spikeEffectRenderer = new SpikeEffectRenderer();
     private final MatchDisplay matchDisplay = new MatchDisplay();
+    private boolean resourcesPrepared;
+
+    /** GamePanel 建構時、顯示視窗與啟動更新迴圈前呼叫；不改變對局或可見畫面。 */
+    public void prepareForFirstFrame() {
+        if (resourcesPrepared) return;
+        BufferedImage image = new BufferedImage(GameConfig.SCREEN_WIDTH, GameConfig.SCREEN_HEIGHT,
+                BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            MatchDisplay.prepareFonts();
+            spikeEffectRenderer.prepareRenderResources(g);
+            resourcesPrepared = true;
+        } finally {
+            g.dispose();
+        }
+    }
 
     public void render(Graphics2D g, GameModel model) {
         render(g, model, false);

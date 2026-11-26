@@ -2,7 +2,7 @@
 
 本文件記錄實作現況。協作與品質規則以 [AGENTS.md](AGENTS.md) 為權威；操作與發布引用 [README.md](README.md)。
 
-更新：2026-11-07，`AIbot`，基準 commit `ed3ada0` 加目前未提交的 AI 門檻、補位、本地暫停、近網第三球與選單調整。發行版本 v1.2.0；以下已實作與尚待確認分開記錄。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
+初版盤點：2026-11-07，`AIbot`，基準 commit `ed3ada0` 加當時 AI 門檻、補位、本地暫停、近網第三球與選單調整，版本 v1.2.0。最新修正為 2026-11-26 的 v1.2.1，見第 15 節；以下歷史驗證仍保留各自來源與限制。A／B／C／D／E 分類沿用 AGENTS；未另標示者為程式現況 C，不等於人工實測通過。
 
 ## 1. 系統目的與範圍
 
@@ -70,7 +70,7 @@ model 子模組 → model 與必要的 model 子模組
 - `assets/images/` 由 AssetLoader 優先從 JAR 載入，再回退開發目錄；圖片不再作為攔網碰撞階段的判斷來源。
 - GameConfig 是全域調參入口，Team 管理角色碰撞框，Renderer 管理外觀。起跳 Y 參數以 `*_JUMP_VELOCITY_Y` 命名，保留使用者原數值。
 - 發球／扣球的正值水平速率以 `HORIZONTAL_SPEED` 命名，帶符號垂直分量以 `VELOCITY_Y` 命名；ServeType 也分開描述速率與分量，沒有改數值或球路。
-- AppVersion 是遊戲／發行版本來源；UdpCodec 的協定版本是不同概念。現行遊戲版本為 v1.2.0，協定版本為 12。
+- AppVersion 是遊戲／發行版本來源；UdpCodec 的協定版本是不同概念。遊戲版本讀取 AppVersion，協定版本為 12。
 - 建置／發行／診斷目錄由 .gitignore 排除；不提交 bundled runtime。
 - 沒有建立 Service、Repository、shared/common 或相容層空殼。
 - 實際角色與模型目前沒有對外繼承擴充入口；具體類別使用 final，Player 的建構責任限於角色 package。GamePanel 持有對局執行資源，明確拒絕序列化／反序列化，不以 transient 欄位假裝可還原對局。
@@ -252,3 +252,13 @@ AI 初版 JAR 曾以 `javac -Xlint:all -encoding UTF-8 -cp release/HaiKyuu/app/H
 本次驗證來源為 `AIbot` 基準 commit `86ce35d91541580aa17c669ef868a48762a53603` 加目前未提交差異，包含使用者手動設定 MB 二次起跳倍率 0.8 與跳發短球垂直速度 2.0。JDK 21.0.10 的 `build-release.bat --no-pause` 退出碼 0，乾淨編譯零警告，GameplayFlowTest、LauncherTest、NetworkSyncTest、AiMatchTest、AiTacticsTest、ArchitectureTest、ReleaseReplacementTest 與隔離 JAR 的 39 張素材檢查通過。較小選單與 TOUCH 置中已有離屏繪圖／幾何驗證。
 
 更新後 JAR 另編譯 NetworkSyncTest 至 `build/ai-tactics-network`，執行 `java '-Djava.awt.headless=true' -cp 'release/HaiKyuu/app/HaiKyuu.jar;build/ai-tactics-network' network.NetworkSyncTest loopback`，退出碼 0，使用動態埠並完成資源清理。`release/HaiKyuu/` 與 `release/HaiKyuu-v1.2.0.zip` 已更新，兩者遊戲 JAR 雜湊一致；完整 log 在忽略的 `build/ai-tactics-release-verification.log`。兩隊 AI 決策本機取樣平均約 0.004～0.006 ms，p95 約 0.021～0.028 ms，不包含整體繪圖成本。未宣稱真人實戰、雙機區網或無 Java Windows 人工驗收通過；未 commit、push 或對外發布。
+
+## 15. v1.2.1 首次判決與手部攔網反彈
+
+- A：修正開局首次落地判決的停頓；僅 MB 手部攔網框加入可調總速度下限，保留反射方向。頭部圓框與網子本體維持原有反彈；AI 重構與提高長球 TOUCH OUT 機率不在本次範圍。
+- C：JDK 21、新 JVM、相同離屏畫布與文字反鋸齒，在 90 次普通比分繪製後，首次 IN 判決量測約 113～119 ms，另一次冷啟動觀察到 2119 ms；同 JVM 第二次約 1.5～2.4 ms。首次煙霧約 29～36 ms。這是路徑的 wall-clock 耗時，包含首次字型／字形與 Java2D 初始化、OS 排程等成本，不能全部當成純 CPU 字型時間。
+- MatchDisplay.prepareFonts 在非 dedicated server 的 Main 啟動路徑先以實際判決／勝負文字離屏量字及繪字，每個 JVM 一次，安排在 Client／房主連線握手前。GamePanel 的 GameRenderer.prepareForFirstFrame 同時確保字型已備妥，並預先建立該 renderer 的煙霧圖層、漸層與模糊器資源；視窗顯示、更新迴圈開始及第一球之前完成。預熱不操作模型，不建立假碰撞或模型煙霧。
+- 手部最低反彈速度為 GameConfig.BLOCK_HITBOX_MIN_REBOUND_SPEED，預設 3.0 像素／幀，設 0 可停用；驗證為有限非負數。BlockReflection 先算原反射結果，只有總速度不足時等比放大；完全靜止時沿既有碰撞法線彈開。正式手部碰撞及 AI ReboundForecast 共用算法與設定，頭部傳入 0，不改幾何、計次、TOUCH OUT 或攔網反彈係數。
+- 驗證來源：Fix-lag，基準 fc77078 加本次未提交差異。全新 build/v121-verified 以 javac -Xlint:all -encoding UTF-8 編譯零警告，AGENTS 日常入口的 14 個 Java 測試及 ArchitectureTest 全部通過。新增 BlockReflectionTest 驗證方向、上下限、靜止球及鏡像，GameplayFlowTest 覆蓋兩側實際手框碰撞，既有頭框案例仍驗證慢球不強制加速。RenderWarmupTest 驗證準備不改模型，以及預熱前後判決／煙霧／鏡像的像素一致；兩項新測試已接入日常與打包入口，打包腳本語法檢查通過。
+- 效能證據：修正前獨立探針在 build/v121-first-landing-before.log；修正後三個獨立 JVM 的 build/v121-warmup-1.log 至 -3.log，首次 IN 分別為 1.162／1.272／1.742 ms，準備移至開局前約 287～306 ms。證明本機 headless 的首次判決繪圖尖峰降低，不代表完整畫面每幀都低於 16.7 ms，也不代表一般煙霧每幀成本已消除。編譯與回歸 log 為 build/v121-compile.log、build/v121-*.log。
+- 未重新打包 EXE／ZIP，未做真人 GUI、不同 DPI／顯示驅動及雙機區網實測；既有發行產物不會隨來源變更自動更新。

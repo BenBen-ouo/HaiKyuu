@@ -63,6 +63,7 @@ public final class GamePanel extends JPanel {
         setFocusable(true);
         setLayout(null);
         if (networkView == null && controller.canPause()) addPauseControls();
+        renderer.prepareForFirstFrame();
     }
 
     private void addPauseControls() {
