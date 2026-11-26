@@ -14,6 +14,7 @@ import java.awt.geom.Area;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.Ellipse2D;
 import network.NetworkView;
+import network.TimingDiagnostics;
 
 public class GameRenderer {
     private static final Color NET_HITBOX_FILL = new Color(40, 210, 90, 70);
@@ -54,8 +55,11 @@ public class GameRenderer {
             drawWorld(g, frame, true);
         }
 
+        long hudStarted = System.nanoTime();
+        for (RenderFrame.PlayerImage player : frame.players()) playerRenderer.drawBlockTouch(g, player, mirrorWorld);
         // 比分、規則提示與比賽結束畫面永遠保持正常方向。
         matchDisplay.draw(g, frame.match(), mirrorWorld);
+        TimingDiagnostics.recordIfSlow("paint HUD", hudStarted, 5);
     }
 
     private void drawMirroredWorld(Graphics2D g, RenderFrame frame) {
@@ -73,15 +77,23 @@ public class GameRenderer {
     }
 
     private void drawWorld(Graphics2D g, RenderFrame frame, boolean drawWorldBoundaryGuide) {
+        long started = System.nanoTime();
         courtRenderer.draw(g, drawWorldBoundaryGuide, frame.netFlashFrames());
         drawNetHitBox(g, frame.net());
+        TimingDiagnostics.recordIfSlow("paint court", started, 5);
 
+        started = System.nanoTime();
         for (RenderFrame.PlayerImage player : frame.players()) playerRenderer.draw(g, player);
+        TimingDiagnostics.recordIfSlow("paint players", started, 5);
 
+        started = System.nanoTime();
         if (frame.ball().visible()) {
             ballRenderer.draw(g, frame.ball());
         }
+        TimingDiagnostics.recordIfSlow("paint ball", started, 5);
+        started = System.nanoTime();
         spikeEffectRenderer.draw(g, frame);
+        TimingDiagnostics.recordIfSlow("paint effects", started, 5);
     }
 
     private void drawNetHitBox(Graphics2D g, RenderFrame.Net box) {

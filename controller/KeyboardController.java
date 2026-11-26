@@ -16,6 +16,15 @@ import model.serve.ServeType;
 public class KeyboardController implements KeyListener, FocusListener {
     private final Set<Integer> pressedKeys = new HashSet<>();
     private boolean previousHitBoxTogglePressed;
+    private final Set<Integer> blockedUntilRelease = new HashSet<>();
+    private boolean suspended;
+
+    public synchronized void setSuspended(boolean value) {
+        blockedUntilRelease.addAll(pressedKeys);
+        pressedKeys.clear();
+        previousHitBoxTogglePressed = false;
+        suspended = value;
+    }
 
     @Override
     public synchronized void focusLost(FocusEvent event) {
@@ -127,12 +136,14 @@ public class KeyboardController implements KeyListener, FocusListener {
 
     @Override
     public synchronized void keyPressed(KeyEvent e) {
-        pressedKeys.add(e.getKeyCode());
+        if (suspended) blockedUntilRelease.add(e.getKeyCode());
+        else if (!blockedUntilRelease.contains(e.getKeyCode())) pressedKeys.add(e.getKeyCode());
     }
 
     @Override
     public synchronized void keyReleased(KeyEvent e) {
         pressedKeys.remove(e.getKeyCode());
+        blockedUntilRelease.remove(e.getKeyCode());
     }
 
     @Override

@@ -9,6 +9,8 @@ import model.GameModel;
 import model.SideRules;
 import model.TeamInput;
 import model.ball.BallTrajectory;
+import model.ball.BlockReflection;
+import model.ball.NetClearanceTrajectory;
 import model.player.BackPlayer;
 import model.player.HitBox;
 import model.player.Player;
@@ -22,8 +24,6 @@ public class RallyContactHandler {
     private static final double THIRD_TOUCH_PASS_SPEED = 16;
     private static final double SETTER_THIRD_TOUCH_PASS_SPEED = 13;
     private static final double BALL_UNSTUCK_DISTANCE = 6.0;
-    private static final double MIN_NORMAL_LENGTH = 0.001;
-    private static final double CENTER_CONTACT_NORMAL_Y = -0.2;
     private static final double SETTER_TARGET_OFFSET_Y = 10;
     private static final double THIRD_TOUCH_TARGET_HEIGHT = 50;
 
@@ -48,7 +48,7 @@ public class RallyContactHandler {
             model.ball.stopRotation();
             model.ball.useSlowFloorBounceSpin();
             model.spikeEffect.stopSpikeTrail();
-            model.recordRegularHit(redSide, player);
+            model.recordAirSet(redSide, player);
             return true;
         }
         return false;
@@ -123,7 +123,7 @@ public class RallyContactHandler {
             // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
             if (isBackRowThreeMeterFault(player, redSide)) {
                 performSpike(player, redSide, input);
-                model.recordHit(redSide, player);
+                model.recordHit(redSide, player, spikeRoute(input));
 
                 boolean awardRed = !redSide;
                 model.transientMessage = "後排三米線";
@@ -137,7 +137,7 @@ public class RallyContactHandler {
 
             // 合法扣球：保留 attack_way 的球路與旋轉邏輯。
             performSpike(player, redSide, input);
-            model.recordHit(redSide, player);
+            model.recordHit(redSide, player, spikeRoute(input));
             return true;
         }
 
@@ -209,6 +209,10 @@ public class RallyContactHandler {
             model.ball.useFastFloorBounceSpin();
         }
     }
+    private static ContactEvent.Route spikeRoute(TeamInput input) {
+        return input.spikeLob ? (input.spikeFlat ? ContactEvent.Route.LONG_LOB : ContactEvent.Route.LOB)
+                : input.spikeFlat ? ContactEvent.Route.FLAT : input.spikeShort ? ContactEvent.Route.SHORT : ContactEvent.Route.NORMAL;
+    }
 
     private double spikeSpinSpeed(boolean redSide, TeamInput input) {
         double spinSpeed = input.spikeLob
@@ -235,7 +239,6 @@ public class RallyContactHandler {
 
         pushBallOutsideHitBox(blockBox);
         reflectBallFromBlock(blocker, blockBox);
-        model.spikeEffect.clearSpikeTrail();
 
         // 攔網屬於高旋轉碰球，保留 attack_way 的高速落地旋轉。
         model.ball.useFastFloorBounceSpin();
@@ -283,7 +286,7 @@ public class RallyContactHandler {
         } else if (player instanceof Setter && hitCountBeforeTouch < 2) {
             setSetterBallVelocity(target);
         } else {
-            setBallVelocity(target);
+            setBallVelocity(target, hitCountBeforeTouch >= 2);
         }
         setRotationForRegularTouch(player, redSide);
         return true;
@@ -366,44 +369,16 @@ public class RallyContactHandler {
     }
 
     private void reflectBallFromBlock(QuickAttacker blocker, HitBox box) {
-        double normalX = model.ball.x - box.getCenterX();
-        double normalY = model.ball.y - box.getCenterY();
-        double normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
-
-        if (normalLength < MIN_NORMAL_LENGTH) {
-            normalX = model.ball.vx == 0
-                    ? SideRules.directionTowardOpponent(blocker.redSide)
-                    : Math.signum(model.ball.vx);
-            normalY = CENTER_CONTACT_NORMAL_Y;
-            normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
-        }
-
-        normalX /= normalLength;
-        normalY /= normalLength;
-
-        double dot = model.ball.vx * normalX + model.ball.vy * normalY;
-        double reflectedVx;
-        double reflectedVy;
-
-        if (dot < 0) {
-            reflectedVx = model.ball.vx - 2 * dot * normalX;
-            reflectedVy = model.ball.vy - 2 * dot * normalY;
-        } else {
-            double speed = Math.hypot(model.ball.vx, model.ball.vy);
-            reflectedVx = normalX * speed;
-            reflectedVy = normalY * speed;
-        }
-
         double bounce = box == blocker.headBlockHitBox
                 ? GameConfig.BLOCK_HEAD_BOUNCE : GameConfig.BLOCK_HITBOX_BOUNCE;
-        reflectedVx *= bounce;
-        reflectedVy *= bounce;
-
-        model.ball.vx = reflectedVx;
-        model.ball.vy = reflectedVy;
+        var reflected = BlockReflection.reflect(model.ball.vx, model.ball.vy,
+                model.ball.x - box.getCenterX(), model.ball.y - box.getCenterY(),
+                SideRules.directionTowardOpponent(blocker.redSide), bounce);
+        model.ball.vx = reflected.x();
+        model.ball.vy = reflected.y();
     }
 
-    private void setBallVelocity(BallTarget target) {
+    private void setBallVelocity(BallTarget target, boolean thirdTouch) {
         BallTrajectory.Velocity velocity = BallTrajectory.estimateVelocityToTargetAtSpeed(
                 model.ball.x,
                 model.ball.y,
@@ -412,6 +387,11 @@ public class RallyContactHandler {
                 target.launchSpeed,
                 GameConfig.GRAVITY
         );
+
+        if (thirdTouch) {
+            velocity = NetClearanceTrajectory.correctIfBlocked(model.ball.x, model.ball.y, model.ball.radius,
+                    target.x, target.y, velocity, model.netHitBox);
+        }
 
         model.ball.vx = velocity.x();
         model.ball.vy = velocity.y();

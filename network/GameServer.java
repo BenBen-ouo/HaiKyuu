@@ -232,6 +232,8 @@ public final class GameServer implements AutoCloseable {
     private List<Packet.EventType> detectSyncEvents(FrameState before) {
         List<Packet.EventType> events = new ArrayList<>(5);
         if (model.didBallHitNetThisFrame()) events.add(Packet.EventType.NET_CONTACT);
+        if (model.blockTouchEffect.didContactThisFrame(true)) events.add(Packet.EventType.RED_BLOCK_CONTACT);
+        if (model.blockTouchEffect.didContactThisFrame(false)) events.add(Packet.EventType.BLUE_BLOCK_CONTACT);
 
         ServeState currentServeState = model.getServeHandler().getState();
         if (before.serveState == ServeState.WAITING_FOR_SERVE
