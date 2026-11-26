@@ -112,6 +112,11 @@ public class RallyContactHandler {
             if (!canSpike(player)) {
                 continue;
             }
+            // 新的 MB 第一球攻擊只處理本場來球，不以跨網的攻擊框搶打對場配球。
+            if (player instanceof QuickAttacker && !input.hasFirstRegularTouch && model.isServeReceptionComplete()
+                    && (redSide ? model.ball.x >= GameConfig.NET_X : model.ball.x <= GameConfig.NET_X)) {
+                continue;
+            }
 
             // 接發方第一次一般觸球前，任一方用攻擊框碰到發球都屬發球犯規。
             if (!model.isServeReceptionComplete()) {

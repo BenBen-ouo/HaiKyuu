@@ -53,7 +53,7 @@ public final class AiStatisticsTest {
             var observation = new AiObservation(new BallForecast(x, landing ? GameConfig.FLOOR_Y - GameConfig.BALL_RADIUS : 430, 0, 2),
                     base.own(), base.opponent(), base.ownTouches(), base.opponentTouches(), base.ownLastRole(), base.lastTouchOwn(),
                     true, false, false, base.serveState(), base.ownServing(), !judgment.isEmpty(), false,
-                    false, landing, false, base.opponentBlock(), contacts, ownScore, otherScore, judgment, base.contactStreamId());
+                    false, landing, false, base.opponentBlock(), contacts, ownScore, otherScore, judgment, base.contactStreamId(), -1);
             learning.observe(observation, ++tick);
         }
         void organization(boolean own) {

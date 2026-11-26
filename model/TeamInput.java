@@ -10,6 +10,7 @@ public final class TeamInput extends ControlInput {
     public Ball ball;
     public boolean canBackAirSet;
     public boolean canWingAirSet;
+    public boolean canMbAttackFirstBall;
     public Player lastHitter;
     public boolean canResolveAttack = true;
     public boolean attackLocked;
@@ -28,6 +29,7 @@ public final class TeamInput extends ControlInput {
         ball = null;
         canBackAirSet = false;
         canWingAirSet = false;
+        canMbAttackFirstBall = false;
         lastHitter = null;
         canResolveAttack = true;
         attackLocked = false;
@@ -41,6 +43,7 @@ public final class TeamInput extends ControlInput {
         copy.ball = ball;
         copy.canBackAirSet = canBackAirSet;
         copy.canWingAirSet = canWingAirSet;
+        copy.canMbAttackFirstBall = canMbAttackFirstBall;
         copy.lastHitter = lastHitter;
         copy.canResolveAttack = canResolveAttack;
         copy.attackLocked = attackLocked;

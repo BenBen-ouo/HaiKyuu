@@ -165,7 +165,7 @@ public final class GameConfig {
     public static final double SERVE_JUMP_SHORT_VELOCITY_Y = -1.0;
     public static final double SERVE_JUMP_LONG_VELOCITY_Y = -2.0;
     public static final double SERVE_JUMP_SLOW_HORIZONTAL_SPEED = 12.5;
-    public static final double SERVE_JUMP_SLOW_VELOCITY_Y = -3.0;
+    public static final double SERVE_JUMP_SLOW_VELOCITY_Y = -3.5;
 
     // 三米線距離（像素）；後排起跳扣球以起跳中心判定，踩線也違規。
     public static final double THREE_METER_PX = 167.0;

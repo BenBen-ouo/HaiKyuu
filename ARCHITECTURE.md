@@ -262,3 +262,11 @@ AI 初版 JAR 曾以 `javac -Xlint:all -encoding UTF-8 -cp release/HaiKyuu/app/H
 - 驗證來源：Fix-lag，基準 fc77078 加本次未提交差異。全新 build/v121-verified 以 javac -Xlint:all -encoding UTF-8 編譯零警告，AGENTS 日常入口的 14 個 Java 測試及 ArchitectureTest 全部通過。新增 BlockReflectionTest 驗證方向、上下限、靜止球及鏡像，GameplayFlowTest 覆蓋兩側實際手框碰撞，既有頭框案例仍驗證慢球不強制加速。RenderWarmupTest 驗證準備不改模型，以及預熱前後判決／煙霧／鏡像的像素一致；兩項新測試已接入日常與打包入口，打包腳本語法檢查通過。
 - 效能證據：修正前獨立探針在 build/v121-first-landing-before.log；修正後三個獨立 JVM 的 build/v121-warmup-1.log 至 -3.log，首次 IN 分別為 1.162／1.272／1.742 ms，準備移至開局前約 287～306 ms。證明本機 headless 的首次判決繪圖尖峰降低，不代表完整畫面每幀都低於 16.7 ms，也不代表一般煙霧每幀成本已消除。編譯與回歸 log 為 build/v121-compile.log、build/v121-*.log。
 - 未重新打包 EXE／ZIP，未做真人 GUI、不同 DPI／顯示驅動及雙機區網實測；既有發行產物不會隨來源變更自動更新。
+## 16. MB 貼網第一球
+
+- A：人類操作與 AI 均可在正常來回中，以 MB 扣擊尚未被本隊接起的貼網第一球；對方發球尚未正常接起前不開放。仍用原 MB 動作鍵起跳、放開後再按擊球，成功算第一次觸球並保留原扣球鎖定。保留使用者手動短發參數，本次不升版、不修改攔網角度或 TOUCH OUT 機制。
+- GameModel.canMbAttackFirstBall 由已確認的發球接起狀態、觸球次數、上一位觸球者、回合階段與扣球鎖定判斷資格。TeamInput 只帶當幀上下文，複製／重用時一併處理。Client 預測由相同入口推導資格，仍不能判碰撞或改球速。
+- QuickAttacker.firstBallAttackContactFrames 依現有重力、MB 起跳速度與實際攻擊框計算有限自由飛行交會；球心須已在本場，開網或不可達球仍走原攔網。只在地面按鍵時選動作，不把已開始的 BLOCK 中途改成攻擊。預測不保證未來碰網／碰人後仍可命中，正式命中由既有 RallyContactHandler 確認，第一球另防止跨網搶打對場配球。
+- FirstBallAttackPlanner 使用 AiObservation 的可達時間與既有進攻反應延遲安排 MB；等待可達窗口期間保留 MB，避免過時攔網方案先觸發 BLOCK。只透過原有 ControlInput 操作，出手選路仍用 AttackOptions。這個公開可達能力由模型衍生，不讀未公開輸入；不增加 UDP 欄位或協定版本。
+- AiMatchLearning 對實際第一球攻擊清除舊舉球情境，記錄第一球／UNKNOWN 節奏；其出手不是一般接球，也不是攔網預判。既有自身進攻學習仍僅採第二／第三球樣本。
+- 驗證入口為 MbFirstBallAttackTest、GameplayFlowTest、NetworkSyncTest 及既有 AI 回歸；新案例接入 AGENTS 日常及 tools/build-release.ps1 打包入口。快照案例驗證實際第一球扣擊後，既有欄位可同步觸球、鎖定與動作圖片。預測案例驗證 Client 不自行揮臂、計次或改球位置／速度；不代表真人雙機區網實測完成。- 本次自動驗證來源為 dev 的 5c76c0e 加本次差異及使用者已暫存的短發球調整。全新 build/mb-first-final 以 javac -Xlint:all -encoding UTF-8 編譯零警告，AGENTS 日常入口 15 項 Java 測試與 ArchitectureTest 全部退出碼 0；打包腳本語法檢查通過。兩側入門／普通／專家各 12 個固定種子，在指定可達、無主動對手攔網的場景均完成實際第一球扣擊，不等於真人得分率。log 為 build/mb-first-final-compile.log、build/mb-first-final-*.log。未重建 EXE／ZIP，未做實體 GUI／雙機區網驗收，未 commit 或 push。

@@ -32,6 +32,7 @@ public final class NetworkSyncTest {
         testMotionSnapshotKeepsAnimationAlive();
         testAuthoritativeAttackSwingSnapshot();
         testMbSnapshotReconcilesActionAndAsset();
+        testMbFirstBallAttackSnapshot();
         testAirSetInputAndSnapshotAnimation();
         testJumpServeInputAndTossEvent();
         testRemoteInterpolationStopsAfterBoundedExtrapolation();
@@ -221,6 +222,35 @@ public final class NetworkSyncTest {
                 check(player.getAction() != PlayerAction.AIR_SETTING && model.ball.y == ballY,
                         "左右 WS／後排的成功空中舉球動畫與碰球均等待 Server 確認");
             }
+        }
+    }
+
+    private static void testMbFirstBallAttackSnapshot() throws Exception {
+        for (boolean red : new boolean[]{true, false}) {
+            var server = new GameModel();
+            server.getServeHandler().setRedServing(!red);
+            server.getServeHandler().setWaitingForServe(false);
+            var own = red ? server.redTeam : server.blueTeam;
+            var other = red ? server.blueTeam : server.redTeam;
+            server.recordRegularHit(red, own.backPlayer);
+            server.recordRegularHit(!red, other.backPlayer);
+            server.ball.x = red ? 590 : 610; server.ball.y = 300;
+            server.ball.vx = server.ball.vy = 0; server.ball.syncPreviousPosition();
+            var press = new model.ControlInput(); press.mbActionPressed = true;
+            server.update(red ? press : new model.ControlInput(), red ? new model.ControlInput() : press);
+            server.update(new model.ControlInput(), new model.ControlInput());
+            for (int tick = 0; tick < 70 && server.getHitCount(red) == 0; tick++)
+                server.update(red ? press : new model.ControlInput(), red ? new model.ControlInput() : press);
+            check(server.getHitCount(red) == 1 && server.isAttackLocked(red), "Server 確實完成 MB 第一球扣擊");
+            var decoded = snapshot(1, 0, Packet.WorldSnapshot.from(server, 0)).snapshot;
+            var client = new GameModel();
+            decoded.rallyContacts.applyTo(client);
+            decoded.redTeam.applyMotionTo(client.redTeam);
+            decoded.blueTeam.applyMotionTo(client.blueTeam);
+            var mb = (red ? client.redTeam : client.blueTeam).quickAttacker;
+            check(client.getHitCount(red) == 1 && client.isAttackLocked(red)
+                            && mb.getAction() == PlayerAction.ATTACK_SWING && mb.assetName.equals(own.quickAttacker.assetName),
+                    "既有快照完整同步第一觸球、攻擊鎖定與揮臂圖片，不新增輸入 bit");
         }
     }
 

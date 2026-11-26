@@ -15,6 +15,7 @@ public final class RuleBasedAi {
     private final OpponentHabits habits = new OpponentHabits();
     private final DefensePlanner defense;
     private final OffensePlanner offense;
+    private final FirstBallAttackPlanner firstBallAttack;
     private final ServePlanner serve;
     private final AiMatchLearning learning;
     private AiObservation previous;
@@ -37,17 +38,20 @@ public final class RuleBasedAi {
         RandomGenerator defenseRandom = new Random(random.nextLong());
         defense = new DefensePlanner(defenseRandom);
         offense = new OffensePlanner(attackRandom, habits, learning);
+        firstBallAttack = new FirstBallAttackPlanner(attackRandom);
         serve = new ServePlanner(attackRandom);
     }
     public ControlInput update(AiObservation o) {
         tick++;
         learning.observe(o, tick);
         ControlInput input = new ControlInput();
+        boolean firstBallAttackHandled = false;
         boolean waiting = o.serveState() == ServeState.WAITING_FOR_SERVE;
         boolean newBall = previous == null || waiting && (previous.serveState() != o.serveState()
                 || previous.rallyOver() && !o.rallyOver());
         if (newBall) {
             offense.clear();
+            firstBallAttack.reset();
             defense.reset();
             serve.begin(tick, difficulty);
             defense.react(tick, difficulty, habits, o);
@@ -87,9 +91,13 @@ public final class RuleBasedAi {
             } else {
                 state = o.receptionComplete() ? State.DEFENDING : State.RECEIVING;
                 if (changedFlight) defense.react(tick, difficulty, habits, o);
+                if (changedFlight) firstBallAttack.react();
+                firstBallAttackHandled = firstBallAttack.update(o, input, tick, difficulty, learning);
+                if (firstBallAttackHandled) state = State.ATTACKING;
                 // 發球後尚未被接起，不能讓自己的球員追球觸發發球犯規。
-                if (o.receptionComplete() || !o.ownServing()) defense.update(o, input, tick, difficulty, habits);
-                else DefensePlanner.move(input, o.own().get(0), GameConfig.NET_X + GameConfig.RED_BACK_OFFSET_X
+                if (!firstBallAttackHandled && (o.receptionComplete() || !o.ownServing()))
+                    defense.update(o, input, tick, difficulty, habits);
+                else if (!firstBallAttackHandled) DefensePlanner.move(input, o.own().get(0), GameConfig.NET_X + GameConfig.RED_BACK_OFFSET_X
                         + o.own().get(0).receiveOffsetX() + o.own().get(0).receiveWidth() / 2);
             }
         }
@@ -101,7 +109,7 @@ public final class RuleBasedAi {
         input.servePressed |= input.backJump || input.backDive;
         input.backJump = input.servePressed;
         input.backDive = input.servePressed;
-        if (input.mbActionPressed && o.ownTouches() == 0)
+        if (input.mbActionPressed && o.ownTouches() == 0 && !firstBallAttackHandled)
             learning.rememberPrediction(defense.predictedRole(), defense.predictedTempo());
         previous = o;
         return redSide ? input : input.mirroredHorizontally();
@@ -111,6 +119,7 @@ public final class RuleBasedAi {
         habits.reset();
         defense.reset();
         offense.clear();
+        firstBallAttack.reset();
         previous = null;
         tick = 0;
         offenseReadyAt = 0;

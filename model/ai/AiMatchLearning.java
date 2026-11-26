@@ -121,9 +121,10 @@ final class AiMatchLearning {
             for (Scene scene : scenes) scene.clear();
             revision++; predictionWaiting = predictionQueued = false;
         }
-        if (e.kind() == ContactEvent.Kind.REGULAR && e.touch() == 1) {
+        if ((e.kind() == ContactEvent.Kind.REGULAR || e.kind() == ContactEvent.Kind.ATTACK) && e.touch() == 1) {
             s.clear(); s.preparedMask = e.preparedMask();
-            if (side == 0) stats.finishPlans(); else { revision++; predictionWaiting = false; }
+            if (e.kind() == ContactEvent.Kind.REGULAR && side == 0) stats.finishPlans();
+            if (side == 1) { revision++; if (e.kind() == ContactEvent.Kind.REGULAR) predictionWaiting = false; }
         }
         s.preparedMask |= e.preparedMask();
         if (e.kind() == ContactEvent.Kind.AIR_SET || e.kind() == ContactEvent.Kind.REGULAR && e.role() == 1 && e.touch() == 2) {

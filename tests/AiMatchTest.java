@@ -1,5 +1,6 @@
 import java.util.Random;
 import model.GameModel;
+import model.rally.ContactEvent;
 import model.ControlInput;
 import model.ai.AiDifficulty;
 import model.ai.AiObservation;
@@ -30,6 +31,7 @@ public final class AiMatchTest {
         int airSets = 0, jumpSets = 0, multiAttacks = 0, twoAttacks = 0, jumpServes = 0, lobs = 0, repeatBlocks = 0;
         java.util.Set<Integer> strikeHeights = new java.util.HashSet<>();
         int[] hitters = new int[4];
+        int mbFirstAttacks = 0;
         int[] tempoCounts = new int[3];
         int[][] takeoff = new int[2][4];
         int[] lastSet = {-1000, -1000};
@@ -52,6 +54,10 @@ public final class AiMatchTest {
                     && a.spikeFlat == a.backRight && a.airSetModifier == (a.backLeft && a.backRight),
                     "AI 操作遵循既有鍵盤共鍵關係");
             model.update(a, b);
+            for (var event : model.contactEvents()) {
+                if (event.role() == 2 && event.kind() == ContactEvent.Kind.ATTACK && event.touch() == 1)
+                    mbFirstAttacks++;
+            }
             if (model.getHitCount(true) == 1 && contacts.red().hitCount() != 1) lastSet[0] = -1000;
             if (model.getHitCount(false) == 1 && contacts.blue().hitCount() != 1) lastSet[1] = -1000;
             if (model.getServeHandler().getState() != before && model.getServeHandler().hasLaunchedServe()) serves++;
@@ -109,8 +115,8 @@ public final class AiMatchTest {
         if (serves < 10 || receives < 5 || sets < 2) throw new AssertionError("AI must actually serve, receive and set");
         check(matches > 0 && spikes > 0 && dives > 0, "AI 完成實際攻防並結束正式比賽");
         if (skill <= 20) check(lobs == 0, "入門不使用吊球");
-        if (skill <= 20) check(hitters[2] == 0 && tempoCounts[0] == 0,
-                "入門不使用快攻配球或負節奏");
+        if (skill <= 20) check(hitters[2] == mbFirstAttacks && tempoCounts[0] == 0,
+                "入門不使用快攻配球或負節奏；新增的貼網第一球不屬於快攻配球");
         if (skill <= 40) check(jumpSets == 0 && repeatBlocks == 0,
                 "普通以下不使用 Setter 跳舉或補攔");
         if (skill < 61) check(airSets == 0 && multiAttacks == 0, "困難以下不使用假扣真舉或三人進攻");

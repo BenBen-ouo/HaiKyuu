@@ -445,6 +445,14 @@ public final class GameModel {
         input.lastHitter = lastHitter;
         input.canBackAirSet = secondTouch && lastHitter != team.backPlayer;
         input.canWingAirSet = secondTouch && lastHitter != team.wingSpiker;
+        input.canMbAttackFirstBall = canMbAttackFirstBall(redSide);
+    }
+
+    /** 第一球扣擊僅限發球已正常接起的來回；扣球鎖定與上一位觸球者仍有效。 */
+    public boolean canMbAttackFirstBall(boolean redSide) {
+        Team team = redSide ? redTeam : blueTeam;
+        return serveReceptionComplete && !scorer.isRallyOver() && !matchOver && getHitCount(redSide) == 0
+                && !isAttackLocked(redSide) && getLastHitter(redSide) != team.quickAttacker;
     }
 
     private void updateTeams(TeamInput redInput, TeamInput blueInput) {

@@ -19,7 +19,7 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
         ServeState serveState, boolean ownServing, boolean rallyOver, boolean matchOver,
         boolean netContact, boolean landing, boolean opponentAttackLocked,
         BlockView opponentBlock, List<ContactEvent> contacts, int ownScore, int opponentScore,
-        String judgment, long contactStreamId) {
+        String judgment, long contactStreamId, int mbFirstBallContactFrames) {
     public AiObservation {
         own = List.copyOf(own);
         opponent = List.copyOf(opponent);
@@ -58,7 +58,8 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
                 blockView(redSide ? model.blueTeam.quickAttacker : model.redTeam.quickAttacker,
                         redSide, model.hasBlocked(!redSide)), model.contactEvents(),
                 redSide ? model.redScore : model.blueScore, redSide ? model.blueScore : model.redScore,
-                model.transientMessage, model.contactStreamId());
+                model.transientMessage, model.contactStreamId(), model.canMbAttackFirstBall(redSide)
+                        ? (redSide ? model.redTeam : model.blueTeam).quickAttacker.firstBallAttackContactFrames(ball) : -1);
     }
     private static BlockView blockView(QuickAttacker mb, boolean redSide, boolean used) {
         return new BlockView(blockShape(mb.blockHitBox, mb.imageWidth, redSide),
