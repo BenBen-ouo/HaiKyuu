@@ -48,7 +48,8 @@ public final class AiPolicyTest {
                     // 較長的公開來球讓負節奏確實有起跑窗口，不要求不可達球路硬起跳。
                     game.ball.vx = red ? 3.2 : -3.2;
                     game.ball.vy = -12;
-                    var planner = new OffensePlanner(new Random(seed), new OpponentHabits());
+                    var plannerHabits = new OpponentHabits();
+                    var planner = new OffensePlanner(new Random(seed), plannerHabits, new AiMatchLearning(red, plannerHabits));
                     var difficulty = new AiDifficulty(50, ability);
                     planner.begin(AiObservation.capture(game, red), 0, difficulty);
                     boolean quickRequested = false, jumped = false;
@@ -114,8 +115,8 @@ public final class AiPolicyTest {
         for (int ability : new int[]{20, 40, 41, 100}) {
             int changed = 0;
             for (int seed = 0; seed < 120; seed++) {
-                int a = AttackOptions.choose(AiObservation.capture(first, true), AiDifficulty.ability(ability), new Random(seed), 3, false);
-                int b = AttackOptions.choose(AiObservation.capture(second, true), AiDifficulty.ability(ability), new Random(seed), 3, false);
+                int a = AttackOptions.choose(AiObservation.capture(first, true), AiDifficulty.ability(ability), new Random(seed), 3, false, new AiMatchStatistics(), null);
+                int b = AttackOptions.choose(AiObservation.capture(second, true), AiDifficulty.ability(ability), new Random(seed), 3, false, new AiMatchStatistics(), null);
                 check(a >= 0 && b >= 0, "測試球路須有可用攻擊選項");
                 if (a != b) changed++;
             }

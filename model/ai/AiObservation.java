@@ -1,6 +1,7 @@
 package model.ai;
 
 import java.util.List;
+import model.rally.ContactEvent;
 import model.GameConfig;
 import model.GameModel;
 import model.player.Player;
@@ -17,10 +18,12 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
         boolean receptionComplete, boolean attackLocked, boolean blockUsed,
         ServeState serveState, boolean ownServing, boolean rallyOver, boolean matchOver,
         boolean netContact, boolean landing, boolean opponentAttackLocked,
-        BlockView opponentBlock) {
+        BlockView opponentBlock, List<ContactEvent> contacts, int ownScore, int opponentScore,
+        String judgment, long contactStreamId) {
     public AiObservation {
         own = List.copyOf(own);
         opponent = List.copyOf(opponent);
+        contacts = List.copyOf(contacts);
         if (own.size() != 4 || opponent.size() != 4) throw new IllegalArgumentException("Four roles required");
     }
     /** 攔網框的唯讀配置；維持目前旋轉與鏡像，不用 AI 自存另一份 Team 數值。 */
@@ -53,7 +56,9 @@ public record AiObservation(BallForecast ball, List<Pose> own, List<Pose> oppone
                 model.isRallyOverForNetwork(), model.matchOver, model.didBallHitNetThisFrame(),
                 model.didBallLandThisFrame(), model.isAttackLocked(!redSide),
                 blockView(redSide ? model.blueTeam.quickAttacker : model.redTeam.quickAttacker,
-                        redSide, model.hasBlocked(!redSide)));
+                        redSide, model.hasBlocked(!redSide)), model.contactEvents(),
+                redSide ? model.redScore : model.blueScore, redSide ? model.blueScore : model.redScore,
+                model.transientMessage, model.contactStreamId());
     }
     private static BlockView blockView(QuickAttacker mb, boolean redSide, boolean used) {
         return new BlockView(blockShape(mb.blockHitBox, mb.imageWidth, redSide),

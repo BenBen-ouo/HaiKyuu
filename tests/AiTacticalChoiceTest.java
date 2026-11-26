@@ -35,7 +35,7 @@ public final class AiTacticalChoiceTest {
             for (int ability : new int[]{1, 20, 40, 41, 60, 61, 100}) {
                 int[] chosen = new int[5];
                 for (int seed = 0; seed < 400; seed++) {
-                    int shot = AttackOptions.choose(o, AiDifficulty.ability(ability), new Random(seed * 7919L), 3, false);
+                    int shot = AttackOptions.choose(o, AiDifficulty.ability(ability), new Random(seed * 7919L), 3, false, new AiMatchStatistics(), null);
                     check(shot >= 0, "可用球路不應因難度消失");
                     chosen[shot]++;
                 }
@@ -108,7 +108,8 @@ public final class AiTacticalChoiceTest {
                 new RallyContactHandler(game).collideTeam(own, red, new TeamInput());
                 check(game.getHitCount(red) == 1, "準備案例需先完成接發球");
                 game.ball.vx = red ? 3.2 : -3.2; game.ball.vy = -12;
-                var planner = new OffensePlanner(new Random(seed * 7919L), new OpponentHabits());
+                var plannerHabits = new OpponentHabits();
+                var planner = new OffensePlanner(new Random(seed * 7919L), plannerHabits, new AiMatchLearning(red, plannerHabits));
                 var difficulty = new AiDifficulty(50, 100);
                 planner.begin(AiObservation.capture(game, red), 0, difficulty);
                 int backStart = -1, wingStart = -1, setAt = -1, roles = 0;
@@ -168,11 +169,11 @@ public final class AiTacticalChoiceTest {
                                 var covered = AiObservation.capture(game, true);
                                 for (int seed = 0; seed < 12; seed++) {
                                     long sample = seed * 7919L;
-                                    int a = AttackOptions.choose(noCover, 1, new Random(sample), striker, false);
-                                    int b = AttackOptions.choose(covered, 1, new Random(sample), striker, false);
+                                    int a = AttackOptions.choose(noCover, 1, new Random(sample), striker, false, new AiMatchStatistics(), null);
+                                    int b = AttackOptions.choose(covered, 1, new Random(sample), striker, false, new AiMatchStatistics(), null);
                                     if (a >= 0 && b >= 0 && a != b) {
-                                        int below = AttackOptions.choose(noCover, AiDifficulty.ability(60), new Random(sample), striker, false);
-                                        int belowCovered = AttackOptions.choose(covered, AiDifficulty.ability(60), new Random(sample), striker, false);
+                                        int below = AttackOptions.choose(noCover, AiDifficulty.ability(60), new Random(sample), striker, false, new AiMatchStatistics(), null);
+                                        int belowCovered = AttackOptions.choose(covered, AiDifficulty.ability(60), new Random(sample), striker, false, new AiMatchStatistics(), null);
                                         check(below == belowCovered, "60 以下不啟用回彈補救選路");
                                         changed = true; break;
                                     }
@@ -202,8 +203,10 @@ public final class AiTacticalChoiceTest {
                 game.ball.x = own.wingSpiker.hitBox.getCenterX();
                 game.ball.y = own.wingSpiker.hitBox.getCenterY();
                 new RallyContactHandler(game).collideTeam(own, red, new TeamInput());
-                var difficulty = new AiDifficulty(60, 100);
-                var planner = new OffensePlanner(new Random(seed * 7919L), new OpponentHabits());
+                // 本例只驗證扣球／假攻擊；空中舉球另由 AiTacticsTest、AiStatisticsTest 驗證。
+                var difficulty = new AiDifficulty(60, 60);
+                var plannerHabits = new OpponentHabits();
+                var planner = new OffensePlanner(new Random(seed * 7919L), plannerHabits, new AiMatchLearning(red, plannerHabits));
                 planner.begin(AiObservation.capture(game, red), 0, difficulty);
                 boolean trackPeak = false;
                 for (int t = 0; t < 240 && !game.isRallyOverForNetwork(); t++) {

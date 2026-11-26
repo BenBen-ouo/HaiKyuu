@@ -13,6 +13,7 @@ import model.player.BackPlayer;
 import model.player.Player;
 import model.player.PlayerPhysics;
 import model.player.Team;
+import model.rally.ContactEvent;
 
 import java.util.Random;
 
@@ -46,6 +47,10 @@ public class ServeBallController {
         model.ball.stopRotation();
         model.ball.useSlowFloorBounceSpin();
         setRandomizedVelocity(serveType.horizontalSpeed * direction, serveType.verticalVelocity);
+        model.recordServeLaunch(redSide, switch (serveType) {
+            case NORMAL -> ContactEvent.Route.SERVE_NORMAL; case CEILING -> ContactEvent.Route.SERVE_CEILING;
+            case LOW_NET -> ContactEvent.Route.SERVE_LOW; case SHORT -> ContactEvent.Route.SERVE_SHORT;
+        });
     }
 
     public void tossJumpServe(boolean redSide) {
@@ -73,6 +78,8 @@ public class ServeBallController {
         model.ball.useFastFloorBounceSpin();
         model.setLastHitTeam(redSide);
         model.spikeEffect.startSpikeTrail(redSide);
+        model.recordServeLaunch(redSide, shortArc ? ContactEvent.Route.JUMP_SHORT
+                : slowHorizontal ? ContactEvent.Route.JUMP_SLOW : longArc ? ContactEvent.Route.JUMP_LONG : ContactEvent.Route.JUMP_NORMAL);
     }
 
     private void placeBallForServe(Player server, boolean redSide) {

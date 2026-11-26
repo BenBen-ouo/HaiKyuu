@@ -17,6 +17,12 @@ public record AiDifficulty(int defense, int attack) {
         }
     }
     public static double ability(int value) { return (value - 1) / 99.0; }
+    /** 困難（80）與專家（100）的戰術參數；未解鎖時為零。 */
+    static double advancedProbability(int value, double hard, double expert) {
+        if (value < AiTuning.MIN_TACTICAL_ATTACK) return 0;
+        double progress = Math.max(0, Math.min(1, (value - valueForLevel(4)) / 20.0));
+        return hard + (expert - hard) * progress;
+    }
     /** 選單只提供五階段；內部仍沿用原本連續公式與隨機抽樣。 */
     public static int valueForLevel(int level) {
         if (level < 1 || level > LEVEL_COUNT) throw new IllegalArgumentException("AI level must be in 1..5");

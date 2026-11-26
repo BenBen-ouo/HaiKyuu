@@ -108,7 +108,8 @@ public final class AiLearningTest {
                     game.ball.x = team.wingSpiker.hitBox.getCenterX();
                     game.ball.y = team.wingSpiker.hitBox.getCenterY();
                     new RallyContactHandler(game).collideTeam(team, red, new TeamInput());
-                    var planner = new OffensePlanner(new Random(seed), learned ? deepHabits() : new OpponentHabits());
+                    var plannerHabits = learned ? deepHabits() : new OpponentHabits();
+                    var planner = new OffensePlanner(new Random(seed), plannerHabits, new AiMatchLearning(red, plannerHabits));
                     var difficulty = new AiDifficulty(100, 100);
                     planner.begin(AiObservation.capture(game, red), 0, difficulty);
                     boolean backJumped = false, frontAttacked = false;

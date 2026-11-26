@@ -173,7 +173,7 @@ FixedTickSchedule 限制補跑，不放大物理步長。更新失敗明確回�
 | 模型依賴與循環 | ArchitectureTest.ps1／jdeps，已接打包 | 檢查禁止依賴及四層間的類別循環；保留已審查的模型內擁有者／協作者回參照，不宣稱所有 package 都無循環。 |
 | 遊戲與狀態 | GameplayFlowTest，已接打包 | 含左右、落地邊界、焦點、補跑、畫面資料及迴圈關閉；不是實體 GUI。 |
 | 網路 | NetworkSyncTest，基本模式已接打包 | 基本使用記憶體傳輸；動態埠 loopback 另執行，不等於雙機區網。 |
-| 本地 AI | AiMatchTest、AiTacticsTest、AiPolicyTest、AiLearningTest、AiDefenseBalanceTest、AiTacticalChoiceTest、LauncherTest，已接打包 | 實際模型攻防、進攻轉換率、站位、混合節奏、門檻、鏡像、回彈補救選路、習慣對進攻安排與回防的影響、誤差分布、短球分工、難度分離、R 重開及模式輸入；不是人工手感或實戰勝率保證。 |
+| 本地 AI | AiMatchTest、AiTacticsTest、AiPolicyTest、AiLearningTest、AiDefenseBalanceTest、AiTacticalChoiceTest、AiStatisticsTest、LauncherTest，已接打包 | 實際模型攻防、進攻轉換率、站位、混合節奏、門檻、鏡像、回彈補救選路、習慣對進攻安排與回防的影響、誤差分布、短球分工、難度分離、R 重開及模式輸入；不是人工手感或實戰勝率保證。 |
 | 本地暫停 | LocalPauseTest，已接打包 | 凍結模型、AI、判決計時及活動特效；放開再按、確認繼續；連線不顯示按鈕。實體操作仍需人工確認。 |
 | 近網一般第三球 | ThirdTouchTrajectoryTest，已接打包 | 左右後排／WS／Setter 實際觸球、越網、保留目標、已可過網／遠網不改，以及無解時維持正常觸網政策。 |
 | 發行回復 | ReleaseReplacementTest.ps1，已接打包 | 正常替換、舊 ZIP 鎖住及新 ZIP 鎖住失敗；不是所有 OS 故障注入。 |
@@ -209,7 +209,9 @@ FixedTickSchedule 限制補跑，不放大物理步長。更新失敗明確回�
 - OffensePlanner 在第一球後承諾戰術，以實際站位及含 Setter 跳躍的接觸估計，更新尚未起跳的可達窗口；到位且合法才輸出起跳，已起跳者不取消或瞬移。站舉負節奏的動作開始在 Setter 觸球前 42～48 幀，第二節奏約在球頂點開始後排起跳／WS 助跑。MB 只安排可達的快攻第一節奏，開網而無法覆蓋則改 WS／後排。
 - AttackOptions 在實際球與攻擊框重疊時評估既有球路，優先選能過網且落在對場的選項；變化只在可用選項間抽樣。前四幀若有較好的正常扣球接觸點，可稍等而非一進框就吊球。假扣真舉包含 Setter 接第一球後的空中舉球備援，進攻 61 起才允許；60 以下只選可達攻擊或一般接球。若 WS 舉第二球，後排會先留在合法第三球起跳位置。進攻 41 起解鎖跳發與雙人進攻，61 起解鎖三人進攻；OffensePlanner 計入已起跳者，避免跨幀重複分配超過人數。
 - 正常／低網／短球／天花板球及跳發變化均由 ServePlanner 按現有操作執行；跳發依序拋球、放開、起跳、放開再按擊球，沒有直接設置出球速度。戰術涵蓋吊球、現有合法二次攻擊、空中假扣真舉、Setter 跳舉及多人假跑／起跳；不新增 Setter 二次扣球。
-- OpponentHabits 累計已發生的攻擊者、節奏、方向、吊球、發球類型及實際落地位置，以先驗樣本逐步調整防守。攻擊落點依角色與節奏分類；RuleBasedAi 只為未中斷的出手記首次落地，死球反彈不重複計入。OffensePlanner 使用同一份習慣評估後排起跳後的回防風險，僅部分組織採用保留後排的偏好；DefensePlanner 在己方扣球飛出後即開始退防，準備位置隨深球習慣及防守能力調整。只記本場，不寫檔；每球保留、整場重開清空。參數及行為說明見 docs/AI_DIFFICULTY.md。
+- GameModel 的 ContactLog 保存當幀已確認觸球，ContactEvent 是不可變模型觀察資料，並非網路封包。AiObservation 帶出事件及比分；AiMatchLearning 按模型來源與序號去重，統一更新 OpponentHabits 及 AiMatchStatistics，不再由 RuleBasedAi 依揮臂動畫推斷成功觸球。碰撞、發球與規則仍由原模型處理，紀錄不反向改變模型。
+- OpponentHabits 累計公開的攻擊者、已知節奏、球路、舉球／多人戰術及未中斷的實際落地，以先驗樣本逐步調整防守；未知節奏不混成第二節奏。AiMatchStatistics 另記自身與對手實際出手、情境、安排／完成、接球位置、落點與結果；AiMatchLearning 在一般接起後結束前次出手歸因，避免把後續反攻失誤記為直接得分。攔網猜測、實際接觸及結果分開。查詢只回傳不可變副本，資料只在本場，整場重開清空。
+- OffensePlanner 在合法空中第二球窗口首次出現後承諾一次主動舉球／二次扣球／正常組織偏好，排除前一觸球者，窗口失效不重抽；保留 Setter 第一球後的救援。AttackOptions 僅在已可行球路間依足夠自身樣本調整選擇權重。DefensePlanner 依公開空中舉球、跳舉與多人準備加入延遲辨識，成功才重判過時的接球分工及攔網期限；不讀取未公開意圖。機率、歸因分類與學習門檻見 docs/AI_DIFFICULTY.md。
 - DefenseForecast 只根據公開場況估計對手攻擊窗口、WS 站立／延後撲救窗口與已離場球；不執行碰撞。DefensePlanner 擁有接球誤差、反應期限、分工及接球最高點的觀察狀態，RuleBasedAi 每 tick 提供觀察以清除上一輪攔網殘留。AiObservation 的 opponentAttackLocked 是模型既有已確認觸球狀態的唯讀投影，不讀對手輸入、不改 UDP 協定。首次攔網需先觀察接球通過最高點；短球仍在對手可達攻擊範圍時保留後場，失去窗口後轉為救球。誤差機率、熟悉度延遲與實際限制見難度文件。
 - OffensePlanner 分別保存 WS／後排的節奏偏好及實際起跑先後；多人組織偏好混合負一與第二節奏，WS／後排可在合法位置假跑，MB 不對不可達球路空跳。AttackOptions 在 1～40 偏好對手可防守路線，41 起找空檔，61 起加入 ReboundForecast 的回彈補救評分。ReboundForecast 讀取 AiObservation 的不可變攔網框與階段剩餘時間，依既有物理估計交會；只評估 WS／後排是否能落地後補救，不修改模型或讀取未公開輸入。正式反射與估計共用 model.ball.BlockReflection；幾何仍由原碰撞系統裁定。這些新增觀察欄位只用於本地 AI，不變更 UDP 快照或 wire protocol。
 - 後排攻擊與假起跳共用 OffensePlanner 的近三米線準備帶：最遠準備點依跳躍最高點時的橫向移動與攻擊框前緣推導，最近點保留合法三米線及走位死區。真實攻擊仍須另有球框重疊窗口，來不及前進就不跳；空中舉球保留原本的可達位置範圍。這是本地 AI 操作限制，不修改人類角色的起跳能力、踩線規則或球的物理。

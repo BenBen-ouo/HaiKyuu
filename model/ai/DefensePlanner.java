@@ -24,12 +24,45 @@ final class DefensePlanner {
     private boolean coverOwnAttack;
     private int previousOpponentTouches;
     private boolean receptionApexPassed;
+    private long seenReading = -1;
+    private AiMatchLearning.Reading pendingReading, recognizedReading;
+    private int readingReadyAt;
 
     DefensePlanner(RandomGenerator random) { this.random = random; }
 
     void reset() {
         targetValid = false; assignReceiver = true; wingAssigned = false; coverOwnAttack = false;
         previousOpponentTouches = 0; receptionApexPassed = false;
+        seenReading = -1; pendingReading = recognizedReading = null;
+    }
+    int predictedRole() { return predictedAttacker == 0 ? 0 : predictedAttacker == 1 ? 2 : 3; }
+    int predictedTempo() { return predictedTempo; }
+
+    void recognize(AiMatchLearning.Reading read, int tick, AiDifficulty difficulty, AiMatchStatistics stats) {
+        if (difficulty.defense() < AiTuning.MIN_TACTICAL_ATTACK) return;
+        if (read.revision() != seenReading) {
+            seenReading = read.revision();
+            recognizedReading = null;
+            pendingReading = read.setting() == AiMatchStatistics.Setting.AIR || read.setting() == AiMatchStatistics.Setting.JUMP
+                    || read.participants() >= 2 ? read : null;
+            if (pendingReading != null)
+                readingReadyAt = tick + AiDifficulty.reactionFrames(difficulty.defense(), random);
+        } else {
+            // 同一組合仍持續觀察已公開的起跳／舉球時間；更新資訊不重新抽辨識成功率。
+            if (pendingReading != null) pendingReading = read;
+            if (recognizedReading != null) recognizedReading = read;
+        }
+        if (pendingReading != null && tick >= readingReadyAt) {
+            var candidate = pendingReading; pendingReading = null;
+            double probability = AiDifficulty.advancedProbability(difficulty.defense(), AiTuning.HARD_TACTIC_RECOGNITION_PROBABILITY,
+                    AiTuning.EXPERT_TACTIC_RECOGNITION_PROBABILITY);
+            if (random.nextDouble() < probability) {
+                recognizedReading = candidate; blockAt = Integer.MAX_VALUE;
+                assignReceiver = true; wingAssigned = false; targetValid = false;
+                readyAt = Math.max(readyAt, tick);
+                stats.recognized(candidate.setting(), candidate.participants());
+            }
+        }
     }
 
     void observe(AiObservation o) {
@@ -252,15 +285,23 @@ final class DefensePlanner {
                     || attacker.action() == PlayerAction.ATTACK_SWING
                     || attacker.action() == PlayerAction.RUN_APPROACH) {
                 double gap = Math.hypot(o.ball().x() - attacker.centerX(), o.ball().y() - attacker.y());
+                if (recognizedReading != null && attacker.action() == PlayerAction.ATTACK_READY) {
+                    int arrival = attackArrival(o, attacker, AiTuning.FORECAST_FRAMES);
+                    if (arrival < 0) continue;
+                }
                 if (gap < nearest) { nearest = gap; visible = i; }
             }
         }
         if (visible >= 0 && visible != lastVisibleAttacker) {
-            if (random.nextDouble() < AiTuning.LOW_VISIBLE_READ_PROBABILITY
+            if (recognizedReading != null || random.nextDouble() < AiTuning.LOW_VISIBLE_READ_PROBABILITY
                     + AiTuning.VISIBLE_READ_SKILL_PROBABILITY * skill) predictedAttacker = visible;
             lastVisibleAttacker = visible;
         }
         var suspect = o.opponent().get(roles[predictedAttacker]);
+        if (recognizedReading != null) {
+            var tempo = recognizedReading.tempo(roles[predictedAttacker]);
+            if (tempo != AiMatchStatistics.Tempo.UNKNOWN) predictedTempo = tempo.ordinal();
+        }
         int netArrival = o.ball().velocityX() < 0
                 ? (int) Math.ceil((GameConfig.NET_X - o.ball().x()) / o.ball().velocityX()) : -1;
         if (difficulty.defense() < AiTuning.MIN_TEMPO_PREDICTION_DEFENSE) {
@@ -300,18 +341,19 @@ final class DefensePlanner {
         for (int role : new int[]{0, 2, 3}) {
             var p = o.opponent().get(role);
             if (p.action() != PlayerAction.ATTACK_READY) continue;
-            for (int t = 0; t <= AiTuning.AGGRESSIVE_BLOCK_CONTACT_WINDOW_FRAMES; t++) {
-                double y = p.y() + p.velocityY() * t + GameConfig.GRAVITY * t * (t + 1) / 2;
-                if (y > GameConfig.FLOOR_Y - p.height()) break;
-                if (DefenseForecast.overlaps(o.ball().xAt(t), o.ball().yAt(t),
-                        p.x() + p.velocityX() * t + p.attackOffsetX(), y + p.attackOffsetY(),
-                        p.attackWidth(), p.attackHeight())) {
-                    earliest = Math.min(earliest, t);
-                    break;
-                }
-            }
+            int arrival = attackArrival(o, p, AiTuning.AGGRESSIVE_BLOCK_CONTACT_WINDOW_FRAMES);
+            if (arrival >= 0) earliest = Math.min(earliest, arrival);
         }
         return earliest == Integer.MAX_VALUE ? -1 : earliest;
+    }
+    private static int attackArrival(AiObservation o, AiObservation.Pose p, int horizon) {
+        for (int t = 0; t <= horizon; t++) {
+            double y = p.y() + p.velocityY() * t + GameConfig.GRAVITY * t * (t + 1) / 2;
+            if (y > GameConfig.FLOOR_Y - p.height()) break;
+            if (DefenseForecast.overlaps(o.ball().xAt(t), o.ball().yAt(t), p.x() + p.velocityX() * t + p.attackOffsetX(),
+                    y + p.attackOffsetY(), p.attackWidth(), p.attackHeight())) return t;
+        }
+        return -1;
     }
 
     private int weightedRole(OpponentHabits habits, double skill) {

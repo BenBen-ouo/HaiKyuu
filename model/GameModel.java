@@ -4,6 +4,9 @@
 */
 package model;
 
+import java.util.List;
+import model.rally.ContactEvent;
+import model.rally.ContactLog;
 import model.ball.Ball;
 import model.ball.NetHitBox;
 import model.effect.SpikeEffect;
@@ -20,6 +23,9 @@ import model.serve.ServeHandler;
 
 public final class GameModel {
     private static final double INITIAL_BALL_CENTER_Y = 130;
+    private final ContactLog contactLog = new ContactLog();
+    public List<ContactEvent> contactEvents() { return contactLog.snapshot(); }
+    public long contactStreamId() { return contactLog.streamId(); }
 
     public Ball ball = new Ball(GameConfig.SCREEN_WIDTH / 2.0, INITIAL_BALL_CENTER_Y);
     public final NetHitBox netHitBox = new NetHitBox();
@@ -88,6 +94,7 @@ public final class GameModel {
     }
 
     public void restart() {
+        contactLog.beginFrame();
         redScore = 0;
         blueScore = 0;
         matchOver = false;
@@ -215,6 +222,7 @@ public final class GameModel {
     }
 
     private void updateFrame(TeamInput redInput, TeamInput blueInput) {
+        contactLog.beginFrame();
         blockTouchEffect.beginFrame();
         if (netFlashFrames > 0) netFlashFrames--;
         landingSmokeThisFrame = false;
@@ -252,10 +260,21 @@ public final class GameModel {
     }
 
     public void recordHit(boolean redSide, Player hitter) {
+        recordHit(redSide, hitter, ContactEvent.Route.NORMAL);
+    }
+    public void recordHit(boolean redSide, Player hitter, ContactEvent.Route route) {
+        if (matchOver) return;
         recordContact(redSide, hitter, true);
+        contactLog.record(redSide ? redTeam : blueTeam, hitter, getHitCount(redSide), ContactEvent.Kind.ATTACK, route, ball);
     }
 
     public void recordRegularHit(boolean redSide, Player hitter) {
+        recordRegularContact(redSide, hitter, ContactEvent.Kind.REGULAR);
+    }
+    public void recordAirSet(boolean redSide, Player hitter) {
+        recordRegularContact(redSide, hitter, ContactEvent.Kind.AIR_SET);
+    }
+    private void recordRegularContact(boolean redSide, Player hitter, ContactEvent.Kind kind) {
         if (matchOver) return;
         preparePossession(redSide);
         redAttackLocked = false;
@@ -268,6 +287,7 @@ public final class GameModel {
 
         boolean firstRegularTouch = serveReceptionComplete && getHitCount(redSide) == 0;
         recordContact(redSide, hitter, serveReceptionComplete);
+        contactLog.record(redSide ? redTeam : blueTeam, hitter, getHitCount(redSide), kind, ContactEvent.Route.FREE_BALL, ball);
         if (firstRegularTouch) {
             (redSide ? blueTeam : redTeam).quickAttacker.beginOpponentReceiveCycle();
         }
@@ -306,6 +326,12 @@ public final class GameModel {
         rallyState.recordBlock(redSide, blocker);
         blockTouchEffect.show(redSide);
         ballContactThisFrame = true;
+        contactLog.record(redSide ? redTeam : blueTeam, blocker, getHitCount(redSide), ContactEvent.Kind.BLOCK,
+                ContactEvent.Route.FREE_BALL, ball);
+    }
+    public void recordServeLaunch(boolean redSide, ContactEvent.Route route) {
+        var team = redSide ? redTeam : blueTeam;
+        contactLog.record(team, team.backPlayer, 0, ContactEvent.Kind.SERVE, route, ball);
     }
 
     private void preparePossession(boolean redSide) {

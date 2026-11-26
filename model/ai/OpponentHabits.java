@@ -16,11 +16,21 @@ public final class OpponentHabits {
     private int fastDeepLandings;
     private int attackLandingSamples;
     private int attacks;
+    private int timedAttacks;
     private int lobs;
     private int serveSamples;
+    private int airSets, jumpSets, multiAttacks;
+    void recordTactic(AiMatchStatistics.Setting setting, boolean multi) {
+        if (setting == AiMatchStatistics.Setting.AIR) airSets++;
+        if (setting == AiMatchStatistics.Setting.JUMP) jumpSets++;
+        if (multi) multiAttacks++;
+    }
+    public int airSetSamples() { return airSets; }
+    public int jumpSetSamples() { return jumpSets; }
+    public int multiAttackSamples() { return multiAttacks; }
     public void recordAttack(int role, int tempo, int direction) {
         attackers[role]++;
-        tempos[tempo]++;
+        if (tempo >= 0) { tempos[tempo]++; timedAttacks++; }
         directions[direction]++;
         attacks++;
         if (direction >= 3) lobs++;
@@ -50,9 +60,11 @@ public final class OpponentHabits {
     }
     public void recordAttackLanding(int role, int tempo, double x) {
         recordLanding(false, x);
+        attackLandingSamples++;
+        // 二次攻擊尚無舉球時間，不能混成第二節奏。
+        if (tempo < 0) return;
         attackLandingSum[role][tempo] += x;
         attackLandings[role][tempo]++;
-        attackLandingSamples++;
         if (tempo <= 1 && x >= GameConfig.COURT_LEFT_X - GameConfig.BALL_RADIUS
                 && x <= GameConfig.COURT_LEFT_X + GameConfig.THREE_METER_PX) {
             fastDeepLandings++;
@@ -81,7 +93,7 @@ public final class OpponentHabits {
     }
     public double tempoWeight(int tempo) {
         return (tempos[tempo] + AiTuning.HABIT_PRIOR_SAMPLES / 3)
-                / (attacks + AiTuning.HABIT_PRIOR_SAMPLES);
+                / (timedAttacks + AiTuning.HABIT_PRIOR_SAMPLES);
     }
     public double lobRate() { return (lobs + 1.0) / (attacks + AiTuning.HABIT_PRIOR_SAMPLES); }
     public double expectedLanding(boolean serve, double fallback) {
@@ -105,7 +117,9 @@ public final class OpponentHabits {
         fastDeepLandings = 0;
         attackLandingSamples = 0;
         attacks = 0;
+        timedAttacks = 0;
         lobs = 0;
         serveSamples = 0;
+        airSets = jumpSets = multiAttacks = 0;
     }
 }

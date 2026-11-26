@@ -207,7 +207,8 @@ public final class AiDefenseBalanceTest {
                 var own = red ? game.redTeam : game.blueTeam;
                 game.recordRegularHit(red, own.setter);
                 ball(game, red, 591, 500, 0, -5);
-                var planner = new OffensePlanner(new Random(seed), new OpponentHabits());
+                var plannerHabits = new OpponentHabits();
+                var planner = new OffensePlanner(new Random(seed), plannerHabits, new AiMatchLearning(red, plannerHabits));
                 var difficulty = new AiDifficulty(50, 100);
                 planner.begin(AiObservation.capture(game, red), 0, difficulty);
                 for (int t = 0; t < 100 && !game.isRallyOverForNetwork(); t++) {

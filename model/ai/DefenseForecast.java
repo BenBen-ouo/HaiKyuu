@@ -28,7 +28,8 @@ final class DefenseForecast {
         for (int role : new int[]{0, 2, 3}) {
             var p = o.opponent().get(role);
             if (p.diving() || p.action() == PlayerAction.BLOCK || p.action() == PlayerAction.RECEIVING
-                    || p.action() == PlayerAction.ATTACK_SWING || p.action() == PlayerAction.RUN_RETURN) continue;
+                    || p.action() == PlayerAction.ATTACK_SWING || p.action() == PlayerAction.AIR_SETTING
+                    || p.action() == PlayerAction.RUN_RETURN) continue;
             if (!p.jumping() && !p.canStart() && p.action() != PlayerAction.RUN_APPROACH) continue;
             int approach = !p.jumping() && role == 3 ? WingSpiker.approachDurationFrames() : 0;
             double jumpVy = p.jumping() ? p.velocityY() : role == 0 ? GameConfig.BACK_JUMP_VELOCITY_Y

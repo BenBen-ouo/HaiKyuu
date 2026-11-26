@@ -48,7 +48,7 @@ public class RallyContactHandler {
             model.ball.stopRotation();
             model.ball.useSlowFloorBounceSpin();
             model.spikeEffect.stopSpikeTrail();
-            model.recordRegularHit(redSide, player);
+            model.recordAirSet(redSide, player);
             return true;
         }
         return false;
@@ -123,7 +123,7 @@ public class RallyContactHandler {
             // 後排球員從三米線內起跳並完成攻擊時，判定後排違規。
             if (isBackRowThreeMeterFault(player, redSide)) {
                 performSpike(player, redSide, input);
-                model.recordHit(redSide, player);
+                model.recordHit(redSide, player, spikeRoute(input));
 
                 boolean awardRed = !redSide;
                 model.transientMessage = "後排三米線";
@@ -137,7 +137,7 @@ public class RallyContactHandler {
 
             // 合法扣球：保留 attack_way 的球路與旋轉邏輯。
             performSpike(player, redSide, input);
-            model.recordHit(redSide, player);
+            model.recordHit(redSide, player, spikeRoute(input));
             return true;
         }
 
@@ -208,6 +208,10 @@ public class RallyContactHandler {
         } else {
             model.ball.useFastFloorBounceSpin();
         }
+    }
+    private static ContactEvent.Route spikeRoute(TeamInput input) {
+        return input.spikeLob ? (input.spikeFlat ? ContactEvent.Route.LONG_LOB : ContactEvent.Route.LOB)
+                : input.spikeFlat ? ContactEvent.Route.FLAT : input.spikeShort ? ContactEvent.Route.SHORT : ContactEvent.Route.NORMAL;
     }
 
     private double spikeSpinSpeed(boolean redSide, TeamInput input) {

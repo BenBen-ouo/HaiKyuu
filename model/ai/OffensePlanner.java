@@ -24,6 +24,9 @@ final class OffensePlanner {
 
     private final RandomGenerator random;
     private final OpponentHabits habits;
+    private final AiMatchLearning learning;
+    enum SecondChoice { UNDECIDED, SETTER, ATTACK, AIR_SET }
+    private SecondChoice secondChoice = SecondChoice.UNDECIDED;
     private final boolean[] launched = new boolean[4];
     private final Window[] decoys = new Window[4];
     private Window selected;
@@ -63,9 +66,10 @@ final class OffensePlanner {
         return false;
     }
 
-    OffensePlanner(RandomGenerator random, OpponentHabits habits) {
+    OffensePlanner(RandomGenerator random, OpponentHabits habits, AiMatchLearning learning) {
         this.random = random;
         this.habits = habits;
+        this.learning = learning;
     }
 
     void clear() {
@@ -73,6 +77,7 @@ final class OffensePlanner {
         selected = null;
         selectedLaunchTick = -1;
         backReserved = false;
+        secondChoice = SecondChoice.UNDECIDED;
         Arrays.fill(launched, false);
         Arrays.fill(decoys, null);
         Arrays.fill(negativeByRole, false);
@@ -112,14 +117,13 @@ final class OffensePlanner {
         mbDirectSecond = difficulty.attack() >= AiTuning.MIN_QUICK_SET_ATTACK
                 && o.ownTouches() == 1 && o.ownLastRole() == SETTER;
         airSetAllowed = difficulty.attack() >= AiTuning.MIN_AIR_SET_ATTACK;
-        preferAirSet = airSetAllowed && o.ownTouches() == 1 && o.ownLastRole() == SETTER
-                && random.nextDouble() < AiTuning.MAX_AIR_SET_PROBABILITY
-                    * AiTuning.unlockedProgress(difficulty.attack(), AiTuning.MIN_AIR_SET_ATTACK);
+        preferAirSet = false;
         waitingForSetter = o.ownTouches() == 1 && o.ownLastRole() != SETTER;
         nextPlan = tick;
         // 與多人組織共用本次戰術抽樣，不額外擾動接下來的球路選擇序列。
         boolean preferGroundDefense = formationChoice < AiTuning.BACK_RETURN_AVOID_MAX_PROBABILITY;
         protectBackReturn = habits.shouldKeepBackForReturn(difficulty.defense()) && preferGroundDefense;
+        if (participants >= 2) learning.statistics().plan(AiMatchStatistics.Tactic.MULTI);
     }
 
     void onSet(AiObservation o, int tick, AiDifficulty difficulty) {
@@ -133,12 +137,16 @@ final class OffensePlanner {
 
     void update(AiObservation o, ControlInput input, int tick, AiDifficulty difficulty) {
         if (!planned) begin(o, tick, difficulty);
+        if (o.ownTouches() == 1 && airSetAllowed && secondChoice == SecondChoice.UNDECIDED && tick >= nextPlan)
+            chooseSecondAction(o, tick, difficulty);
         backReserved = launched[BACK];
         if (selected != null && !launched[selected.role()] && tick > selected.contactTick()) selected = null;
         SetForecast set = forecast(o);
         if (waitingForSetter && quickSet) input.spikeShort = true;
         if (waitingForSetter && jumpSet && !o.own().get(SETTER).jumping()
-                && set.setterJumpDelay() == 0) input.setterJump = true;
+                && set.setterJumpDelay() == 0) {
+            input.setterJump = true; learning.statistics().plan(AiMatchStatistics.Tactic.JUMP_SET);
+        }
         if (selected != null && selected.airSet() && selected.role() == WS && o.ownTouches() == 1) {
             backReserved = true;
             var back = o.own().get(BACK);
@@ -150,6 +158,8 @@ final class OffensePlanner {
             selected = plan(o, set, tick);
             nextPlan = tick + AiTuning.REPLAN_INTERVAL_FRAMES;
             if (selected != null) {
+                learning.statistics().plan(selected.airSet() ? AiMatchStatistics.Tactic.AIR_SET
+                        : !waitingForSetter && o.ownTouches() == 1 ? AiMatchStatistics.Tactic.SECOND_ATTACK : AiMatchStatistics.Tactic.ATTACK);
                 for (int role : ATTACKERS) {
                     decoys[role] = role == selected.role() || launched[role] ? null : findDecoyWindow(o, set, role, tick);
                     if (role == BACK && decoys[role] != null && unsafeBackReturn(o, decoys[role], selected.contactTick())) {
@@ -191,7 +201,7 @@ final class OffensePlanner {
                 if (overlaps(p, o.ball().x(), o.ball().y())) {
                     if (!setting && betterContactSoon(o, p)) return;
                     int shot = setting ? 0 : AttackOptions.choose(o, skill, random, selected.role(),
-                            startedBeforeSet[BACK] && startedBeforeSet[WS]);
+                            startedBeforeSet[BACK] && startedBeforeSet[WS], learning.statistics(), learning.context(o, 0, selected.role()));
                     if (shot >= 0 && o.ownLastRole() != selected.role()) {
                         press(input, selected.role());
                         if (setting) input.airSetModifier = true;
@@ -236,6 +246,21 @@ final class OffensePlanner {
     }
 
     private Window plan(AiObservation o, SetForecast set, int tick) {
+        if (o.ownTouches() == 1 && (secondChoice == SecondChoice.AIR_SET || secondChoice == SecondChoice.ATTACK)) {
+            var current = new SetForecast(o.ball(), 0, -1, true);
+            Window second = null;
+            for (int role : new int[]{WS, BACK}) {
+                if (role == o.ownLastRole()) continue;
+                var candidate = findWindow(o, current, role, tick, secondChoice == SecondChoice.AIR_SET);
+                if (candidate != null && (second == null || candidate.score() < second.score())) second = candidate;
+            }
+            if (second != null) return second;
+            // 已承諾的窗口消失也不重抽；恢復原本正常組織／救援流程。
+            preferAirSet = false;
+            waitingForSetter = o.ownLastRole() != SETTER;
+            secondChoice = SecondChoice.SETTER;
+            set = forecast(o);
+        }
         List<Window> candidates = new ArrayList<>(3);
         for (int role : ATTACKERS) {
             if (launched[role]) continue;
@@ -300,6 +325,7 @@ final class OffensePlanner {
         if (launched[role] || p.jumping() || p.diving()
                 || p.action() == PlayerAction.RUN_RETURN || p.action() == PlayerAction.RUN_APPROACH) return null;
         if (setting && (role == MB || o.ownLastRole() == role)) return null;
+        if (o.ownTouches() == 1 && set.confirmed() && o.ownLastRole() == role) return null;
         if (role == MB && !quickSet && !(mbDirectSecond && o.ownTouches() == 1)) return null;
         if (role == MB && set.confirmed() && !mbDirectSecond) {
             // 開網球即使還能作攔網動畫，也不能安排無法碰到的 MB 攻擊。
@@ -312,6 +338,8 @@ final class OffensePlanner {
         double vy = role == BACK ? GameConfig.BACK_JUMP_VELOCITY_Y
                 : role == MB ? GameConfig.MB_JUMP_VELOCITY_Y : GameConfig.WS_JUMP_VELOCITY_Y;
         int flight = (int) Math.ceil(-2 * vy / GameConfig.GRAVITY);
+        int secondDeadline = o.ownTouches() == 1 && set.confirmed() && o.ownLastRole() != SETTER
+                ? setterContact(o, 0, o.own().get(SETTER).jumping()) : -1;
         double minimumBackX = role == BACK && !setting ? minimumBackAttackX(o) : GameConfig.WORLD_LEFT;
         int nominal = role == MB ? set.delay() : negativeByRole[role] && !set.confirmed()
                 ? set.delay() - negativeLead : set.delay() + apexFrames(set.flight().velocityY());
@@ -319,6 +347,9 @@ final class OffensePlanner {
         boolean negativeStart = negativeByRole[role] && !set.confirmed() && role != MB && !setting;
         int min = setting ? 0 : Math.max(0, nominal - (negativeStart ? 0 : AiTuning.ATTACK_TIMING_JITTER_FRAMES));
         int max = setting ? AiTuning.FORECAST_FRAMES - flight : Math.max(0, nominal + (negativeStart ? 0 : AiTuning.ATTACK_TIMING_JITTER_FRAMES));
+        if (o.ownTouches() == 1 && set.confirmed() && role != MB) {
+            min = 0; max = AiTuning.FORECAST_FRAMES - flight;
+        }
         if (role == MB) { min = Math.max(0, set.delay() - AiTuning.FIRST_TEMPO_WINDOW_FRAMES); max = set.delay() + AiTuning.FIRST_TEMPO_WINDOW_FRAMES; }
         if (role == MB && mbDirectSecond) { min = 0; max = AiTuning.FORECAST_FRAMES - flight; }
         Window best = null;
@@ -329,6 +360,7 @@ final class OffensePlanner {
             for (int age = 2; age < flight; age++) {
                 int t = start + approach + age;
                 if (t >= AiTuning.FORECAST_FRAMES || t < set.delay()) continue;
+                if (secondDeadline >= 0 && t > secondDeadline) continue;
                 double bx = set.flight().xAt(t - set.delay());
                 double by = set.flight().yAt(t - set.delay());
                 if (setting && by < GameConfig.SETTER_SET_APEX_Y) continue;
@@ -361,6 +393,27 @@ final class OffensePlanner {
         }
         return best;
     }
+
+    private void chooseSecondAction(AiObservation o, int tick, AiDifficulty difficulty) {
+        var current = new SetForecast(o.ball(), 0, -1, true);
+        boolean canSet = false, canAttack = false;
+        for (int role : new int[]{WS, BACK}) {
+            if (role == o.ownLastRole()) continue;
+            canSet |= findWindow(o, current, role, tick, true) != null;
+            canAttack |= findWindow(o, current, role, tick, false) != null;
+        }
+        if (!canSet && !canAttack) return;
+        secondChoice = SecondChoice.SETTER;
+        double setChance = AiDifficulty.advancedProbability(difficulty.attack(), AiTuning.HARD_AIR_SET_PROBABILITY,
+                AiTuning.EXPERT_AIR_SET_PROBABILITY);
+        if (random.nextDouble() < setChance && canSet) secondChoice = SecondChoice.AIR_SET;
+        else if (random.nextDouble() < AiDifficulty.advancedProbability(difficulty.attack(),
+                AiTuning.HARD_SECOND_ATTACK_PROBABILITY, AiTuning.EXPERT_SECOND_ATTACK_PROBABILITY) && canAttack)
+            secondChoice = SecondChoice.ATTACK;
+        preferAirSet = secondChoice == SecondChoice.AIR_SET;
+        if (secondChoice != SecondChoice.SETTER) waitingForSetter = false;
+    }
+    SecondChoice secondChoice() { return secondChoice; }
 
     private SetForecast forecast(AiObservation o) {
         if (!waitingForSetter || o.ownTouches() >= 2 || o.ownLastRole() == SETTER) return new SetForecast(o.ball(), 0, -1, true);

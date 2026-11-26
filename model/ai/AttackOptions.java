@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.random.RandomGenerator;
 import model.GameConfig;
+import model.rally.ContactEvent;
 
 /** 評估既有球路能否過網／落在對場；只估計，不碰觸權威球。 */
 final class AttackOptions {
@@ -26,7 +27,8 @@ final class AttackOptions {
         return false;
     }
 
-    static int choose(AiObservation o, double skill, RandomGenerator random, int striker, boolean bothNegative) {
+    static int choose(AiObservation o, double skill, RandomGenerator random, int striker, boolean bothNegative,
+            AiMatchStatistics statistics, AiMatchStatistics.Context context) {
         List<Integer> safe = new ArrayList<>(5);
         int best = -1;
         double bestScore = Double.NEGATIVE_INFINITY;
@@ -63,6 +65,22 @@ final class AttackOptions {
                 ? easiest : safe.get(random.nextInt(safe.size()));
         double variation = AiTuning.EXPERT_SUBOPTIMAL_PROBABILITY
                 + (1 - skill) * AiTuning.LOW_SUBOPTIMAL_EXTRA_PROBABILITY;
+        double total = 0;
+        double[] weights = new double[safe.size()];
+        boolean learned = false;
+        for (int i = 0; i < safe.size(); i++) {
+            int mode = safe.get(i);
+            double boost = statistics.selectionWeight(new AiMatchStatistics.Key(true, striker, o.ownTouches() + 1,
+                    ContactEvent.Route.spike(mode), false), context, (int) Math.round(1 + skill * 99));
+            learned |= boost > 1;
+            weights[i] = ((mode == best ? 1 - variation : 0) + variation / safe.size()) * boost;
+            total += weights[i];
+        }
+        if (learned) {
+            double pick = random.nextDouble() * total;
+            for (int i = 0; i < weights.length; i++) { pick -= weights[i]; if (pick <= 0) return safe.get(i); }
+            return safe.get(safe.size() - 1);
+        }
         return random.nextDouble() < variation ? safe.get(random.nextInt(safe.size())) : best;
     }
 
